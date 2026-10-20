@@ -34,9 +34,9 @@ app.use(cors({
   origin: [
     'http://localhost:5173',
     'http://localhost:5174',
-    'https://drmotors-prod.web.app',
-    'https://drmotors-prod.firebaseapp.com',
-    'https://sistema.drmotors.cl',
+    'https://facilrepuestos-prod.web.app',
+    'https://facilrepuestos-prod.firebaseapp.com',
+    'https://sistema.facilrepuestos.cl',
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],

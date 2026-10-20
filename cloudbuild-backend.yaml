@@ -1,29 +1,22 @@
 steps:
-  # ── 1. Backend: construir imagen Docker ──────────────
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/drmotors-api', './server']
-
-  # ── 2. Backend: subir imagen a Container Registry ────
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/facilrepuestos-api', './server']
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/drmotors-api']
-
-  # ── 3. Backend: desplegar a Cloud Run ─────────────────
+    args: ['push', 'gcr.io/$PROJECT_ID/facilrepuestos-api']
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
       - 'deploy'
-      - 'drmotors-api'
-      - '--image=gcr.io/$PROJECT_ID/drmotors-api'
-      - '--region=us-central1'
+      - 'facilrepuestos-api'
+      - '--image=gcr.io/$PROJECT_ID/facilrepuestos-api'
+      - '--region=southamerica-west1'
       - '--platform=managed'
       - '--allow-unauthenticated'
       - '--port=8080'
-      - '--set-secrets=FIREBASE_SERVICE_ACCOUNT=drmotors-firebase-credentials:latest,BOOSTR_API_KEY=drmotors-boostr-key:latest,GOOGLE_CLIENT_SECRET=drmotors-google-client-secret:latest,WORDPRESS_API_KEY=drmotors-wordpress-key:latest,WOOCOMMERCE_CONSUMER_KEY=drmotors-woo-consumer-key:latest,WOOCOMMERCE_CONSUMER_SECRET=drmotors-woo-consumer-secret:latest,DRMOTORS_SYNC_SECRET=drmotors-sync-secret:latest,WOOCOMMERCE_WEBHOOK_SECRET=drmotors-woo-webhook-secret:latest,DRIVE_TOKEN_JSON=drmotors-drive-token:latest'
-      - '--set-env-vars=FIREBASE_PROJECT_ID=$PROJECT_ID,GOOGLE_CLIENT_ID=29521409532-kuur99h6064tnuumn93b3p9ov6hpfqqp.apps.googleusercontent.com,GOOGLE_REDIRECT_URI=https://api.drmotors.cl/auth/callback,GOOGLE_DRIVE_FOLDER_ID=1KApiVsYW9lrdzz7_8I3JL_VxdeJ_ONAv,WOOCOMMERCE_URL=https://drmotors.cl'
-
+      - '--set-secrets=FIREBASE_SERVICE_ACCOUNT=facilrepuestos-firebase-credentials:latest'
+      - '--set-env-vars=FIREBASE_PROJECT_ID=facilrepuestos-prod'
 images:
-  - 'gcr.io/$PROJECT_ID/drmotors-api'
-
+  - 'gcr.io/$PROJECT_ID/facilrepuestos-api'
 options:
   logging: CLOUD_LOGGING_ONLY

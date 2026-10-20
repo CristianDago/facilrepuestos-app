@@ -1,0 +1,94 @@
+.estado {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 3rem 1rem;
+    color: var(--gray, #666);
+    text-align: center;
+  }
+  
+  .nota {
+    background: #fff;
+    border-left: 3px solid var(--red, #B8172D);
+    padding: 0.7rem 0.9rem;
+    margin-bottom: 1.2rem;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    color: #444;
+  }
+  
+  .seccion {
+    margin-top: 1.6rem;
+    min-width: 0;   /* permite que la tabla se adapte (y haga scroll dentro de .tbl-wrap) */
+  }
+  
+  .seccionTitulo {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--dark, #1A1A1A);
+    margin-bottom: 0.6rem;
+  }
+  
+  .dosColumnas {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1.4rem;
+    min-width: 0;
+  }
+  
+  .colBarra {
+    width: 34%;
+  }
+  
+  .barraPista {
+    background: #EEE;
+    height: 10px;
+    width: 100%;
+  }
+  
+  .barraRelleno {
+    background: var(--red, #B8172D);
+    height: 100%;
+    min-width: 0;
+  }
+  
+  .itemNombre {
+    font-weight: 600;
+  }
+  
+  .itemCodigo {
+    font-size: 0.74rem;
+    color: var(--gray, #666);
+  }
+  
+  .vacio {
+    text-align: center;
+    padding: 1.4rem;
+    color: var(--gray, #666);
+  }
+  
+  .valorAviso {
+    color: #B7791F;
+  }
+  
+  .valorAlerta {
+    color: #C0392B;
+    font-weight: 700;
+  }
+  
+  .masItems {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--gray, #666);
+  }
+  
+  @media (max-width: 1100px) {
+    .dosColumnas {
+      grid-template-columns: 1fr;
+      gap: 0;
+    }
+  }

@@ -1,0 +1,411 @@
+/* ═══════════════════════════════════════════════════════════
+   MecanicoDashboard.module.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── ESTADO DE CARGA ─────────────────────────────────────── */
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: var(--gray);
+}
+
+/* ── HEADER NEGRO ────────────────────────────────────────── */
+.dashHeader {
+  background: var(--black);
+  border-top: 3px solid var(--red);
+  padding: 1.4rem 1.8rem;
+  margin: -1.6rem -1.8rem 1.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.welcomeLabel {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #444;
+  margin-bottom: .2rem;
+}
+
+.welcomeName {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.6rem;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--white);
+  line-height: 1;
+}
+
+.welcomeSub {
+  font-size: .75rem;
+  color: #555;
+  margin-top: .3rem;
+  letter-spacing: 1px;
+}
+
+/* ── STATS STRIP ─────────────────────────────────────────── */
+.statsStrip {
+  display: flex;
+  gap: 1px;
+  background: #222;
+  border: 1px solid #222;
+  overflow: hidden;
+}
+
+.statBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: .7rem 1.4rem;
+  background: #111;
+  min-width: 80px;
+}
+
+.statNum {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 2rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.statLbl {
+  font-size: .58rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-top: 3px;
+}
+
+.colorPendiente { color: #F59E0B; }
+.colorEnProceso { color: #3B82F6; }
+.colorCompletada { color: #10B981; }
+.lblPendiente { color: #78450a; }
+.lblEnProceso { color: #1e3a8a; }
+.lblCompletada { color: #14532d; }
+
+/* ── EMPTY STATE ─────────────────────────────────────────── */
+.emptyState {
+  text-align: center;
+  padding: 4rem 1rem;
+  color: var(--gray);
+}
+
+.emptyIcon {
+  font-size: 3.5rem;
+  margin-bottom: .75rem;
+}
+
+.emptyText {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #CCC;
+}
+
+/* ── LISTA DE ÓRDENES ────────────────────────────────────── */
+.ordenesList {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* ── OT CARD ─────────────────────────────────────────────── */
+.otCard {
+  background: var(--white);
+  border-top: 3px solid var(--red);
+  box-shadow: 0 2px 12px rgba(0,0,0,.08);
+  overflow: hidden;
+}
+
+/* Topbar negro de la card */
+.otCardTopbar {
+  background: var(--black);
+  padding: .7rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.otNumero {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 3px;
+  color: var(--white);
+}
+
+.otEstadoBadge {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  color: white;
+  background: #6B7280;
+}
+
+.otPuestoBadge {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  color: var(--red);
+  background: #fff;
+  border: 1px solid var(--red);
+}
+
+.otEstadoBadge.recibido  { background: #6B7280; }
+.otEstadoBadge.enProceso { background: #F59E0B; }
+.otEstadoBadge.listo     { background: #10B981; }
+
+.otNumeroBadgeRow {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+
+.otMeta {
+  font-size: .72rem;
+  color: #555;
+  letter-spacing: .5px;
+}
+
+/* Cuerpo de la card */
+.otCardBody {
+  padding: 1rem;
+}
+
+.otVehiculo {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: .8rem;
+  flex-wrap: wrap;
+}
+
+.otPlate {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.3rem;
+  font-weight: 900;
+  letter-spacing: 4px;
+  color: var(--dark);
+  background: var(--off);
+  padding: 2px 10px;
+  border: 1.5px solid var(--gray-light);
+}
+
+.otVehiculoDesc {
+  font-size: .88rem;
+  color: var(--gray);
+  font-weight: 500;
+}
+
+.otKm {
+  font-size: .75rem;
+  color: var(--gray);
+  background: var(--off);
+  padding: 2px 8px;
+}
+
+/* ── BARRA PROGRESO TAREAS ───────────────────────────────── */
+.progresoWrap {
+  margin-bottom: 1rem;
+}
+
+.progresoHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.progresoLabel {
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--gray);
+}
+
+.progresoCount {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .85rem;
+  font-weight: 700;
+  color: var(--dark);
+}
+
+.progresoTrack {
+  height: 5px;
+  background: var(--gray-light);
+  overflow: hidden;
+}
+
+.progresoFill {
+  height: 100%;
+  background: var(--success);
+  transition: width .4s ease;
+}
+
+.progresoFill.incompleto {
+  background: var(--red);
+}
+
+/* ── TAREAS ──────────────────────────────────────────────── */
+.tareasSection {
+  margin-bottom: .75rem;
+}
+
+.tareasSectionTitle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--red);
+  margin-bottom: .5rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tareasSectionTitle::before {
+  content: '';
+  display: block;
+  width: 3px;
+  height: 12px;
+  background: var(--red);
+}
+
+.tareaItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .55rem .75rem;
+  margin-bottom: .35rem;
+  gap: .75rem;
+  border-left: 3px solid transparent;
+}
+
+.tareaItemMia {
+  background: rgba(184,23,45,.05);
+  border-left-color: var(--red);
+}
+
+.tareaItemOtro {
+  background: var(--off);
+  border-left-color: #DDD;
+  opacity: .75;
+}
+
+.tareaInfo { flex: 1; min-width: 0; }
+
+.tareaDesc {
+  font-size: .88rem;
+  font-weight: 600;
+  color: var(--dark);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tareaMecanico {
+  font-size: .72rem;
+  color: var(--gray);
+  margin-top: 1px;
+}
+
+.tareaSelect {
+  font-size: .78rem;
+  padding: 4px 8px;
+  min-width: 140px;
+  flex-shrink: 0;
+}
+
+.tareaEstadoLabel {
+  font-size: .75rem;
+  color: var(--gray);
+  flex-shrink: 0;
+}
+
+/* ── SERVICIOS GENERALES ─────────────────────────────────── */
+.serviciosSection {
+  border-top: 1px solid var(--gray-light);
+  padding-top: .75rem;
+  margin-top: .5rem;
+}
+
+.serviciosSectionTitle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--gray);
+  margin-bottom: .4rem;
+}
+
+.servicioItem {
+  display: flex;
+  gap: .5rem;
+  font-size: .84rem;
+  padding: .2rem 0;
+  color: var(--dark);
+}
+
+.servicioMecanico {
+  color: var(--gray);
+}
+
+/* ── NOTAS INTERNAS ──────────────────────────────────────── */
+.notasBox {
+  background: var(--warning-bg);
+  border-left: 3px solid var(--warning);
+  padding: .55rem .8rem;
+  margin-top: .75rem;
+  font-size: .82rem;
+  color: var(--dark);
+}
+
+.sinTareasMsg {
+  color: var(--gray);
+  font-size: .85rem;
+  padding: .5rem 0;
+}
+
+/* ── RESPONSIVE ──────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .dashHeader {
+    margin: -1rem -1rem 1rem;
+    padding: 1rem;
+  }
+
+  .statsStrip {
+    width: 100%;
+  }
+
+  .statBox {
+    flex: 1;
+    padding: .6rem .5rem;
+  }
+
+  .tareaItem {
+    flex-wrap: wrap;
+  }
+
+  .tareaSelect {
+    width: 100%;
+  }
+}

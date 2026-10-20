@@ -1,0 +1,66 @@
+.aviso {
+    background: #FEF3C7;
+    color: #B45309;
+    border-radius: 6px;
+    padding: 0.9rem 1.1rem;
+    font-size: 0.85rem;
+    margin-bottom: 1.4rem;
+    line-height: 1.5;
+  }
+  
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.4rem;
+  }
+  
+  .desc {
+    font-size: 0.85rem;
+    color: var(--gray);
+    line-height: 1.5;
+    margin-bottom: 1rem;
+  }
+  
+  .error {
+    background: #FEE2E2;
+    color: #B91C1C;
+    border-radius: 6px;
+    padding: 0.8rem 1rem;
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+  }
+  
+  .resultadoCard {
+    border-top-color: var(--success, #1B6B31);
+  }
+  
+  .resultadoResumen {
+    font-weight: 700;
+    margin-bottom: 1rem;
+  }
+  
+  .detalleWrap {
+    overflow-x: auto;
+  }
+  
+  .detalleWrap table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+  }
+  
+  .detalleWrap th {
+    text-align: left;
+    padding: 6px 10px;
+    background: var(--off, #F4F4F4);
+    text-transform: uppercase;
+    font-size: 0.68rem;
+    letter-spacing: 1px;
+    color: var(--gray);
+  }
+  
+  .detalleWrap td {
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--gray-light, #E8E8E8);
+  }

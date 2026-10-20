@@ -1,0 +1,218 @@
+/* ═══════════════════════════════════════════════════════════
+   MainLayout.module.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── ROOT WRAPPER ───────────────────────────────────────── */
+.rootWrapper {
+  display: flex;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+}
+
+:global(.main-wrapper) {
+  height: 100vh;
+}
+
+:global(.content) {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* ── OCULTAR SCROLLBAR VISUAL (el scroll sigue funcionando) ── */
+:global(.content),
+:global(.sidebar) {
+  scrollbar-width: none;       /* Firefox */
+  -ms-overflow-style: none;    /* Edge legacy */
+}
+
+:global(.content::-webkit-scrollbar),
+:global(.sidebar::-webkit-scrollbar) {
+  display: none;               /* Chrome / Safari / Edge */
+}
+
+/* ── SIDEBAR: logo centrado (sin texto al costado) ──────── */
+:global(.sidebar-logo) {
+  justify-content: center;
+}
+
+/* ── SIDEBAR: evitar overflow horizontal por nav-items ──── */
+:global(.sidebar) {
+  overflow-x: hidden;
+}
+
+/* ── NAV ITEMS: permitir 2 líneas si el texto no entra ──── */
+:global(.sidebar .nav-item) {
+  white-space: normal;
+  line-height: 1.3;
+}
+
+/* ── BÚSQUEDA GLOBAL ────────────────────────────────────── */
+
+/* Área clickeable del resultado (info del vehículo) */
+.searchResultInfo {
+  flex: 1;
+  cursor: pointer;
+  min-width: 0;
+}
+
+/* Contenedor de acciones rápidas */
+.searchResultActions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Botones rápidos "+ Cot." / "+ OT" dentro del resultado */
+.searchQuickBtn {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.searchQuickBtn:first-child {
+  background: var(--red);
+  color: white;
+}
+
+.searchQuickBtn:last-child {
+  background: var(--dark);
+  color: white;
+}
+
+/* Backdrop para cerrar resultados de búsqueda al click afuera */
+.searchBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+/* ── HEADER DERECHA ─────────────────────────────────────── */
+.headerRight {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.headerUserName {
+  font-size: .8rem;
+  color: var(--gray);
+  white-space: nowrap;
+}
+
+.logoutBtn {
+  font-size: .75rem;
+  white-space: nowrap;
+}
+
+/* ── MENÚ HAMBURGUESA (solo mobile) ─────────────────────── */
+.menuToggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: #ccc;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 10px 4px 0;
+  margin-right: 4px;
+  flex-shrink: 0;
+  transition: color .15s;
+}
+
+.menuToggle:hover {
+  color: #fff;
+}
+
+@media (max-width: 860px) {
+  .menuToggle {
+    display: flex;
+  }
+}
+
+/* ── BOTÓN CERRAR SIDEBAR (solo mobile) ─────────────────── */
+.sidebarClose {
+  display: none;
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+  transition: color .15s;
+}
+
+.sidebarClose:hover {
+  color: #fff;
+}
+
+@media (max-width: 860px) {
+  .sidebarClose {
+    display: block;
+  }
+}
+
+/* ── SIDEBAR COMO DRAWER EN MOBILE ───────────────────────── */
+@media (max-width: 860px) {
+  :global(.sidebar.sidebar-open) {
+    display: flex !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    z-index: 200;
+    box-shadow: 6px 0 32px rgba(0, 0, 0, .5);
+    animation: slideInSidebar .22s ease-out;
+  }
+}
+
+@keyframes slideInSidebar {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(0); }
+}
+
+/* ── BACKDROP DEL DRAWER ─────────────────────────────────── */
+.sidebarBackdrop {
+  display: none;
+}
+
+@media (max-width: 860px) {
+  .sidebarBackdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .6);
+    z-index: 150;
+  }
+}
+
+/* ── GLOBO DE NOTIFICACIÓN (citas nuevas) ────────────────── */
+.navBadge {
+  margin-left: auto;
+  background: var(--red);
+  color: #fff;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .65rem;
+  font-weight: 800;
+  line-height: 1;
+  min-width: 17px;
+  height: 17px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}

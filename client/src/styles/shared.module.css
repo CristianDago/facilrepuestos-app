@@ -1,0 +1,987 @@
+/* ═══════════════════════════════════════════════════════════
+   shared.module.css — Estilos comunes a Cotizaciones y OT
+   Importar con: import shared from '../shared.module.css';
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── PASO 1: BUSCAR PATENTE ─────────────────────────────── */
+.buscarWrap {
+  max-width: 480px;
+  margin: 3rem auto;
+}
+
+.buscarHint {
+  font-size: .88rem;
+  color: var(--gray);
+  margin-bottom: 1.2rem;
+  line-height: 1.6;
+}
+
+.buscarField {
+  margin-bottom: 1rem;
+}
+
+.buscarBtn {
+  width: 100%;
+}
+
+.buscarManualWrap {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--gray-light);
+  text-align: center;
+}
+
+/* ── PAGE HEADER ACTIONS ────────────────────────────────── */
+.headerActions {
+  display: flex;
+  gap: .8rem;
+}
+
+/* ── GRID VEHÍCULO + CLIENTE ────────────────────────────── */
+.dosColumnas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+  margin-bottom: 1.2rem;
+}
+
+@media (max-width: 1100px) {
+  .dosColumnas {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cardInner {
+  margin: 0;
+}
+
+.formRow1 {
+  margin-bottom: .8rem;
+}
+
+.formRow2 {
+  margin-top: .8rem;
+}
+
+.mb12 {
+  margin-bottom: 1.2rem;
+}
+
+/* ── BADGE TARIFA ───────────────────────────────────────── */
+.tarifaBadge {
+  margin-top: .6rem;
+  padding: 4px 10px;
+  background: #EFF6FF;
+  display: inline-block;
+  border-radius: 4px;
+}
+
+.tarifaLabel {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--info);
+}
+
+/* ── AVISO CLIENTE (info azul) ──────────────────────────── */
+.clienteAviso {
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  padding: .6rem .8rem;
+  margin-bottom: 1rem;
+  font-size: .75rem;
+  color: var(--info);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 4px;
+}
+
+/* ── INPUTS DESHABILITADOS ──────────────────────────────── */
+.inputDisabled {
+  background: #F8F8F8;
+  color: #555;
+}
+
+/* ── SECCIÓN TABLA (servicios / trabajos) ───────────────── */
+.seccionTabla {
+  background: var(--white);
+  border-top: 3px solid var(--red);
+  margin-bottom: 1.2rem;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, .07);
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+}
+
+.seccionHeader {
+  padding: .9rem 1.2rem;
+  border-bottom: 1px solid #F0F0F0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.preciosTarifa {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: var(--info);
+  background: #EFF6FF;
+  padding: 3px 8px;
+  border-radius: 3px;
+}
+
+/* ── ANCHOS COLUMNAS TABLA SVC ──────────────────────────── */
+.colServicio   { width: 50%; }
+.colPrecio     { width: 18%; }
+.colCantSvc    { width: 9%;  }
+.colTotalSvc   { width: 15%; }
+.colAccion     { width: 8%;  }
+
+/* ── ANCHOS COLUMNAS TABLA COSTOS ───────────────────────── */
+.colItem       { width: 30%; }
+.colProveedor  { width: 18%; }
+.colMarca      { width: 10%; }
+.colCosto      { width: 10%; }
+.colPVenta     { width: 12%; }
+.colCantCosto  { width: 7%;  }
+.colSubtotal   { width: 12%; }
+.colBorrar     { width: 3%;  }
+
+/* ── ANCHOS COLUMNAS TABLA OT (con mecánico) ────────────── */
+.colTrabajoSvc  { width: 40%; }
+.colMecanico    { width: 18%; }
+.colPrecioOT    { width: 14%; }
+.colCantOT      { width: 7%;  }
+.colTotalOT     { width: 12%; }
+.colAccionOT    { width: 9%;  }
+
+/* ── ANCHOS COLUMNAS REPUESTOS OT ───────────────────────── */
+.colRepuesto    { width: 50%; }
+.colPrecioRep   { width: 18%; }
+.colCantRep     { width: 10%; }
+.colTotalRep    { width: 15%; }
+
+@media (max-width: 768px) {
+  .colServicio, .colPrecio, .colCantSvc, .colTotalSvc, .colAccion,
+  .colItem, .colProveedor, .colMarca, .colCosto, .colPVenta, .colCantCosto, .colSubtotal, .colBorrar,
+  .colTrabajoSvc, .colMecanico, .colPrecioOT, .colCantOT, .colTotalOT, .colAccionOT,
+  .colRepuesto, .colPrecioRep, .colCantRep, .colTotalRep {
+    width: auto;
+  }
+}
+
+/* ── INPUT NUMÉRICO PEQUEÑO ─────────────────────────────── */
+.inputCant {
+  width: 56px;
+}
+
+.inputCantOT {
+  width: 50px;
+}
+
+/* ── EMPTY STATE TABLA ──────────────────────────────────── */
+.emptyTabla {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--gray);
+  font-size: .85rem;
+}
+
+.emptyTablaDark {
+  padding: 1.5rem;
+  text-align: center;
+  color: #444;
+  font-size: .85rem;
+}
+
+/* ── TOTAL BAR (desglose costos) ────────────────────────── */
+.totalBarWrap {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 14px 18px;
+}
+
+.totalBarRow {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+
+.totalBarRowSep {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  border-top: 1px solid #333;
+  padding-top: 8px;
+  margin-top: 2px;
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.totalBarRowTotal {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  border-top: 1px solid #555;
+  padding-top: 8px;
+  margin-top: 2px;
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.totalBarRowIva {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.totalBarValor {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #AAA;
+}
+
+/* ── COSTS SUMMARY CELLS ────────────────────────────────── */
+.csValCliente {
+  color: #60A5FA;
+}
+
+.csValCosto {
+  color: #777;
+}
+
+/* ── MODAL INVENTARIO (oscuro) ──────────────────────────── */
+.modalInventario {
+  max-width: 660px;
+}
+
+.modalInventarioInfo {
+  background: #1A1A1A;
+  border: 1px solid #333;
+  padding: .6rem .8rem;
+  margin-bottom: 1rem;
+  font-size: .78rem;
+  color: #666;
+  display: flex;
+  justify-content: space-between;
+  border-radius: 4px;
+}
+
+.modalInventarioMarca {
+  color: var(--success);
+  font-weight: 700;
+}
+
+.modalBuscarField {
+  margin-bottom: 1rem;
+}
+
+.modalInventarioLista {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #2A2A2A;
+  margin-bottom: 1rem;
+  background: #111;
+  border-radius: 4px;
+}
+
+.modalInventarioEmpty {
+  padding: 1.5rem;
+  text-align: center;
+  color: #444;
+}
+
+.invItemRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.invItemNombre {
+  font-weight: 600;
+  font-size: .88rem;
+  color: #CCC;
+}
+
+.invItemBadgeMarca {
+  background: rgba(27, 107, 49, .3);
+  color: #4ADE80;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .6rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+}
+
+.invItemMeta {
+  font-size: .75rem;
+  color: #555;
+  margin-top: 2px;
+}
+
+.invItemPrecios {
+  text-align: right;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+.invItemPrecioCompra {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  color: #555;
+  font-size: .78rem;
+}
+
+.invItemPrecioVenta {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  color: var(--red-dark);
+  font-size: .82rem;
+}
+
+/* ── MODAL SELECTED ITEM ────────────────────────────────── */
+.selectedItemWrap {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  background: #1A1A1A;
+  padding: .8rem 1rem;
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
+.selectedItemInfo {
+  flex: 1;
+}
+
+.selectedItemNombre {
+  font-weight: 600;
+  color: #CCC;
+}
+
+.selectedItemPrecios {
+  font-size: .78rem;
+  color: #555;
+  margin-top: 2px;
+}
+
+.selectedItemPrecioCompra {
+  color: #444;
+}
+
+.selectedItemPrecioVenta {
+  margin-left: 12px;
+  color: #AAA;
+}
+
+.selectedItemCantField {
+  width: 100px;
+  margin: 0;
+}
+
+/* ── MODAL REPUESTO OT (oscuro, igual que Cotización) ────── */
+.modalRepuesto {
+  max-width: 640px;
+}
+
+.repuestoLista {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid #2A2A2A;
+  margin-bottom: 1rem;
+  background: #111;
+  border-radius: 4px;
+}
+
+.repuestoEmpty {
+  padding: 1.5rem;
+  text-align: center;
+  color: #444;
+}
+
+.repuestoItem {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #1A1A1A;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: background .12s;
+}
+
+.repuestoItem:hover {
+  background: #1A1A1A;
+}
+
+.repuestoItem.seleccionado {
+  background: #2A1A1C;
+}
+
+.repuestoItemNombre {
+  font-weight: 600;
+  font-size: .88rem;
+  color: #CCC;
+}
+
+.repuestoItemMeta {
+  font-size: .75rem;
+  color: #555;
+  margin-top: 2px;
+}
+
+.repuestoItemPrecios {
+  text-align: right;
+  flex-shrink: 0;
+  margin-left: 12px;
+}
+
+.repuestoItemPrecio {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  color: var(--red-dark);
+  font-size: .82rem;
+}
+
+.repuestoItemStock {
+  font-size: .75rem;
+  margin-top: 2px;
+}
+
+.repuestoItemStockDisp {
+  font-weight: 600;
+  color: #777;
+}
+
+.repuestoItemStockReserv {
+  color: var(--warning);
+  margin-left: 6px;
+}
+
+.selectedRepuestoWrap {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  background: #1A1A1A;
+  padding: .8rem 1rem;
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
+.selectedRepuestoInfo {
+  flex: 1;
+}
+
+.selectedRepuestoNombre {
+  font-weight: 600;
+  color: #CCC;
+}
+
+.selectedRepuestoDisp {
+  font-size: .78rem;
+  color: #666;
+}
+
+.selectedRepuestoCantField {
+  width: 100px;
+  margin: 0;
+}
+
+/* ── TEXTAREA ────────────────────────────────────────────── */
+.textarea {
+  resize: vertical;
+}
+
+.textareaDark {
+  resize: vertical;
+  background: #1C1C1C;
+  color: #AAA;
+  border-color: #333;
+}
+
+/* ── BOTÓN GUARDAR ───────────────────────────────────────── */
+.btnGuardar {
+  font-size: .85rem;
+  padding: 13px 28px;
+}
+
+/* ── BANNERS DE ESTADO ──────────────────────────────────── */
+.bannerAdvertencia {
+  background: #FEF3C7;
+  border: 1px solid #F59E0B;
+  padding: .8rem 1.2rem;
+  margin-bottom: 1rem;
+  font-size: .82rem;
+  color: #92400E;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 4px;
+}
+
+.bannerBloqueado {
+  background: #FEE2E2;
+  border: 1px solid #EF4444;
+  padding: .8rem 1.2rem;
+  margin-bottom: 1rem;
+  font-size: .82rem;
+  color: #B91C1C;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 4px;
+}
+
+.bannerFuerte {
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+/* ── COSTOS: INDICADORES DE PROVEEDOR ───────────────────── */
+.proveedorOk {
+  color: var(--success);
+  font-size: .72rem;
+  font-weight: 700;
+}
+
+.proveedorNo {
+  color: #333;
+  font-size: .72rem;
+}
+
+/* ── CELL COLORES EN COST-TBL ───────────────────────────── */
+.cellItem {
+  color: #CCC;
+  font-size: .85rem;
+}
+
+.cellProveedor {
+  color: #666;
+  font-size: .82rem;
+}
+
+.cellCosto {
+  color: #555;
+  font-size: .8rem;
+}
+
+.cellVenta {
+  color: #AAA;
+}
+
+.btnGhostDark {
+  border-color: #444;
+  color: #888;
+  padding: 4px 10px;
+  font-size: .65rem;
+}
+
+/* ── COSTS CARD: header con badge ───────────────────────── */
+.costsCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.costsCardHeaderRight {
+  display: flex;
+  gap: .5rem;
+  align-items: center;
+}
+
+/* ── VER: barra sticky de acciones ─────────────────────── */
+.actionBar {
+  background: var(--dark);
+  padding: 12px 1.8rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  flex-wrap: wrap;
+}
+
+.actionBarNumero {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .72rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #666;
+}
+
+.actionBarEnvios {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #1A1A1A;
+  padding: 4px 10px;
+  border: 1px solid #333;
+  border-radius: 3px;
+}
+
+.actionBarEnviosCnt {
+  font-size: .68rem;
+  color: #555;
+  font-family: 'Barlow Condensed', sans-serif;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.actionBarWa {
+  font-size: .68rem;
+  color: #25D366;
+  font-weight: 700;
+}
+
+.actionBarMail {
+  font-size: .68rem;
+  color: #60A5FA;
+  font-weight: 700;
+}
+
+.actionBarFisico {
+  font-size: .68rem;
+  color: #FACC15;
+  font-weight: 700;
+}
+
+.actionBarUltimo {
+  font-size: .68rem;
+  color: #444;
+}
+
+.actionBarSpacer {
+  flex: 1;
+}
+
+.actionBarBadgeEnvio {
+  margin-left: 5px;
+  font-size: .6rem;
+}
+
+/* ── DOCUMENTO IMPRIMIBLE ───────────────────────────────── */
+.docWrap {
+  background: #fff;
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 40px;
+  font-family: 'Barlow', sans-serif;
+  font-size: 12.5px;
+  color: #111;
+  box-shadow: 0 2px 20px rgba(0, 0, 0, .1);
+}
+
+.docTopbar {
+  background: #8C0E1F;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 18px;
+  margin-bottom: 16px;
+}
+
+.docTitulo {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: 4px;
+  color: #fff;
+}
+
+.docLogo {
+  height: 40px;
+  object-fit: contain;
+}
+
+.docInfoGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid #DDD;
+  margin-bottom: 16px;
+}
+
+.docInfoCol {
+  padding: 12px 16px;
+  border-right: 1px solid #DDD;
+}
+
+.docInfoColRight {
+  padding: 12px 16px;
+}
+
+.docInfoTitle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: .72rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #8C0E1F;
+  margin-bottom: 10px;
+}
+
+.docInfoRow {
+  display: grid;
+  grid-template-columns: 110px 1fr;
+  margin-bottom: 3px;
+  font-size: .78rem;
+  line-height: 1.5;
+}
+
+.docInfoLabel {
+  color: #777;
+}
+
+.docSectionTitle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #8C0E1F;
+  margin-bottom: 6px;
+}
+
+.docSectionTitleMt {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #8C0E1F;
+  margin-bottom: 6px;
+  margin-top: 14px;
+}
+
+.docTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.docTheadRow {
+  background: #1A1A1A;
+}
+
+.docTr {
+  border-bottom: 1px solid #EAEAEA;
+}
+
+.docTrVacio {
+  height: 28px;
+  border-bottom: 1px solid #EAEAEA;
+}
+
+.docTd {
+  padding: 7px 12px;
+  font-size: .82rem;
+}
+
+.docTdR {
+  padding: 7px 12px;
+  font-size: .82rem;
+  text-align: right;
+}
+
+.docTdBold {
+  padding: 7px 12px;
+  font-size: .82rem;
+  text-align: right;
+  font-weight: 700;
+}
+
+.docTdGray {
+  padding: 7px 12px;
+  font-size: .78rem;
+  color: #777;
+}
+
+.docSubtotalBar {
+  background: #F5F5F5;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 16px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #DDD;
+}
+
+.docSubtotalLbl {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #888;
+}
+
+.docSubtotalVal {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #333;
+}
+
+.docIvaBars {
+  background: #F5F5F5;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #DDD;
+}
+
+.docIvaRow {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.docTotalBar {
+  background: #8C0E1F;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 20px;
+  padding: 10px 14px;
+}
+
+.docTotalLbl {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+}
+
+.docTotalVal {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.9rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.docObs {
+  margin-top: 14px;
+  padding: 8px 12px;
+  background: #F9F9F9;
+  border: 1px solid #EEE;
+}
+
+.docObsTitle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .68rem;
+  font-weight: 800;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #8C0E1F;
+  margin-bottom: 4px;
+}
+
+.docObsText {
+  font-size: .78rem;
+  color: #555;
+  line-height: 1.7;
+}
+
+.docCondiciones {
+  margin-top: 12px;
+  font-size: .75rem;
+  color: #444;
+  line-height: 1.8;
+}
+
+.docFooter {
+  margin-top: 20px;
+  padding-top: 10px;
+  border-top: 1px solid #EEE;
+  text-align: center;
+  font-size: .7rem;
+  color: #8C0E1F;
+  font-weight: 600;
+  letter-spacing: 2px;
+}
+
+/* ── COLUMNAS TABLA DOC (COT) ───────────────────────────── */
+.docThDesc    { text-align: left;  width: 56%; }
+.docThPrecio  { text-align: right; width: 14%; }
+.docThCant    { text-align: right; width: 10%; }
+.docThTotal   { text-align: right; width: 20%; }
+
+/* ── FILA DE DESCUENTO ───────────────────────────────────── */
+.descuentoRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .6rem;
+  padding: .7rem 1rem;
+  background: #FAFAFA;
+  border-top: 1px solid var(--gray-light);
+  flex-wrap: wrap;
+}
+
+.descuentoLabel {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #777;
+  flex-shrink: 0;
+}
+
+.descuentoSelect {
+  padding: 5px 8px;
+  font-size: .82rem;
+  width: 120px;
+  flex-shrink: 0;
+}
+
+.descuentoInput {
+  width: 80px;
+  padding: 5px 8px !important;
+  font-size: .88rem !important;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.descuentoMonto {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .9rem;
+  font-weight: 700;
+  color: var(--success);
+  flex-shrink: 0;
+}
+
+/* ── RESPONSIVE DOC ─────────────────────────────────────── */
+@media (max-width: 768px) {
+  .docWrap {
+    padding: 1rem !important;
+    overflow-x: auto;
+  }
+
+  .docTable {
+    min-width: 500px;
+  }
+
+  .docInfoGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .docInfoCol {
+    border-right: none;
+    border-bottom: 1px solid #DDD;
+  }
+}

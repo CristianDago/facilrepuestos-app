@@ -1,0 +1,127 @@
+/* ── STAT CARDS ──────────────────────────────────────────── */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.8rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 1100px) {
+  .statsGrid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .statsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Stat card con border-radius */
+:global(.stat-card) {
+  border-radius: 8px;
+}
+
+.statOtAbiertas {
+  color: var(--warning);
+}
+
+.statIngresos {
+  color: var(--red-dark);
+  font-size: 1.4rem !important;
+  line-height: 1.1;
+}
+
+.statMargenLabel {
+  color: #fff;
+}
+
+.margenNulo {
+  color: #888;
+}
+
+/* ── TABLA COMPACTA CON SCROLL (últimas cotizaciones / OT) ── */
+.tblScroll {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.tblCompacta {
+  min-width: unset;
+}
+
+/* ── TABLAS GRID ─────────────────────────────────────────── */
+.tablasGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+}
+
+@media (max-width: 860px) {
+  .tablasGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── TABLE CARD ──────────────────────────────────────────── */
+.tableCard {
+  background: #fff;
+  border-top: 3px solid var(--red);
+  border-radius: 8px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.07);
+  overflow: hidden;
+}
+
+.tableCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 1.2rem 0.6rem;
+}
+
+.tableCardTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--red);
+}
+
+.tableCardTitle::before {
+  content: '';
+  display: block;
+  width: 3px;
+  height: 14px;
+  background: var(--red);
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ── ROWS ────────────────────────────────────────────────── */
+.rowClickable {
+  cursor: pointer;
+}
+
+.emptyRow {
+  text-align: center;
+  padding: 1.5rem;
+  color: var(--gray);
+  font-size: 0.84rem;
+}
+
+/* ── CELDAS ──────────────────────────────────────────────── */
+.otNumero {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+
+.fechaCell {
+  font-size: 0.82rem;
+  color: var(--gray);
+}

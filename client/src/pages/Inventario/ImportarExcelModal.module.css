@@ -1,0 +1,175 @@
+/* ═══════════════════════════════════════════════════════════
+   ImportarExcelModal.module.css
+   ═══════════════════════════════════════════════════════════ */
+
+   .modal {
+    max-width: 720px;
+  }
+  
+  .btnPlantilla {
+    margin-bottom: 1.2rem;
+  }
+  
+  /* ── ZONA DE ARRASTRE / SELECCIÓN DE ARCHIVO ─────────────── */
+  .dropZone {
+    border: 2px dashed #DDD;
+    padding: 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    margin-bottom: 1rem;
+    background: #FAFAFA;
+    transition: border-color .15s;
+  }
+  
+  .dropZone:hover {
+    border-color: var(--red);
+  }
+  
+  .dropZoneIcon {
+    font-size: 1.8rem;
+    margin-bottom: 0.4rem;
+  }
+  
+  .dropZoneText {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: .9rem;
+    letter-spacing: 1px;
+  }
+  
+  .dropZoneHint {
+    font-size: .78rem;
+    color: #999;
+    margin-top: 4px;
+  }
+  
+  .fileInputHidden {
+    display: none;
+  }
+  
+  /* ── BADGES RESUMEN ───────────────────────────────────────── */
+  .badgesRow {
+    display: flex;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  
+  .badgeBase {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: .72rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 4px 10px;
+  }
+  
+  .badgeNuevos      { background: #E6F4EB; color: var(--success); }
+  .badgeDuplicados  { background: #FEF3C7; color: var(--warning); }
+  .badgeErrores     { background: #FEE2E2; color: var(--red); }
+  .badgeTotal       { background: #F0F0F0; color: #555; }
+  
+  /* ── ACCIÓN DUPLICADOS ────────────────────────────────────── */
+  .duplicadosBox {
+    background: #FEF3C7;
+    border: 1px solid #FDE68A;
+    padding: 10px 14px;
+    margin-bottom: 1rem;
+  }
+  
+  .duplicadosTitulo {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: .78rem;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #B45309;
+    margin-bottom: 8px;
+  }
+  
+  .duplicadosBtnRow {
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  .duplicadosBtn {
+    padding: 6px 14px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: .72rem;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    cursor: pointer;
+    border: 2px solid #CCC;
+    background: transparent;
+    color: #999;
+  }
+  
+  .duplicadosBtn.activoSaltar {
+    border-color: var(--dark);
+    background: var(--dark);
+    color: #fff;
+  }
+  
+  .duplicadosBtn.activoActualizar {
+    border-color: var(--red);
+    background: #FFF0F1;
+    color: var(--red);
+  }
+  
+  /* ── PREVIEW TABLA ────────────────────────────────────────── */
+  .previewWrap {
+    max-height: 280px;
+    overflow-y: auto;
+    border: 1px solid var(--gray-light);
+    margin-bottom: 1rem;
+  }
+  
+  .previewTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .82rem;
+  }
+  
+  .previewTheadRow {
+    background: var(--black);
+    position: sticky;
+    top: 0;
+  }
+  
+  .previewTh {
+    color: #fff;
+    padding: 8px 12px;
+    text-align: left;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: .65rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  
+  .previewThR {
+    text-align: right;
+  }
+  
+  .previewRow {
+    border-bottom: 1px solid #F0F0F0;
+    background: #fff;
+  }
+  
+  .previewRow.duplicado { background: #FFFBEB; }
+  .previewRow.error      { background: #FFF5F5; }
+  
+  .previewTd       { padding: 6px 12px; }
+  .previewTdR      { padding: 6px 12px; text-align: right; }
+  .previewTdCodigo { padding: 6px 12px; font-family: monospace; font-weight: 700; }
+  .previewTdGray   { padding: 6px 12px; color: #777; }
+  .previewTdPrecio {
+    padding: 6px 12px;
+    text-align: right;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+  }
+  
+  .estadoNuevo      { color: var(--success); font-weight: 700; font-size: .72rem; }
+  .estadoDuplicado  { color: var(--warning); font-weight: 700; font-size: .72rem; }
+  .estadoError      { color: var(--red);     font-weight: 700; font-size: .72rem; }

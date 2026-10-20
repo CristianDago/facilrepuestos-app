@@ -1,0 +1,106 @@
+/* ═══════════════════════════════════════════════════════════
+   PerfilVehiculo.module.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── ACCIONES DEL HEADER ────────────────────────────────── */
+.headerActions {
+  display: flex;
+  gap: .8rem;
+  flex-wrap: wrap;
+}
+
+/* ── BLOQUE PROPIETARIO (header del perfil) ─────────────── */
+.propietarioBlock {
+  text-align: right;
+}
+
+.propietarioLabel {
+  font-size: .78rem;
+  color: var(--gray);
+}
+
+.propietarioNombre {
+  font-weight: 600;
+  font-size: .95rem;
+}
+
+.propietarioDato {
+  font-size: .82rem;
+  color: var(--gray);
+}
+
+@media (max-width: 600px) {
+  :global(.vp-header) {
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .propietarioBlock {
+    text-align: left;
+  }
+}
+
+/* ── STATS ──────────────────────────────────────────────── */
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.4rem;
+}
+
+@media (max-width: 768px) {
+  .statsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.statCardFlat {
+  margin: 0;
+}
+
+.statAprobadas {
+  color: var(--success);
+}
+
+.statFacturado {
+  color: var(--red-dark);
+  font-size: 1.4rem !important;
+  line-height: 1.1;
+}
+
+/* ── HISTORIAL (cotizaciones + OT) ──────────────────────── */
+.historialGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.2rem;
+}
+
+@media (max-width: 900px) {
+  .historialGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tblWrapFlat {
+  box-shadow: none;
+  border-top-color: #DDD;
+}
+
+.tableMinWidth {
+  min-width: 0;
+}
+
+.emptyRow {
+  text-align: center;
+  padding: 1rem;
+  color: var(--gray);
+}
+
+.fechaCell {
+  font-size: .82rem;
+}
+
+.otNumero {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+}

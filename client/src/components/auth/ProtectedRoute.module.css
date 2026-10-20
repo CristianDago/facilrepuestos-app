@@ -1,0 +1,20 @@
+/* ═══════════════════════════════════════════════════════════
+   ProtectedRoute.module.css
+   ═══════════════════════════════════════════════════════════ */
+
+   .loadingWrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+  }
+  
+  .loadingBox {
+    text-align: center;
+    color: var(--gray);
+  }
+  
+  .loadingIcon {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+  }

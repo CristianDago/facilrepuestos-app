@@ -1,0 +1,212 @@
+.container {
+  height: 100vh;
+  overflow-y: auto;
+  display: flex;
+  align-items: safe center;
+  justify-content: center;
+  background: #0D0D0D;
+  padding: 1.5rem;
+}
+
+.card {
+  background: #161616;
+  border: 1px solid #242424;
+  border-top: 4px solid var(--red);
+  border-radius: 20px;
+  width: 100%;
+  max-width: 420px;
+  padding: 2.5rem 2rem;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.8);
+}
+
+/* ── LOGO ─────────────────────────────────────────────────── */
+.logoWrap {
+  text-align: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #1E1E1E;
+}
+
+.logo {
+  height: 52px;
+  object-fit: contain;
+  filter: brightness(1.05);
+}
+
+/* ── SELECTOR ────────────────────────────────────────────── */
+.selectorTitle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #fff;
+  margin-bottom: 0.3rem;
+}
+
+.selectorSub {
+  font-size: 0.82rem;
+  color: #888;
+  margin-bottom: 1.5rem;
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: #1E1E1E;
+  border: 1px solid #2E2E2E;
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.option:hover {
+  background: #222;
+  border-color: #3A3A3A;
+}
+
+.optionAdmin {
+  border-left: 3px solid var(--red);
+}
+
+.optionAdmin:hover {
+  border-left-color: var(--red-dark);
+}
+
+.optionIcon {
+  font-size: 1.3rem;
+  width: 28px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.optionTitle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #fff;
+  display: block;
+}
+
+.optionDesc {
+  font-size: 0.74rem;
+  color: #fff;
+  margin-top: 2px;
+  display: block;
+}
+
+/* ── FORM ────────────────────────────────────────────────── */
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.formTitle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #fff;
+  margin-bottom: 0.2rem;
+}
+
+.backBtn {
+  background: none;
+  border: none;
+  color: #555;
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  width: fit-content;
+  margin-bottom: 0.5rem;
+  font-family: 'Barlow Condensed', sans-serif;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: color 0.15s;
+}
+
+.backBtn:hover {
+  color: #999;
+}
+
+.error {
+  background: rgba(184, 23, 45, 0.12);
+  border: 1px solid rgba(184, 23, 45, 0.3);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  color: #F87171;
+  font-size: 0.82rem;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.formLabel {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #555;
+}
+
+.formInput {
+  background: #1E1E1E !important;
+  border: 1px solid #2E2E2E !important;
+  border-radius: 8px !important;
+  color: #DDD !important;
+  padding: 10px 13px;
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.formInput::placeholder {
+  color: #3A3A3A;
+}
+
+.formInput:focus {
+  border-color: var(--red) !important;
+  box-shadow: 0 0 0 3px rgba(184, 23, 45, 0.1);
+}
+
+/* ── SUBMIT BTN ──────────────────────────────────────────── */
+.submitBtn {
+  width: 100%;
+  margin-top: 0.5rem;
+  border-radius: 8px;
+}
+
+/* ── FOOTER ──────────────────────────────────────────────── */
+.cardFooter {
+  margin-top: 2rem;
+  padding-top: 1rem;
+  border-top: 1px solid #1A1A1A;
+  text-align: center;
+}
+
+.version {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: #2A2A2A;
+}

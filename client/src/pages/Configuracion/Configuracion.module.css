@@ -1,0 +1,155 @@
+/* ═══════════════════════════════════════════════════════════
+   Configuracion.module.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── SECCIÓN (estructura uniforme: título, desc, controles, lista) ── */
+.section {
+  margin-bottom: 2.5rem;
+}
+
+.section:last-child {
+  margin-bottom: 0;
+}
+
+.sectionHint {
+  font-size: .85rem;
+  color: var(--gray);
+}
+
+.searchInputSm {
+  width: 220px;
+}
+
+.sectionTitle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--dark);
+}
+
+.sectionSubtitle {
+  font-size: .82rem;
+  color: var(--gray);
+  margin-top: 2px;
+  margin-bottom: 1rem;
+}
+
+.controlsRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+/* ── TABLAS ─────────────────────────────────────────────── */
+.emptyRow {
+  text-align: center;
+  padding: 2rem;
+  color: var(--gray);
+}
+
+.cellBold {
+  font-weight: 600;
+}
+
+.accionesRow {
+  display: flex;
+  gap: 4px;
+}
+
+.btnDanger {
+  background: #FEE2E2;
+  color: #B91C1C;
+  border: none;
+  border-radius: 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.btnDanger:hover {
+  background: #FECACA;
+}
+
+/* ── BADGES TIPO FABRICANTE ──────────────────────────────── */
+.badgeDefault {
+  background: #F0F0F0;
+  color: #555;
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+
+.badgeCustom {
+  background: var(--success-bg);
+  color: var(--success);
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+
+/* ── MODAL SERVICIO ──────────────────────────────────────── */
+.infoBanner {
+  background: var(--off);
+  padding: .6rem .8rem;
+  margin-bottom: 1rem;
+  font-size: .78rem;
+  color: var(--gray);
+  border-radius: 4px;
+}
+
+.mb1 {
+  margin-bottom: 1rem;
+}
+
+.mt1 {
+  margin-top: 1rem;
+}
+
+.textareaFull {
+  width: 100%;
+  resize: vertical;
+}
+
+/* ── AGREGAR MATERIAL ─────────────────────────────────────── */
+.addMaterialRow {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+}
+
+.flexGrow2 { flex: 2; }
+.flexGrow1 { flex: 1; }
+
+/* ── AGREGAR FABRICANTE ──────────────────────────────────── */
+.addFabricanteRow {
+  display: flex;
+  gap: .75rem;
+  max-width: 400px;
+  flex-wrap: wrap;
+}
+
+.flexInput {
+  flex: 1;
+  min-width: 160px;
+}
+
+.noAction {
+  color: #CCC;
+  font-size: .8rem;
+}

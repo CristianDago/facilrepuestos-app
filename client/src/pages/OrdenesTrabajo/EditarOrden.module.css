@@ -1,0 +1,111 @@
+/* ═══════════════════════════════════════════════════════════
+   EditarOrden.module.css
+   Todo lo compartido viene de shared.module.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── MECÁNICO ASIGNADO ──────────────────────────────────── */
+.mecanicoSelect {
+  font-size: .78rem;
+}
+
+.mecanicoAsignado {
+  font-size: .68rem;
+  color: var(--success);
+  margin-top: 2px;
+}
+
+/* ── NOTAS INTERNAS ─────────────────────────────────────── */
+/* usa shared.textareaDark */
+
+/* ── REPUESTOS: footer alineado derecha ─────────────────── */
+.repuestoFooter {
+  justify-content: flex-end;
+}
+
+/* ── ESTADO: aviso entrega real ─────────────────────────── */
+.avisoEntregaReal {
+  font-size: .72rem;
+  color: var(--success);
+  margin-top: 4px;
+}
+
+/* ── MODAL HISTORIAL ────────────────────────────────────── */
+.modalHistorial {
+  max-width: 480px;
+}
+
+.historialLista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.historialItem {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.6rem 0.75rem;
+  background: var(--off);
+  border-radius: 6px;
+}
+
+.historialInfo {
+  flex: 1;
+}
+
+.historialEstados {
+  font-size: .88rem;
+  font-weight: 600;
+}
+
+.historialDe {
+  color: var(--gray);
+}
+
+.historialA {
+  color: var(--red);
+}
+
+.historialMeta {
+  font-size: .75rem;
+  color: var(--gray);
+}
+
+/* ── TÍTULOS DE SECCIÓN SIN MARGEN ───────────────────────── */
+.cardTitleFlush { margin: 0; }
+
+/* ── BUSCADOR DE SERVICIO / INSUMO (input + botón limpiar) ── */
+.filtroRow    { display: flex; gap: 4px; margin-bottom: 4px; }
+.filtroInput  { flex: 1; font-size: .82rem; }
+.filtroClear  { background: none; border: none; cursor: pointer; color: #999; }
+
+/* ── TEXTAREA DE DETALLE DE SERVICIO ─────────────────────── */
+.detalleTextarea {
+  width: 100%;
+  margin-top: 4px;
+  font-size: .8rem;
+  resize: vertical;
+  border: 1px solid #EEE;
+  padding: 4px 6px;
+}
+
+/* ── ENCABEZADO SECCIÓN REPUESTOS (acciones) ─────────────── */
+.repuestosHeaderAcciones {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* ── FILA MATERIAL EXTERNO (selector + input manual) ─────── */
+.materialManualWrap { display: flex; flex-direction: column; gap: 4px; }
+
+/* ── COSTO / P.VENTA DE MATERIAL EXTERNO ─────────────────── */
+.costoInput       { width: 80px; }
+.precioVentaInput { width: 80px; font-weight: 700; }
+
+/* ── CARD CON MARGEN INFERIOR (Observaciones) ────────────── */
+.cardConMargen { margin-bottom: 1.2rem; }
+
+/* ── FILA DE DESCUENTO EN TOTAL-BAR ──────────────────────── */
+.descuentoRowVerde { color: #4ADE80; }

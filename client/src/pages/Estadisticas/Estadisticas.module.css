@@ -1,0 +1,127 @@
+.ivaValue {
+  color: var(--warning);
+}
+
+.creditoValue {
+  color: var(--success);
+}
+
+.costoValue {
+  color: #888;
+}
+
+.margenNulo {
+  color: #888;
+}
+
+.rangoSelectWrap {
+  width: 200px;
+}
+
+/* ── HEADER: selector de mes ─────────────────────────────── */
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+}
+
+.mesSelect {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 8px 14px;
+  border: 1.5px solid var(--gray-light);
+  background: var(--white);
+  min-width: 170px;
+}
+
+.tablaHistoricaTitulo {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--gray);
+  margin: 1.8rem 0 0.8rem;
+}
+
+/* ── CONTROLES ────────────────────────────────────────────── */
+.controlsBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.granTabs {
+  display: flex;
+  gap: 0;
+  border: 1.5px solid var(--gray-light);
+}
+
+.granTab {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  background: var(--white);
+  color: var(--gray);
+  border: none;
+  padding: 9px 20px;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.granTab:not(:last-child) {
+  border-right: 1.5px solid var(--gray-light);
+}
+
+.granTab:hover {
+  background: var(--off);
+  color: var(--dark);
+}
+
+.granTabActive,
+.granTabActive:hover {
+  background: var(--red);
+  color: #fff;
+}
+
+/* ── NOTA METODOLÓGICA ───────────────────────────────────── */
+.infoNote {
+  background: var(--info-bg);
+  border: 1px solid #BFDBFE;
+  color: var(--info);
+  font-size: .78rem;
+  line-height: 1.5;
+  padding: .7rem 1rem;
+  margin-bottom: 1.2rem;
+  border-radius: 4px;
+}
+
+/* ── ESTADO VACÍO ────────────────────────────────────────── */
+.emptyState {
+  text-align: center;
+  color: var(--gray);
+  padding: 2rem 1rem;
+  font-size: .9rem;
+}
+
+/* ── BADGE DE ADVERTENCIA ────────────────────────────────── */
+.warnBadge {
+  margin-left: 6px;
+  color: var(--warning);
+  cursor: help;
+  font-size: .85rem;
+}
+
+/* ── FILA DE TOTALES ─────────────────────────────────────── */
+.totalRow td {
+  background: var(--off);
+  border-top: 2px solid var(--dark);
+  border-bottom: none;
+}

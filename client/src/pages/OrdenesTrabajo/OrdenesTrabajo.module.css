@@ -1,0 +1,382 @@
+/* ═══════════════════════════════════════════════════════════
+   OrdenesTrabajo.module.css — Lista de órdenes de trabajo
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── PAGE HEADER ────────────────────────────────────────── */
+.toolbarRight {
+  display: flex;
+  gap: .8rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.searchInput  { width: 220px; }
+.filtroEstado { width: 150px; }
+
+/* ── FLUJO VISUAL (stats clickables) ───────────────────── */
+.statsGridOT {
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.statIngresos {
+  color: var(--red-dark);
+  font-size: 1.4rem !important;
+  line-height: 1.1;
+}
+
+/* ── TABLA ──────────────────────────────────────────────── */
+.emptyRow {
+  text-align: center;
+  padding: 2rem;
+  color: var(--gray);
+}
+
+.otNumero {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 1.05rem;
+}
+
+.origenDirecta {
+  font-size: .75rem;
+  color: var(--gray);
+}
+
+.fecha {
+  font-size: .83rem;
+}
+
+.fechaRealInput {
+  font-size: .78rem;
+  padding: 4px 6px !important;
+  border: 1.5px solid var(--gray-light) !important;
+  width: 128px;
+  max-width: 100%;
+}
+
+.fechaRealInput:hover,
+.fechaRealInput:focus {
+  border-color: var(--red) !important;
+}
+
+.sinRepuestos {
+  color: #CCC;
+  font-size: .75rem;
+}
+
+/* ── ESTADO / ENVÍOS ────────────────────────────────────── */
+.stockDescontado {
+  font-size: .68rem;
+  color: var(--success);
+  margin-top: 2px;
+}
+
+.puestoBadge {
+  font-size: .68rem;
+  font-weight: 700;
+  color: var(--red-dark);
+  margin-top: 2px;
+}
+
+.enviosResumen {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.envioWa {
+  font-size: .65rem;
+  background: rgba(37, 211, 102, .15);
+  color: #25D366;
+  padding: 1px 5px;
+  font-weight: 700;
+  border-radius: 3px;
+}
+
+.envioMail {
+  font-size: .65rem;
+  background: rgba(96, 165, 250, .15);
+  color: #60A5FA;
+  padding: 1px 5px;
+  font-weight: 700;
+  border-radius: 3px;
+}
+
+.envioFisico {
+  font-size: .65rem;
+  background: rgba(250, 204, 21, .15);
+  color: #FACC15;
+  padding: 1px 5px;
+  font-weight: 700;
+  border-radius: 3px;
+}
+
+.envioUltimo {
+  font-size: .62rem;
+  color: var(--gray);
+  width: 100%;
+}
+
+/* ── ACCIONES ───────────────────────────────────────────── */
+.accionesCol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── COLUMNA ACCIONES FIJA (sticky) ──────────────────────── */
+/* Evita tener que hacer scroll horizontal para llegar a los botones */
+.thAcciones {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--black);
+  box-shadow: -6px 0 8px -6px rgba(0, 0, 0, .25);
+}
+
+.tdAcciones {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--white);
+  box-shadow: -6px 0 8px -6px rgba(0, 0, 0, .15);
+}
+
+/* En mobile la tabla ya se convierte en tarjetas — desactivar el sticky */
+@media (max-width: 768px) {
+  .thAcciones,
+  .tdAcciones {
+    position: static;
+    box-shadow: none;
+  }
+}
+
+.btnEliminar {
+  background: #FEE2E2;
+  color: #B91C1C;
+  border: none;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background .15s;
+}
+
+.btnEliminar:hover {
+  background: #FECACA;
+}
+
+/* ── MODAL ESTADO ───────────────────────────────────────── */
+.flujoEstados {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: 1.2rem;
+  flex-wrap: wrap;
+}
+
+.flujoEstadoItem {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.flujoEstadoBtn {
+  padding: 4px 12px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  border: 1.5px solid #DDD;
+  background: transparent;
+  color: #BBB;
+  border-radius: 4px;
+  transition: all .15s;
+}
+
+.flujoEstadoBtn:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.flujoEstadoSep { color: #CCC; }
+
+.fechaEntregaField { margin-bottom: 1rem; }
+
+.bannerStockDescontar {
+  background: #E6F4EB;
+  border: 1px solid #1B6B31;
+  padding: .8rem 1rem;
+  margin-bottom: 1rem;
+  font-size: .82rem;
+  color: #1B6B31;
+  border-radius: 4px;
+}
+/* ── FLUJO VISUAL: TARJETAS CLICKABLES ───────────────────── */
+.flujoStatCard {
+  margin: 0;
+  cursor: pointer;
+  border-radius: 8px;
+  border-top-color: #DDD;
+  opacity: 1;
+}
+
+.flujoStatCard.activo {
+  border-top-color: var(--red);
+}
+
+.flujoStatCard.atenuado {
+  opacity: .5;
+}
+
+.flujoStatValue.recibido   { color: var(--info); }
+.flujoStatValue.enProceso  { color: var(--warning); }
+.flujoStatValue.listo      { color: var(--success); }
+.flujoStatValue.entregado  { color: var(--gray); }
+
+.ingresosCard {
+  margin: 0;
+  border-radius: 8px;
+}
+
+/* ── COLUMNA PAGO ─────────────────────────────────────────── */
+.pagoInfo {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .75rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--success);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.pagoIvaTag {
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #999;
+}
+
+.pagoIvaTag.sinIva {
+  color: var(--warning);
+}
+
+.pagoVacio {
+  color: #CCC;
+  font-size: .8rem;
+}
+
+/* ── MODAL ESTADO: BOTÓN DE FLUJO ACTIVO ─────────────────── */
+.flujoEstadoBtn.activo {
+  border-color: var(--red);
+  color: var(--red);
+  background: #FFF0F1;
+}
+
+/* ── MÉTODO DE PAGO ───────────────────────────────────────── */
+.metodoPagoField {
+  margin-top: 1rem;
+}
+
+.metodoPagoRow {
+  display: flex;
+  gap: .5rem;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.metodoPagoBtn {
+  padding: 7px 14px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: .75rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  border: 2px solid #DDD;
+  cursor: pointer;
+  background: transparent;
+  color: #999;
+}
+
+.metodoPagoBtn.activo {
+  border-color: var(--red);
+  background: #FFF0F1;
+  color: var(--red);
+}
+
+/* ── MODAL ACTIONS EN COLUMNA (checkbox + botones) ───────── */
+.modalActionsCol {
+  flex-direction: column;
+  align-items: stretch;
+  gap: .75rem;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  cursor: pointer;
+  padding: 8px 12px;
+  background: #F9FAFB;
+  border: 1px solid #E5E7EB;
+  user-select: none;
+}
+
+.checkboxRow.marcado {
+  background: #FEF3C7;
+  border-color: #FDE68A;
+}
+
+.checkboxBox {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border: 2px solid #CCC;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkboxBox.marcado {
+  border-color: var(--red);
+  background: var(--red);
+}
+
+.checkboxCheck {
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.checkboxLabel {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .82rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #555;
+}
+
+.checkboxHint {
+  font-size: .72rem;
+  color: #999;
+}
+
+.modalActionsRow {
+  display: flex;
+  gap: .8rem;
+  justify-content: flex-end;
+}

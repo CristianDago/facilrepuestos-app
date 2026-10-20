@@ -1,0 +1,32 @@
+# Dependencias
+node_modules/
+
+# Variables de entorno
+.env
+.env.*
+*.env
+
+# Credenciales Firebase / Google
+serviceAccount.json
+serviceAccountKey.json
+firebase-adminsdk*.json
+drive-token.json
+credentials.json
+client_secret*.json
+*.pem
+*.key
+
+# Build y logs
+dist/
+build/
+*.log
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+.firebase/server/drive-token.json

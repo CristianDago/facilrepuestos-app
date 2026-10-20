@@ -1,0 +1,139 @@
+/* ═══════════════════════════════════════════════════════════
+   Vehiculos.module.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── ESPACIADOS GENÉRICOS ───────────────────────────────── */
+.mb08 {
+  margin-bottom: .8rem;
+}
+
+.mt08 {
+  margin-top: .8rem;
+}
+
+/* ── PASO PATENTE: estado API ───────────────────────────── */
+.apiStatusWrap {
+  display: flex;
+  align-items: center;
+}
+
+/* ── SECCIÓN "DATOS DEL CLIENTE" ────────────────────────── */
+.sectionTitle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--red);
+  margin-bottom: .8rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sectionTitleBar {
+  display: block;
+  width: 3px;
+  height: 15px;
+  background: var(--red);
+}
+
+/* ── AVISO INFO (datos cliente solo editables desde perfil) ── */
+.infoBanner {
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  padding: .5rem .8rem;
+  margin-bottom: .8rem;
+  font-size: .75rem;
+  color: var(--info);
+  border-radius: 4px;
+}
+
+/* ── ERROR DE VALIDACIÓN (teléfono / email) ─────────────── */
+.fieldError {
+  font-size: .7rem;
+  color: var(--red);
+  margin-top: 2px;
+}
+
+.inputError {
+  border-color: var(--red);
+}
+
+/* ── TOOLBAR DERECHA (buscar + nuevo) ───────────────────── */
+.toolbarRight {
+  display: flex;
+  gap: .8rem;
+}
+
+.searchInput {
+  width: 260px;
+}
+
+/* ── TABLA ──────────────────────────────────────────────── */
+.emptyRow {
+  text-align: center;
+  padding: 2rem;
+  color: var(--gray);
+}
+
+.cellBold {
+  font-weight: 600;
+}
+
+.cellMuted {
+  font-size: .8rem;
+  color: var(--gray);
+}
+
+.cellEmail {
+  font-size: .72rem;
+  color: var(--gray);
+}
+
+.cellRut {
+  font-size: .72rem;
+  color: var(--gray);
+  font-family: 'Barlow Condensed', sans-serif;
+  letter-spacing: .5px;
+}
+
+.accionesCol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── COLUMNA ACCIONES FIJA (sticky) ──────────────────────── */
+/* Evita tener que hacer scroll horizontal para llegar a los botones */
+.thAcciones {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--black);
+  box-shadow: -6px 0 8px -6px rgba(0, 0, 0, .25);
+}
+
+.tdAcciones {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--white);
+  box-shadow: -6px 0 8px -6px rgba(0, 0, 0, .15);
+}
+
+/* En mobile la tabla ya se convierte en tarjetas — desactivar el sticky */
+@media (max-width: 768px) {
+  .thAcciones,
+  .tdAcciones {
+    position: static;
+    box-shadow: none;
+  }
+}
+
+.cellKm {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: .88rem;
+  color: var(--gray);
+}

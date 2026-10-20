@@ -1,0 +1,382 @@
+.page {
+  min-height: 100vh;
+  height: 100vh;
+  overflow-y: auto;
+  background: #0A0A0A;
+  color: #EDEDED;
+  font-family: 'Barlow', sans-serif;
+  padding: 1.4rem 1.8rem 2.5rem;
+}
+
+/* ── HEADER ───────────────────────────────────────────────── */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #1A0508 0%, #0A0A0A 70%);
+  border-bottom: 3px solid var(--red);
+  padding: 1rem 1.6rem;
+  margin: -1.4rem -1.8rem 1.4rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.logo {
+  height: 50px;
+  object-fit: contain;
+}
+
+.clockBlock {
+  text-align: right;
+}
+
+.clock {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 2.4rem;
+  font-weight: 900;
+  color: var(--red);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.date {
+  font-size: .85rem;
+  color: #888;
+  text-transform: capitalize;
+  margin-top: 2px;
+}
+
+.loadingTag {
+  color: #555;
+}
+
+/* ── STATS ────────────────────────────────────────────────── */
+.statsRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 1.4rem;
+}
+
+.statCard {
+  background: #141414;
+  border: 1px solid #262626;
+  border-top: 3px solid #4B5563;
+  padding: 1rem 1.2rem;
+}
+
+.statSuccess { border-top-color: #10B981; }
+.statWarning { border-top-color: #D97706; }
+.statInfo    { border-top-color: #7C3AED; }
+
+.statNum {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 2.6rem;
+  font-weight: 900;
+  line-height: 1;
+  color: #fff;
+}
+
+.statLbl {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #888;
+  margin-top: 4px;
+}
+
+/* ── LAYOUT PRINCIPAL ─────────────────────────────────────── */
+.mainGrid {
+  display: grid;
+  grid-template-columns: 1.6fr 1fr;
+  gap: 1.2rem;
+  align-items: start;
+  margin-bottom: 1.2rem;
+}
+
+@media (max-width: 1100px) {
+  .mainGrid { grid-template-columns: 1fr; }
+  .statsRow { grid-template-columns: 1fr 1fr; }
+}
+
+/* ── PUESTOS ──────────────────────────────────────────────── */
+.puestosGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: .8rem;
+}
+
+.puestoCard {
+  background: #141414;
+  border: 1px solid #262626;
+  min-height: 190px;
+  display: flex;
+  flex-direction: column;
+}
+
+.puestoHeader {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .85rem;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  color: #fff;
+  padding: .55rem .7rem;
+}
+
+.puestoBody {
+  padding: .8rem .8rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.puestoPatente {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.3rem;
+  font-weight: 900;
+  letter-spacing: 2px;
+  color: #fff;
+}
+
+.puestoAuto {
+  font-size: .78rem;
+  color: #999;
+  margin-top: 1px;
+}
+
+.puestoTareasList {
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  margin-top: .6rem;
+}
+
+.puestoTareaItem {
+  padding-bottom: .5rem;
+  border-bottom: 1px solid #222;
+}
+
+.puestoTareaItem:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.puestoTarea {
+  font-size: .78rem;
+  color: #ccc;
+  line-height: 1.35;
+}
+
+.puestoMecanico {
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--red);
+  margin-top: .2rem;
+}
+
+.puestoSinTarea {
+  font-size: .74rem;
+  color: #666;
+  margin-top: .6rem;
+  font-style: italic;
+}
+
+.puestoLibre {
+  font-size: .95rem;
+  font-style: italic;
+  color: #444;
+  text-align: center;
+}
+
+/* ── VEHÍCULOS EN TALLER ──────────────────────────────────── */
+.vehiculosCard {
+  background: #141414;
+  border: 1px solid #262626;
+  border-top: 3px solid var(--red);
+}
+
+.vehiculosHeader {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .82rem;
+  font-weight: 800;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: #fff;
+  background: linear-gradient(90deg, var(--red), var(--red-dark));
+  padding: .7rem 1rem;
+}
+
+.vehiculosList {
+  max-height: 560px;
+  overflow-y: auto;
+}
+
+.vehiculoRow {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  padding: .65rem 1rem;
+  border-bottom: 1px solid #1F1F1F;
+}
+
+.vehiculoBar {
+  width: 3px;
+  align-self: stretch;
+  background: var(--red);
+  flex-shrink: 0;
+}
+
+.vehiculoInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.vehiculoPatente {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #fff;
+  font-size: .95rem;
+}
+
+.vehiculoMarca {
+  font-size: .7rem;
+  color: #888;
+}
+
+.vehiculoBadge {
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  flex-shrink: 0;
+}
+
+.badgeTrabajo    { background: rgba(184,23,45,.18); color: #F87171; }
+.badgeIngresado  { background: rgba(217,119,6,.18); color: #FBBF24; }
+.badgeListo      { background: rgba(16,185,129,.18); color: #34D399; }
+
+.vehiculoTiempo {
+  font-size: .68rem;
+  color: #666;
+  flex-shrink: 0;
+  min-width: 60px;
+  text-align: right;
+}
+
+/* ── EQUIPO ───────────────────────────────────────────────── */
+.equipoCard {
+  background: #141414;
+  border: 1px solid #262626;
+}
+
+.equipoHeader {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .82rem;
+  font-weight: 800;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: #fff;
+  padding: .7rem 1rem;
+  border-bottom: 1px solid #262626;
+}
+
+.equipoList {
+  display: flex;
+  flex-direction: column;
+}
+
+.equipoRow {
+  display: flex;
+  align-items: flex-start;
+  gap: .8rem;
+  padding: .65rem 1.2rem;
+  border-bottom: 1px solid #1F1F1F;
+  flex-wrap: wrap;
+}
+
+.equipoNombre {
+  font-weight: 700;
+  color: var(--red);
+  min-width: 140px;
+  font-size: .88rem;
+  padding-top: .1rem;
+}
+
+.equipoTareasList {
+  flex: 1;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+}
+
+.equipoTareaItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: .6rem;
+}
+
+.equipoTarea {
+  font-size: .82rem;
+  color: #ccc;
+}
+
+.equipoBadgeActivo {
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  background: rgba(16,185,129,.18);
+  color: #34D399;
+  padding: 3px 9px;
+}
+
+.equipoDisponible {
+  font-size: .82rem;
+  color: #555;
+  font-style: italic;
+}
+
+.equipoTiempo {
+  font-size: .72rem;
+  color: #666;
+  min-width: 70px;
+  text-align: right;
+}
+
+/* ── ESTADO VACÍO ─────────────────────────────────────────── */
+.emptyState {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #555;
+  font-size: .85rem;
+}
+
+/* ── LINK VOLVER ──────────────────────────────────────────── */
+.volverLink {
+  display: inline-block;
+  margin-top: 1.4rem;
+  font-size: .78rem;
+  color: #555;
+}
+
+.volverLink:hover {
+  color: #888;
+}
+
+/* ── RESPONSIVE ───────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .page { padding: 1rem 1rem 2rem; }
+  .header { margin: -1rem -1rem 1rem; padding: .8rem 1rem; }
+  .clock { font-size: 1.7rem; }
+  .statsRow { grid-template-columns: 1fr 1fr; gap: .6rem; }
+  .puestosGrid { grid-template-columns: repeat(2, 1fr); }
+  .equipoRow { flex-direction: column; align-items: flex-start; gap: .3rem; }
+}

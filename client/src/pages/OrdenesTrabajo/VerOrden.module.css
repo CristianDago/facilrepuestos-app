@@ -1,0 +1,321 @@
+/* ═══════════════════════════════════════════════════════════
+   VerOrden.module.css
+   Todo lo compartido viene de shared.module.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── LOADING ────────────────────────────────────────────── */
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: var(--gray);
+}
+
+/* ── PANEL DE TAREAS ────────────────────────────────────── */
+.tareasPanel {
+  background: var(--white);
+  border-top: 3px solid var(--red);
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, .07);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.tareasHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.tareasHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.tareasTitle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: .75rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--red);
+}
+
+.tareasProgreso {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.progresoBar {
+  width: 120px;
+  height: 6px;
+  background: #F0F0F0;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progresoLabel {
+  font-size: .75rem;
+  color: var(--gray);
+}
+
+.progresoListo {
+  font-size: .75rem;
+  font-weight: 700;
+  color: #10B981;
+}
+
+/* ── RELLENO DE BARRA DE PROGRESO ────────────────────────── */
+.progresoFill {
+  height: 100%;
+  background: #10B981;
+  transition: width 0.3s;
+}
+
+/* ── FORMULARIO NUEVA TAREA ─────────────────────────────── */
+.tareaForm {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  padding: 0.75rem;
+  background: var(--off);
+  border-radius: 6px;
+}
+
+.tareaFormInput {
+  flex: 2;
+  min-width: 200px;
+}
+
+.tareaFormSelect {
+  flex: 1;
+  min-width: 160px;
+}
+
+/* ── LISTA DE TAREAS ────────────────────────────────────── */
+.tareasEmpty {
+  color: var(--gray);
+  font-size: .85rem;
+  text-align: center;
+  padding: 1rem 0;
+}
+
+.tareasList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.tareaRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+}
+
+/* ── TARJETA DE TAREA SEGÚN ESTADO ───────────────────────── */
+.tareaCard {
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #E8E8E8;
+  background: var(--off);
+}
+.tareaCard.en_proceso { background: #FFFBEB; border-color: #FDE68A; }
+.tareaCard.completada  { background: #F0FFF4; border-color: #BBF7D0; }
+
+/* ── PUNTO DE ESTADO ─────────────────────────────────────── */
+.estadoDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #6B7280;
+}
+.estadoDot.en_proceso { background: #F59E0B; }
+.estadoDot.completada  { background: #10B981; }
+
+/* ── SELECT DE ESTADO DE TAREA ───────────────────────────── */
+.tareaEstadoSelect {
+  font-size: .75rem;
+  padding: 4px 8px;
+  min-width: 130px;
+  background: #fff;
+  font-weight: 600;
+  color: #6B7280;
+  border-color: #6B7280;
+}
+.tareaEstadoSelect.en_proceso { color: #F59E0B; border-color: #F59E0B; }
+.tareaEstadoSelect.completada  { color: #10B981; border-color: #10B981; }
+
+/* ── COLOR DE ESTADO EN HISTORIAL ─────────────────────────── */
+.historialEstado { font-weight: 600; color: #6B7280; }
+.historialEstado.en_proceso { color: #F59E0B; }
+.historialEstado.completada  { color: #10B981; }
+
+.tareaInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.tareaDesc {
+  font-weight: 600;
+  font-size: .88rem;
+}
+
+.tareaMecanico {
+  font-size: .75rem;
+  color: var(--gray);
+}
+
+.tareaEliminar {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #CCC;
+  font-size: .9rem;
+  padding: 2px 4px;
+  transition: color .15s;
+}
+
+.tareaEliminar:hover { color: var(--red); }
+
+/* ── HISTORIAL DE TAREA ─────────────────────────────────── */
+.tareaHistorial {
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 0.4rem 0.85rem;
+  background: rgba(0, 0, 0, 0.02);
+}
+
+.tareaHistorialRow {
+  font-size: .7rem;
+  color: var(--gray);
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.tareaHistorialArrow { color: #AAA; }
+
+/* ── ALERTA TAREAS COMPLETAS ────────────────────────────── */
+.alertaTareasListas {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: #F0FFF4;
+  border: 1px solid #BBF7D0;
+  border-radius: 6px;
+  font-size: .85rem;
+  color: #15803D;
+  font-weight: 600;
+}
+
+/* ── COLUMNAS TABLA DOC OT ──────────────────────────────── */
+.docThServicio  { text-align: left;  width: 40%; }
+.docThMecanico  { text-align: left;  width: 20%; }
+.docThPrecio    { text-align: right; width: 14%; }
+.docThCant      { text-align: right; width: 8%;  }
+.docThTotal     { text-align: right; width: 18%; }
+
+/* Repuestos OT */
+.docThRepuesto  { text-align: left;  width: 56%; }
+.docThCantRep   { text-align: right; width: 10%; }
+.docThTotalRep  { text-align: right; width: 20%; }
+
+/* ── ENCABEZADO BASE DE TABLA DOC (compartido con columnas de arriba) ── */
+.th {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .67rem;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: #fff;
+  padding: 8px 12px;
+}
+
+/* ── BOTONES DE CANAL DE ENVÍO ───────────────────────────── */
+.btnWhatsapp { background: #25D366; border: none; }
+.btnFisico   { background: #78716C; border: none; }
+.btnEnviando { opacity: .6; }
+
+/* ── NOMBRE / DETALLE DE ÍTEM (servicio o repuesto) ──────── */
+.itemNombre {
+  font-weight: 700;
+}
+.itemDetalle {
+  font-size: .78rem;
+  color: #555;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* ── FILA VACÍA ──────────────────────────────────────────── */
+.emptyRow {
+  padding: 12px;
+  text-align: center;
+  color: #AAA;
+  font-size: .82rem;
+}
+
+/* ── FILA DE DESCUENTO ───────────────────────────────────── */
+.descuentoRow { color: var(--success); }
+
+/* ── DATOS DE LA EMPRESA ─────────────────────────────────── */
+.empresaValor          { font-weight: 500; }
+.empresaValorNombre    { font-weight: 700; color: #8C0E1F; }
+.empresaValorWeb       { font-weight: 500; color: #8C0E1F; }
+
+/* ── BARRA DE MÉTODO DE PAGO ─────────────────────────────── */
+.pagoBar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 10px 18px;
+  background: #F4F4F4;
+  border-top: 1px solid #E8E8E8;
+}
+.pagoLabel {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #999;
+}
+.pagoValor {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .9rem;
+  font-weight: 800;
+  color: var(--success);
+}
+.pagoSinIvaBadge {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  background: #FEF3C7;
+  color: #B45309;
+  padding: 2px 8px;
+  border: 1px solid #FDE68A;
+}
+
+/* ── FIRMAS ─────────────────────────────────────────────── */
+.firmasGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+  margin-top: 30px;
+  padding-top: 10px;
+}
+
+.firmaLinea {
+  border-top: 1px solid #333;
+  padding-top: 6px;
+  text-align: center;
+  font-size: .72rem;
+  color: #777;
+}

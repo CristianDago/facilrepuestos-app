@@ -1,0 +1,124 @@
+/* ═══════════════════════════════════════════════════════════
+   NuevaCotizacion.module.css
+   Todo lo compartido viene de shared.module.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── TÍTULOS DE SECCIÓN SIN MARGEN ───────────────────────── */
+.cardTitleFlush { margin: 0; }
+
+/* ── BUSCADOR DE SERVICIO / INSUMO (input + botón limpiar) ── */
+.filtroRow    { display: flex; gap: 4px; margin-bottom: 4px; }
+.filtroInput  { flex: 1; font-size: .82rem; }
+.filtroClear  { background: none; border: none; cursor: pointer; color: #999; }
+
+/* ── TEXTAREA DE DETALLE DE SERVICIO ─────────────────────── */
+.detalleTextarea {
+  width: 100%;
+  margin-top: 4px;
+  font-size: .8rem;
+  resize: vertical;
+  border: 1px solid #EEE;
+  padding: 4px 6px;
+}
+
+/* ── ENCABEZADO SECCIÓN REPUESTOS (acciones) ─────────────── */
+.repuestosHeaderAcciones {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.costoInternoBadge {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #999;
+  border: 1px solid #EEE;
+  padding: 3px 8px;
+}
+
+/* ── FILA MATERIAL EXTERNO (selector + input manual) ─────── */
+.materialManualWrap { display: flex; flex-direction: column; gap: 4px; }
+
+/* ── P. VENTA DESTACADO ───────────────────────────────────── */
+.precioVentaInput { font-weight: 700; }
+
+/* ── BARRA DE DESCUENTO ───────────────────────────────────── */
+.descuentoBar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  background: #FAFAFA;
+  border-top: 1px solid var(--gray-light);
+}
+.descuentoLabel {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #777;
+}
+.descuentoTipoSelect { padding: 5px 8px; font-size: .82rem; width: 90px; }
+.descuentoInput      { width: 90px; padding: 5px 8px; font-size: .88rem; text-align: right; }
+.descuentoMonto {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .9rem;
+  font-weight: 700;
+  color: var(--success);
+}
+.descuentoRowVerde { color: #4ADE80; }
+
+/* ── RESUMEN INTERNO (costo compra / utilidad estimada) ──── */
+.resumenInterno {
+  display: flex;
+  gap: 1.5rem;
+  padding: 0.6rem 1rem;
+  background: #FAFAFA;
+  border-top: 1px solid var(--gray-light);
+  flex-wrap: wrap;
+}
+.resumenCol { display: flex; flex-direction: column; }
+.resumenLabel {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: #999;
+}
+.resumenValorCosto {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: .9rem;
+  color: var(--gray);
+}
+.resumenValorUtilidad {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: .9rem;
+}
+.margenBueno { color: var(--success); }
+.margenMedio { color: var(--warning); }
+.margenBajo  { color: var(--red); }
+.margenNulo  { color: #999; }
+
+/* ── CARD CON MARGEN INFERIOR ────────────────────────────── */
+.cardConMargen { margin-bottom: 1.2rem; }
+
+/* ── ITEM DE INVENTARIO EN EL MODAL (fila clicable) ──────── */
+.invItemCard {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #1A1A1A;
+  border-left: 3px solid transparent;
+  background: transparent;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.invItemCard.atiende       { border-left-color: var(--success); background: #0D1A0F; }
+.invItemCard.seleccionado  { background: #2A1A1C; }

@@ -1,0 +1,12 @@
+/* ═══════════════════════════════════════════════════════════
+   ClientePortal.module.css
+   ═══════════════════════════════════════════════════════════ */
+
+   .resultadosCount {
+    color: var(--gray);
+    font-size: .85rem;
+  }
+
+  .otBadge {
+    margin-left: 0.75rem;
+  }

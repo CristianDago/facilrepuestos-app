@@ -1,0 +1,51 @@
+/* ═══════════════════════════════════════════════════════════
+   VerCotizacion.module.css
+   Todo lo compartido viene de shared.module.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* Loading / not found */
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: var(--gray);
+}
+
+/* Columnas tabla doc cotización */
+.docThDesc   { text-align: left;  width: 56%; }
+.docThPrecio { text-align: right; width: 14%; }
+.docThCant   { text-align: right; width: 10%; }
+.docThTotal  { text-align: right; width: 20%; }
+
+/* ── ENCABEZADO BASE DE TABLA DOC (compartido con columnas de arriba) ── */
+.th {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .67rem;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: #fff;
+  padding: 8px 12px;
+}
+
+/* ── BOTONES DE CANAL DE ENVÍO ───────────────────────────── */
+.btnWhatsapp { background: #25D366; border: none; }
+.btnEnviando { opacity: .6; }
+
+/* ── NOMBRE / DETALLE DE ÍTEM (servicio o repuesto) ──────── */
+.itemNombre {
+  font-weight: 700;
+}
+.itemDetalle {
+  font-size: .78rem;
+  color: #555;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* ── DATOS DE LA EMPRESA ─────────────────────────────────── */
+.empresaValor        { font-weight: 500; }
+.empresaValorNombre  { font-weight: 700; color: #8C0E1F; }
+.empresaValorWeb     { font-weight: 500; color: #8C0E1F; }
+
+/* ── FILA DE DESCUENTO ───────────────────────────────────── */
+.descuentoRow { color: var(--success); }

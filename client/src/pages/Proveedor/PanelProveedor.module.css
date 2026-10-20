@@ -1,0 +1,85 @@
+.wrap {
+  height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;   /* html/body tienen overflow:hidden: el scroll vive aquí */
+  background: #ECECEC;
+}
+
+.header {
+  background: var(--black, #0D0D0D);
+  border-bottom: 2px solid var(--red, #B8172D);
+  padding: 0.8rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.headerLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.logo {
+  height: 38px;
+  object-fit: contain;
+}
+
+.headerTitle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: #fff;
+}
+
+.headerSub {
+  font-size: 0.78rem;
+  color: #999;
+}
+
+/* ── Menú ─────────────────────────────────────────────── */
+.nav {
+  background: #1A1A1A;
+  display: flex;
+  gap: 0.25rem;
+  padding: 0 1.5rem;
+  overflow-x: auto;
+}
+
+.navLink {
+  padding: 0.75rem 1.1rem;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: #BBB;
+  border-bottom: 3px solid transparent;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.navLink:hover {
+  color: #fff;
+}
+
+.navLinkActive {
+  color: #fff;
+  border-bottom-color: var(--red, #B8172D);
+}
+
+.content {
+  min-width: 0;
+  padding: 1.6rem 1.8rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+@media (max-width: 700px) {
+  .header { padding: 0.8rem 1rem; }
+  .nav { padding: 0 1rem; }
+  .content { padding: 1rem; }
+}

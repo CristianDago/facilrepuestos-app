@@ -1,0 +1,11 @@
+.wrap{display:flex;align-items:center;justify-content:space-between;padding:.65rem 1rem;background:var(--white);border-top:1px solid var(--gray-light);flex-wrap:wrap;gap:.5rem}
+.info{font-family:'Barlow Condensed',sans-serif;font-size:.72rem;letter-spacing:1px;color:var(--gray)}
+.controls{display:flex;align-items:center;gap:2px}
+.btn{font-family:'Barlow Condensed',sans-serif;font-size:.78rem;font-weight:700;letter-spacing:1px;min-width:30px;height:30px;padding:0 6px;border:1.5px solid var(--gray-light);background:var(--white);color:var(--dark);cursor:pointer;transition:all .12s;display:flex;align-items:center;justify-content:center}
+.btn:hover:not(:disabled){border-color:var(--red);color:var(--red)}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn.active{background:var(--red);border-color:var(--red);color:white}
+.ellipsis{font-size:.78rem;color:var(--gray);padding:0 4px;line-height:30px}
+.sizer{display:flex;align-items:center;gap:.5rem;font-family:'Barlow Condensed',sans-serif;font-size:.72rem;letter-spacing:1px;color:var(--gray)}
+.sizer select{font-size:.72rem;padding:4px 24px 4px 8px;height:30px;border:1.5px solid var(--gray-light);font-family:'Barlow Condensed',sans-serif}
+@media(max-width:560px){.wrap{justify-content:center}.info{width:100%;text-align:center}}

@@ -1,0 +1,235 @@
+/* ═══════════════════════════════════════════════════════════
+   Proveedores.module.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── ERROR DE VALIDACIÓN (teléfono) ─────────────────────── */
+.fieldError {
+  font-size: .7rem;
+  color: var(--red);
+  margin-top: 2px;
+}
+
+.inputError {
+  border-color: var(--red);
+}
+
+/* ── TOOLBAR (buscar, filtro, nuevo) ────────────────────── */
+.toolbarRight {
+  display: flex;
+  gap: .8rem;
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  width: 240px;
+}
+
+.filtroCategoria {
+  width: 150px;
+}
+
+@media (max-width: 600px) {
+  .searchInput,
+  .filtroCategoria {
+    width: 100%;
+  }
+}
+
+/* ── STATS ──────────────────────────────────────────────── */
+.statConMarcas {
+  color: var(--success);
+}
+
+.statConEmail {
+  color: var(--info);
+}
+
+/* ── TABLA ──────────────────────────────────────────────── */
+.emptyRow {
+  text-align: center;
+  padding: 2rem;
+  color: var(--gray);
+}
+
+.cellNombre {
+  font-weight: 600;
+}
+
+.cellRut {
+  font-family: monospace;
+  font-size: .82rem;
+}
+
+.marcasRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.badgeMarca {
+  background: #EFF6FF;
+  color: var(--info);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .6rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 2px 7px;
+}
+
+.badgeMore {
+  font-size: .72rem;
+  color: var(--gray);
+  align-self: center;
+}
+
+.dash {
+  color: var(--gray);
+  font-size: .8rem;
+}
+
+.accionesCol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.btnDanger {
+  background: #FEE2E2;
+  color: #B91C1C;
+  border: none;
+  border-radius: 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.btnDanger:hover {
+  background: #FECACA;
+}
+
+/* ── MODAL: FORMULARIO PROVEEDOR ─────────────────────────── */
+.modalProveedorForm {
+  max-width: 640px;
+}
+
+.fullWidth {
+  grid-column: 1 / -1;
+}
+
+/* ── SECCIÓN MARCAS ──────────────────────────────────────── */
+.sectionTitle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--red);
+  margin-bottom: .8rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sectionTitleBar {
+  display: block;
+  width: 3px;
+  height: 15px;
+  background: var(--red);
+}
+
+.marcasGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 1rem;
+}
+
+.marcaToggle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all .12s;
+  border: 1.5px solid var(--gray-light);
+  background: var(--white);
+  color: var(--gray);
+}
+
+.marcaToggle:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.marcaToggleActive {
+  border-color: var(--success);
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.marcasExtraRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: .8rem;
+}
+
+.chipMarcaExtra {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border: 2px solid var(--info);
+  background: #EFF6FF;
+  color: var(--info);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chipRemoveExtra {
+  cursor: pointer;
+  color: #999;
+  font-weight: 400;
+}
+
+.customAddRow {
+  display: flex;
+  gap: .6rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.flexInput {
+  flex: 1;
+  min-width: 120px;
+}
+
+/* ── RESUMEN MARCAS SELECCIONADAS ───────────────────────── */
+.resumenBox {
+  background: var(--off);
+  padding: .6rem .8rem;
+  margin-bottom: 1rem;
+  font-size: .78rem;
+  color: var(--gray);
+  border-radius: 4px;
+}
+
+.resumenStrong {
+  color: var(--dark);
+}
+
+/* ── NOTAS ──────────────────────────────────────────────── */
+.textarea {
+  resize: vertical;
+}

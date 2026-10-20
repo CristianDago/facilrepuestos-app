@@ -1,0 +1,784 @@
+/* ═══════════════════════════════════════════════════════════
+   Inventario.module.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── TOOLBAR DOS FILAS ───────────────────────────────────── */
+.pageHeaderWrap {
+  margin-bottom: 1.4rem;
+}
+
+/* Fila 1: título + búsqueda / filtro / vista */
+.toolbarFila1 {
+  display: flex;
+  gap: .8rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Fila 2: botones de acción alineados a la derecha */
+.toolbarFila2 {
+  display: flex;
+  gap: .8rem;
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: .6rem;
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  width: 220px;
+}
+
+.filtroCategoria {
+  width: 160px;
+}
+
+@media (max-width: 860px) {
+  .toolbarFila1,
+  .toolbarFila2 {
+    justify-content: flex-start;
+  }
+  .searchInput {
+    flex: 1;
+    min-width: 140px;
+  }
+}
+
+@media (max-width: 600px) {
+  .searchInput,
+  .filtroCategoria {
+    width: 100%;
+  }
+  .toolbarFila2 {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* ── TOGGLE VISTA GRID / TABLA ───────────────────────────── */
+.vistaToggle {
+  display: flex;
+  border: 1.5px solid var(--gray-light);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.vistaBtn {
+  border: none;
+  border-radius: 0;
+}
+
+.vistaBtnActive {
+  background: var(--red);
+  color: #fff;
+}
+
+/* ── STOCK BAR ───────────────────────────────────────────── */
+.stockBarRow {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin-bottom: 4px;
+}
+
+.stockBarCol {
+  margin-bottom: 2px;
+}
+
+.stockReservadoNum {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--warning);
+  line-height: 1;
+}
+
+.stockTotalNum {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--gray);
+  line-height: 1;
+}
+
+.stockBarTrack {
+  height: 4px;
+  background: #EEE;
+  display: flex;
+  margin-top: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.stockLowWarning {
+  font-size: .68rem;
+  color: var(--red);
+  font-weight: 600;
+  margin-top: 3px;
+}
+
+/* ── STATS ──────────────────────────────────────────────── */
+.colorDanger  { color: var(--red); }
+.colorWarning { color: var(--warning); }
+.colorGray    { color: var(--gray); }
+.colorSuccess { color: var(--success); }
+
+.statValorInventario {
+  color: var(--red-dark);
+  font-size: 1.4rem !important;
+  line-height: 1.1;
+}
+
+.priceVenta { color: var(--red-dark); }
+
+/* ── EMPTY STATE ─────────────────────────────────────────── */
+.emptyState {
+  text-align: center;
+  padding: 3rem;
+  color: var(--gray);
+}
+
+.emptyStateIcon {
+  font-size: 2.5rem;
+  opacity: 0.4;
+}
+
+/* ── INV-CARD ────────────────────────────────────────────── */
+.cardFabricante {
+  font-size: .7rem;
+  color: var(--info);
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.cardEquivalencias {
+  font-size: .68rem;
+  color: var(--gray);
+  margin-bottom: 4px;
+}
+
+.cardBadgesRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-bottom: .5rem;
+}
+
+.badgeTipo {
+  background: #F0F0F0;
+  color: #555;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .6rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 2px 7px;
+}
+
+.badgePosicion {
+  background: #EFF6FF;
+  color: var(--info);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .6rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 2px 7px;
+}
+
+.badgeLado {
+  background: #FEF3C7;
+  color: var(--warning);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .6rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 2px 7px;
+}
+
+.badgeMarca {
+  background: #E6F4EB;
+  color: var(--success);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .58rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 2px 6px;
+}
+
+.badgeMore {
+  font-size: .7rem;
+  color: var(--gray);
+}
+
+.cardModelos {
+  font-size: .7rem;
+  color: var(--gray);
+  margin-bottom: .3rem;
+}
+
+.cardAnios {
+  font-size: .72rem;
+  color: var(--gray);
+  margin-bottom: .4rem;
+}
+
+.cardCodigo {
+  font-size: .72rem;
+  color: var(--gray);
+  margin-bottom: .3rem;
+}
+
+.cardProveedor {
+  font-size: .72rem;
+  color: var(--gray);
+  margin-bottom: .6rem;
+}
+
+.cardActions {
+  display: flex;
+  gap: .5rem;
+  margin-top: .8rem;
+  flex-wrap: wrap;
+}
+
+/* ── BOTÓN ELIMINAR ──────────────────────────────────────── */
+.btnDanger {
+  background: #FEE2E2;
+  color: #B91C1C;
+  border: none;
+  border-radius: 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.btnDanger:hover { background: #FECACA; }
+
+/* ── TABLA ──────────────────────────────────────────────── */
+.thReservado { background: #1A1A1A; }
+
+.emptyTableRow {
+  text-align: center;
+  padding: 2rem;
+  color: var(--gray);
+}
+
+.itemNombre { font-weight: 600; }
+.itemCodigo { font-size: .72rem; color: var(--gray); }
+.itemStockBajo { font-size: .68rem; color: var(--red); font-weight: 600; }
+.dash { color: var(--gray); font-size: .8rem; }
+.dashDark { color: #333; }
+.cellPosLado { font-size: .78rem; }
+
+.tableMarcasRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.badgeMarcaTable {
+  background: #E6F4EB;
+  color: var(--success);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .58rem;
+  font-weight: 700;
+  padding: 2px 6px;
+}
+
+.tableModelos {
+  font-size: .7rem;
+  color: var(--gray);
+  margin-top: 2px;
+}
+
+.cellAnios {
+  font-size: .78rem;
+  color: var(--gray);
+}
+
+.dispNum {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 1rem;
+}
+
+.reservNum {
+  color: var(--warning);
+  font-weight: 700;
+}
+
+.tableActionsCol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ── MODAL FORMULARIO ────────────────────────────────────── */
+.modalInventarioForm {
+  max-width: 680px;
+}
+
+.fullWidth {
+  grid-column: 1 / -1;
+}
+
+.inputAutoGen {
+  background: #F8F8F8;
+  color: #555;
+}
+
+/* ── AGREGAR INLINE (fabricante / tipo / marca) ──────────── */
+.addRow {
+  display: flex;
+  gap: .5rem;
+  margin-top: .4rem;
+  flex-wrap: wrap;
+}
+
+.addInput {
+  font-size: .78rem;
+  padding: 4px 8px;
+  flex: 1;
+  min-width: 120px;
+}
+
+.customAddRow {
+  display: flex;
+  gap: .6rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.flexInput {
+  flex: 1;
+  min-width: 120px;
+}
+
+/* ── EQUIVALENCIAS ───────────────────────────────────────── */
+.hintText {
+  font-size: .72rem;
+  color: var(--gray);
+  margin-bottom: .5rem;
+}
+
+.eqAddRow {
+  display: flex;
+  gap: .5rem;
+  margin-bottom: .5rem;
+  flex-wrap: wrap;
+}
+
+.eqFabricanteSelect {
+  min-width: 140px;
+}
+
+.chipsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+}
+
+.chipEquivalencia {
+  background: #EFF6FF;
+  color: var(--info);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  padding: 3px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 3px;
+}
+
+.chipRemove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--info);
+  font-weight: 900;
+  font-size: .8rem;
+  padding: 0;
+}
+
+/* ── SECCIONES ───────────────────────────────────────────── */
+.sectionTitle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--red);
+  margin-bottom: .8rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sectionTitleBar {
+  display: block;
+  width: 3px;
+  height: 15px;
+  background: var(--red);
+}
+
+.mb08 { margin-bottom: .8rem; }
+.mb1  { margin-bottom: 1rem; }
+
+/* ── MARCAS COMPATIBLES ──────────────────────────────────── */
+.subLabel {
+  font-size: .72rem;
+  color: var(--gray);
+  margin-bottom: .5rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.marcasGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: .8rem;
+}
+
+.marcaToggle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  cursor: pointer;
+  transition: all .12s;
+  border: 1.5px solid var(--gray-light);
+  background: var(--white);
+  color: var(--gray);
+}
+
+.marcaToggle:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.marcaToggleActive {
+  border-color: var(--success);
+  background: var(--success-bg);
+  color: var(--success);
+}
+
+.marcasExtraRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: .6rem;
+}
+
+.chipMarcaExtra {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border: 2px solid var(--info);
+  background: #EFF6FF;
+  color: var(--info);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chipRemoveExtra {
+  cursor: pointer;
+  color: #999;
+}
+
+/* ── RESUMEN COMPATIBILIDAD ──────────────────────────────── */
+.resumenBox {
+  background: var(--off);
+  padding: .6rem .8rem;
+  margin-bottom: 1rem;
+  font-size: .78rem;
+  color: var(--gray);
+  border-radius: 4px;
+}
+
+.resumenStrong { color: var(--dark); }
+.resumenAnios  { margin-left: 8px; }
+/* ═══════════════════════════════════════════════════════════
+   PANEL EXPANDIBLE (compartido por Equivalencias y Modelos)
+   ═══════════════════════════════════════════════════════════ */
+.expPanelWrap {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.expCard {
+  border: 1px solid var(--gray-light);
+  background: #FAFAFA;
+}
+
+.expCardMb {
+  margin-bottom: 0.5rem;
+}
+
+.expCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.expCardHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.expCardTitle {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: .82rem;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.expCardCount {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .72rem;
+  font-weight: 700;
+  color: var(--success);
+  letter-spacing: 1px;
+}
+
+.expCardEmpty {
+  font-size: .72rem;
+  color: #BBB;
+}
+
+.expCardHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.expCardArrow {
+  color: #999;
+  font-size: .8rem;
+}
+
+.expCardRemove {
+  color: #CCC;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 0 4px;
+}
+
+.expCardBody {
+  padding: 0 12px 12px;
+}
+
+.expChipsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+}
+
+.expChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--dark);
+  color: #fff;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 3px 8px;
+}
+
+.expChipRemove {
+  cursor: pointer;
+  color: #AAA;
+  font-weight: 900;
+  margin-left: 2px;
+}
+
+.expAddRow {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.expAddInputWrap {
+  flex: 1;
+  position: relative;
+}
+
+.expAddInput {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: .85rem;
+  border: 1.5px solid var(--gray-light);
+}
+
+/* ── SUGERENCIAS DE MODELO ───────────────────────────────── */
+.sugerenciasRow {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.sugerenciaBtn {
+  padding: 3px 8px;
+  font-size: .7rem;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border: 1px solid #DDD;
+  background: #fff;
+  cursor: pointer;
+  color: #666;
+}
+
+/* ── VARIOS ESPACIADOS/DETALLES SUELTOS ──────────────────── */
+.chipsRowMt {
+  margin-top: 6px;
+}
+
+.modelosSectionWrap {
+  margin-top: 1rem;
+}
+
+.modelosOptionalLabel {
+  font-weight: 400;
+  color: #999;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.aniosGridMt {
+  margin-top: 1rem;
+}
+
+.resumenModelosDetail {
+  margin-top: 4px;
+  font-size: .78rem;
+  color: #555;
+}
+
+.resumenModelosMarca {
+  margin-right: 8px;
+}
+
+.precioCompraCalculado {
+  background: #F8F8F8;
+  font-weight: 700;
+}
+
+/* ── SEGMENTOS DE LA BARRA DE STOCK (el ancho queda inline, es dinámico) ── */
+.stockBarFillDisponible {
+  background: var(--success);
+  transition: width .3s;
+}
+
+.stockBarFillDisponible.bajo {
+  background: var(--red);
+}
+
+.stockBarFillReservado {
+  background: var(--warning);
+  transition: width .3s;
+}
+
+/* ── NO VENDER ONLINE ─────────────────────────────────── */
+.ocultarTiendaRow {
+  display: flex;
+  align-items: flex-start;
+  gap: .7rem;
+  background: var(--off);
+  padding: .8rem 1rem;
+  border-radius: 6px;
+  margin-top: .9rem;
+  cursor: pointer;
+}
+
+.ocultarTiendaRow input[type="checkbox"] {
+  appearance: auto;
+  -webkit-appearance: checkbox;
+  accent-color: var(--red);
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.ocultarTiendaLabel {
+  font-weight: 700;
+  font-size: .85rem;
+  color: var(--dark);
+}
+
+.ocultarTiendaHint {
+  font-size: .75rem;
+  color: var(--gray);
+  margin-top: 2px;
+}
+
+.badgeOcultoTienda {
+  font-size: .62rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--gray);
+  background: var(--gray-light);
+  padding: 2px 7px;
+  border-radius: 3px;
+  display: inline-block;
+  margin-top: 3px;
+}
+
+.textareaDescripcion {
+  width: 100%;
+  min-height: 84px;
+  resize: vertical;
+  box-sizing: border-box;
+  line-height: 1.4;
+}
+
+.avisoContacto {
+  margin-top: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  background: #FFF8E1;
+  border: 1px solid #F0D77A;
+  border-left: 3px solid #E0A800;
+  color: #6B5200;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.ivaLinea {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--gray, #666);
+  font-weight: 400;
+}

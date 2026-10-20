@@ -1,0 +1,202 @@
+/* ═══════════════════════════════════════════════════════════
+   CostosFijos.module.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── TOOLBAR ─────────────────────────────────────────────── */
+.toolbarRight {
+  display: flex;
+  gap: .8rem;
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  width: 240px;
+}
+
+.mesSelect {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 8px 14px;
+  border: 1.5px solid var(--gray-light);
+  background: var(--white);
+  min-width: 170px;
+}
+
+.infoNote {
+  font-size: .8rem;
+  color: var(--gray);
+  background: var(--off);
+  border-radius: 6px;
+  padding: .7rem 1rem;
+  margin-bottom: 1.2rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 600px) {
+  .searchInput {
+    width: 100%;
+  }
+}
+
+/* ── TOGGLE DESCUENTA IVA ────────────────────────────────── */
+.ivaToggleRow {
+  display: flex;
+  align-items: flex-start;
+  gap: .7rem;
+  background: var(--off);
+  padding: .8rem 1rem;
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  cursor: pointer;
+}
+
+.ivaToggleRow input[type="checkbox"] {
+  appearance: auto;
+  -webkit-appearance: checkbox;
+  accent-color: var(--red);
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.ivaToggleLabel {
+  font-weight: 700;
+  font-size: .85rem;
+  color: var(--dark);
+}
+
+.ivaToggleHint {
+  font-size: .75rem;
+  color: var(--gray);
+  margin-top: 2px;
+}
+
+.sinIvaBadge {
+  font-size: .68rem;
+  color: var(--gray);
+  font-style: italic;
+}
+
+.statIva {
+  color: var(--info);
+}
+
+/* ── STAT DESTACADA (Gasto Operacional Total) ───────────── */
+.statCardDestacada {
+  border-top-color: var(--dark) !important;
+  background: #1A1A1A;
+}
+
+.statCardDestacada :global(.stat-value) {
+  color: #fff;
+}
+
+.statCardDestacada :global(.stat-label) {
+  color: #fff;
+}
+
+/* ── SUELDOS DEL MES ─────────────────────────────────────── */
+.sueldosCard {
+  margin-top: -.4rem;
+}
+
+.sueldosList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sueldoRow {
+  display: flex;
+  justify-content: space-between;
+  padding: .5rem .7rem;
+  background: var(--off);
+  border-radius: 4px;
+  font-size: .86rem;
+}
+
+.sueldoNombre {
+  font-weight: 600;
+}
+
+.sueldoMonto {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  color: var(--red-dark);
+}
+
+.sueldosFooterNota {
+  font-size: .75rem;
+  color: var(--gray);
+  margin-top: .8rem;
+}
+
+/* ── FILTROS ─────────────────────────────────────────────── */
+.filtrosRow {
+  display: flex;
+  gap: .8rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.2rem;
+}
+
+.filtrosRow select {
+  width: 180px;
+}
+
+@media (max-width: 700px) {
+  .filtrosRow select {
+    width: 100%;
+  }
+}
+
+/* ── TABLA ───────────────────────────────────────────────── */
+.emptyRow {
+  text-align: center;
+  padding: 2rem;
+  color: var(--gray);
+}
+
+.fecha {
+  font-size: .83rem;
+}
+
+.accionesCol {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.btnDanger {
+  background: #FEE2E2;
+  color: #B91C1C;
+  border: none;
+  border-radius: 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: .65rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background .15s;
+}
+
+.btnDanger:hover {
+  background: #FECACA;
+}
+
+/* ── AGREGAR CATEGORÍA PERSONALIZADA ────────────────────── */
+.customAddRow {
+  display: flex;
+  gap: .6rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.flexInput {
+  flex: 1;
+  min-width: 120px;
+}

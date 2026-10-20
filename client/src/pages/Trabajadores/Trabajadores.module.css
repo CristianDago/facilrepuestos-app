@@ -1,0 +1,185 @@
+/* ═══════════════════════════════════════════════════════════
+   Trabajadores.module.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── TOOLBAR (buscar + nuevo) ────────────────────────────── */
+.toolbarRight {
+  display: flex;
+  gap: .8rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  width: 280px;
+}
+
+@media (max-width: 600px) {
+  .searchInput {
+    width: 100%;
+  }
+}
+
+/* ── ESTADOS DE CARGA / VACÍO ─────────────────────────────── */
+.loading {
+  text-align: center;
+  padding: 3rem;
+  color: var(--gray);
+}
+
+.emptyRow {
+  text-align: center;
+  color: var(--gray);
+  padding: 2rem;
+}
+
+/* ── TABLA ──────────────────────────────────────────────── */
+.cellNombre {
+  font-weight: 600;
+}
+
+.cellEmail {
+  font-size: .8rem;
+  color: var(--gray);
+}
+
+.colorGray {
+  color: var(--gray);
+}
+
+.accionesRow {
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+}
+
+.accionesRow button {
+  width: 100%;
+}
+
+/* ── MODALES: TAMAÑOS ─────────────────────────────────────── */
+.modalTrabajador {
+  max-width: 560px;
+}
+
+.modalResetPassword {
+  max-width: 400px;
+}
+
+.modalLiquidacion {
+  max-width: 500px;
+}
+
+/* ── FORMULARIO TRABAJADOR ───────────────────────────────── */
+.errorBox {
+  margin: 0 0 1rem;
+}
+
+.fullWidth {
+  grid-column: 1 / -1;
+}
+
+/* ── LIQUIDACIONES: LISTA EXISTENTE ──────────────────────── */
+.liqLoading {
+  color: var(--gray);
+  font-size: .85rem;
+  padding: .5rem 0;
+}
+
+.liqEmpty {
+  color: var(--gray);
+  font-size: .85rem;
+  text-align: center;
+  padding: .75rem 0;
+}
+
+.liqList {
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+  max-height: 220px;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+}
+
+.liqItem {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .5rem .75rem;
+  border-radius: 4px;
+  background: var(--off);
+  border: 1px solid var(--gray-light);
+}
+
+.liqInfo {
+  flex: 1;
+  min-width: 0;
+}
+
+.liqPeriodo {
+  font-weight: 600;
+  font-size: .88rem;
+}
+
+.liqMeta {
+  font-size: .75rem;
+  color: var(--gray);
+}
+
+.liqVerBtn {
+  font-size: .72rem;
+  flex-shrink: 0;
+}
+
+.liqDeleteBtn {
+  background: #FEE2E2;
+  color: #B91C1C;
+  border: none;
+  border-radius: 4px;
+  font-size: .72rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  flex-shrink: 0;
+  transition: background .15s;
+}
+
+.liqDeleteBtn:hover {
+  background: #FECACA;
+}
+
+/* ── LIQUIDACIONES: SUBIR NUEVA ──────────────────────────── */
+.uploadSectionTitle {
+  font-weight: 600;
+  font-size: .85rem;
+  margin-bottom: .75rem;
+}
+
+.uploadForm {
+  display: flex;
+  flex-direction: column;
+  gap: .85rem;
+}
+
+.fileDropzone {
+  border: 2px dashed var(--gray-light);
+  border-radius: 4px;
+  padding: 1rem;
+  text-align: center;
+  cursor: pointer;
+  background: var(--off);
+  transition: border-color .15s;
+}
+
+.fileDropzone:hover {
+  border-color: var(--red);
+}
+
+.fileSelected {
+  color: var(--red);
+  font-weight: 600;
+}
+
+.hiddenInput {
+  display: none;
+}

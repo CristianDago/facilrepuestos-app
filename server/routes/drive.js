@@ -12,6 +12,23 @@ const TOKEN_PATH = path.join(__dirname, '../drive-token.json');
 const router     = Router();
 const upload     = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
+// ─── Siembra el token desde la variable de entorno (Secret Manager) ──
+// En Cloud Run el disco es efímero: si el contenedor se reinicia o se crea
+// una instancia nueva, el archivo local se pierde. Si existe la variable de
+// entorno DRIVE_TOKEN_JSON (inyectada como secreto), la escribimos a disco
+// al arrancar para no perder la autorización ya hecha.
+function seedTokenFromEnv() {
+  if (!fs.existsSync(TOKEN_PATH) && process.env.DRIVE_TOKEN_JSON) {
+    try {
+      fs.writeFileSync(TOKEN_PATH, process.env.DRIVE_TOKEN_JSON);
+      console.log('✓ Token de Drive restaurado desde DRIVE_TOKEN_JSON');
+    } catch (err) {
+      console.error('No se pudo escribir el token de Drive desde el entorno:', err.message);
+    }
+  }
+}
+seedTokenFromEnv();
+
 // ─── OAuth2 Client ────────────────────────────────────────
 function getOAuth2Client() {
   return new google.auth.OAuth2(
@@ -51,10 +68,20 @@ router.get('/callback', async (req, res) => {
     const oauth2 = getOAuth2Client();
     const { tokens } = await oauth2.getToken(code);
     fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
+    // Si SHOW_DRIVE_TOKEN_ONCE=true, muestra el JSON del token en pantalla una
+    // sola vez para poder copiarlo y guardarlo en Secret Manager. Se usa solo
+    // la primera vez que se autoriza; después se saca esta variable de entorno.
+    const mostrarToken = process.env.SHOW_DRIVE_TOKEN_ONCE === 'true';
     res.send(`
       <html><body style="font-family:sans-serif;text-align:center;padding:3rem">
         <h2>✅ Google Drive autorizado correctamente</h2>
         <p>Ya puedes cerrar esta ventana y usar el sistema.</p>
+        ${mostrarToken ? `
+          <p style="max-width:700px;margin:2rem auto;text-align:left;background:#eee;padding:1rem;word-break:break-all;font-size:0.8rem;color:#000">
+            ${JSON.stringify(tokens)}
+          </p>
+          <p style="color:#a00">Copia este texto y guárdalo ahora — no se volverá a mostrar.</p>
+        ` : ''}
       </body></html>
     `);
   } catch (err) {
@@ -79,7 +106,7 @@ router.post('/upload', requireAuth, requireStaff, upload.single('file'), async (
 
     // Subfolder por usuario
     const subfolderName = req.body.subfolder || 'general';
-    
+
     // Buscar o crear subcarpeta
     let subfolderId = folder;
     const folderSearch = await drive.files.list({
@@ -139,11 +166,6 @@ router.post('/upload', requireAuth, requireStaff, upload.single('file'), async (
 });
 
 // ─── GET /api/drive/file/:fileId — sirve el archivo directamente ─────
-// Usa el acceso autorizado del backend a la API de Drive en vez de
-// depender de un link público ("cualquiera con el link"), que en cuentas
-// de Google Workspace muchas veces está restringido por política del
-// dominio y no funciona para hotlinking externo aunque la API no arroje
-// error al intentar configurarlo.
 router.get('/file/:fileId', async (req, res, next) => {
   try {
     const auth  = getAuthorizedClient();

@@ -34,6 +34,7 @@ import MiPerfil          from './pages/Mecanico/MiPerfil';
 import Calendario        from './pages/Calendario/Calendario';
 import PanelProveedor    from './pages/Proveedor/PanelProveedor';
 import EstadisticasProveedor from './pages/Proveedor/EstadisticasProveedor';
+import ProveedorPOS         from './pages/Proveedor/POS/ProveedorPOS';
 import Mantenimiento     from './pages/Mantenimiento/Mantenimiento';
 
 export default function App() {
@@ -57,13 +58,14 @@ export default function App() {
             <Route path="calendario"  element={<Calendario />} />
           </Route>
 
-          {/* Proveedor: menú con "Mis Repuestos" y "Estadísticas" */}
+          {/* Proveedor: menú con "Punto de Venta", "Mis Repuestos" y "Estadísticas" */}
           <Route path="/proveedor" element={
-            <ProtectedRoute roles={['proveedor']}>
+            <ProtectedRoute roles={['proveedor', 'admin']}>
               <PanelProveedor />
             </ProtectedRoute>
           }>
             <Route index                element={<Inventario modo="proveedor" />} />
+            <Route path="pos"           element={<ProveedorPOS />} />
             <Route path="estadisticas"  element={<EstadisticasProveedor />} />
           </Route>
 
@@ -92,6 +94,7 @@ export default function App() {
             <Route path="estadisticas"             element={<Estadisticas />} />
             <Route path="configuracion"            element={<Configuracion />} />
             <Route path="calendario"               element={<Calendario />} />
+            <Route path="pos"                      element={<ProveedorPOS />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/login" replace />} />

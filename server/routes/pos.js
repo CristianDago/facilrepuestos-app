@@ -1,0 +1,163 @@
+import { Router } from 'express';
+import { db } from '../config/firebase.js';
+import { requireAuth } from '../middleware/auth.js';
+
+const router = Router();
+
+const round2 = (n) => Math.round((n + Number.EPSILON) * 100) / 100;
+
+// POST /api/pos/venta
+// Procesa una venta de mostrador, descuenta stock de forma atómica y genera el ticket
+router.post('/venta', requireAuth, async (req, res, next) => {
+  try {
+    const {
+      items = [],
+      metodoPago = 'EFECTIVO',
+      cliente = {},
+      tipoDocumento = 'TICKET', // 'TICKET' | 'COTIZACION'
+      notas = '',
+    } = req.body;
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, error: 'El carro de venta no tiene productos' });
+    }
+
+    const esCotizacion = tipoDocumento === 'COTIZACION';
+    const esProveedor = req.user.rol === 'proveedor';
+    const proveedorId = esProveedor ? req.user.docId : (req.body.proveedorId || null);
+
+    // Si es solo cotización, no descuenta stock en base de datos
+    if (esCotizacion) {
+      const ahora = new Date();
+      const numTicket = `COT-${ahora.getFullYear()}${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(Math.floor(1000 + Math.random() * 9000))}`;
+
+      const totalNeto = items.reduce((sum, it) => sum + (Number(it.precioNeto || it.precio) || 0) * (Number(it.cantidad) || 1), 0);
+      const totalIva  = Math.round(totalNeto * 0.19);
+      const total     = totalNeto + totalIva;
+
+      const cotizacionData = {
+        numeroTicket: numTicket,
+        tipoDocumento: 'COTIZACION',
+        fecha: ahora.toISOString(),
+        vendedorId: req.user.uid,
+        vendedorNombre: `${req.user.nombre || ''} ${req.user.apellido || ''}`.trim() || 'Vendedor',
+        proveedorId,
+        items,
+        totalNeto,
+        totalIva,
+        total,
+        metodoPago,
+        cliente,
+        notas,
+        estado: 'PENDIENTE',
+      };
+
+      const docRef = await db.collection('ventas_pos').add(cotizacionData);
+      return res.json({
+        success: true,
+        data: { id: docRef.id, ...cotizacionData },
+      });
+    }
+
+    // Venta en firme: transacción atómica en Firestore para garantizar consistencia de stock
+    const resultadoVenta = await db.runTransaction(async (transaction) => {
+      // 1. Leer y verificar todos los productos
+      const itemDocs = [];
+      for (const it of items) {
+        if (!it.id) {
+          throw new Error('Producto sin identificador válido');
+        }
+        const docRef = db.collection('inventario').doc(it.id);
+        const docSnap = await transaction.get(docRef);
+
+        if (!docSnap.exists) {
+          throw new Error(`El producto "${it.nombre || it.codigo || it.id}" ya no existe en inventario`);
+        }
+
+        const data = docSnap.data();
+
+        // Si es proveedor, solo puede vender de su propio inventario
+        if (esProveedor && data.proveedorId !== req.user.docId) {
+          throw new Error(`No tienes permiso para vender el ítem "${data.nombre || data.codigo}" de otro proveedor`);
+        }
+
+        const stockActual = Number(data.stock) || 0;
+        const stockReservado = Number(data.stockReservado) || 0;
+        const disponible = Math.max(0, stockActual - stockReservado);
+        const cantidadPedida = Number(it.cantidad) || 1;
+
+        if (disponible < cantidadPedida) {
+          throw new Error(
+            `Stock insuficiente para "${data.nombre || data.codigo}". Disponible: ${disponible}, Solicitado: ${cantidadPedida}`
+          );
+        }
+
+        itemDocs.push({ docRef, currentData: data, cantidad: cantidadPedida });
+      }
+
+      // 2. Descontar stock de cada ítem
+      const ahora = new Date();
+      for (const { docRef, currentData, cantidad } of itemDocs) {
+        const nuevoStock = (Number(currentData.stock) || 0) - cantidad;
+        transaction.update(docRef, {
+          stock: nuevoStock,
+          updatedAt: ahora.toISOString(),
+        });
+      }
+
+      // 3. Crear registro de venta POS con número de ticket consecutivo
+      const numTicket = `T-${ahora.getFullYear()}${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(Math.floor(1000 + Math.random() * 9000))}`;
+
+      const totalNeto = items.reduce((sum, it) => sum + (Number(it.precioNeto || it.precio) || 0) * (Number(it.cantidad) || 1), 0);
+      const totalIva  = Math.round(totalNeto * 0.19);
+      const total     = totalNeto + totalIva;
+
+      const ventaData = {
+        numeroTicket: numTicket,
+        tipoDocumento: 'TICKET',
+        fecha: ahora.toISOString(),
+        vendedorId: req.user.uid,
+        vendedorNombre: `${req.user.nombre || ''} ${req.user.apellido || ''}`.trim() || 'Vendedor',
+        proveedorId,
+        items,
+        totalNeto,
+        totalIva,
+        total,
+        metodoPago,
+        cliente,
+        notas,
+        estado: 'COMPLETADA',
+      };
+
+      const nuevaVentaRef = db.collection('ventas_pos').doc();
+      transaction.set(nuevaVentaRef, ventaData);
+
+      return { id: nuevaVentaRef.id, ...ventaData };
+    });
+
+    res.json({ success: true, data: resultadoVenta });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+// GET /api/pos/ventas
+// Listado de ventas recientes del mostrador
+router.get('/ventas', requireAuth, async (req, res, next) => {
+  try {
+    let query = db.collection('ventas_pos').orderBy('fecha', 'desc').limit(50);
+
+    if (req.user.rol === 'proveedor') {
+      query = query.where('proveedorId', '==', req.user.docId);
+    }
+
+    const snap = await query.get();
+    const ventas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+    res.json({ success: true, data: ventas });
+  } catch (error) {
+    next(error);
+  }
+});
+
+export default router;

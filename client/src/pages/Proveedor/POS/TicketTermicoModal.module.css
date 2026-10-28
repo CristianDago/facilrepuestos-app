@@ -1,0 +1,261 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 1rem;
+}
+
+.modal {
+  background: #ffffff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  background-color: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.modalTitle {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 6px;
+  line-height: 1;
+}
+
+.closeBtn:hover {
+  color: #0f172a;
+  background-color: #e2e8f0;
+}
+
+.previewWrap {
+  padding: 1.25rem;
+  overflow-y: auto;
+  background-color: #f1f5f9;
+  display: flex;
+  justify-content: center;
+}
+
+/* El ticket que se ve en pantalla y se imprime */
+.ticketContainer {
+  width: 100%;
+  max-width: 320px;
+  background: #ffffff;
+  padding: 16px 14px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px;
+  line-height: 1.35;
+  color: #000000;
+  border: 1px dashed #cbd5e1;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.ticketHeader {
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.localNombre {
+  font-size: 16px;
+  font-weight: 900;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.localSub {
+  font-size: 11px;
+  color: #333;
+}
+
+.divider {
+  border-top: 1px dashed #000;
+  margin: 8px 0;
+}
+
+.dividerDouble {
+  border-top: 2px solid #000;
+  margin: 10px 0;
+}
+
+.ticketMeta {
+  font-size: 11px;
+  margin-bottom: 10px;
+}
+
+.metaRow {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.tableHeader {
+  display: flex;
+  justify-content: space-between;
+  font-weight: 700;
+  font-size: 12px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed #000;
+  margin-bottom: 6px;
+}
+
+.itemRow {
+  margin-bottom: 6px;
+}
+
+.itemDesc {
+  font-weight: 700;
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.itemSub {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #222;
+}
+
+.totalesSection {
+  margin-top: 8px;
+}
+
+.totalRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+.totalGrande {
+  font-size: 16px;
+  font-weight: 900;
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid #000;
+}
+
+.ticketFooter {
+  text-align: center;
+  font-size: 11px;
+  margin-top: 14px;
+  color: #222;
+}
+
+.ticketAgradecimiento {
+  font-weight: 700;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.actions {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  background-color: #ffffff;
+  border-top: 1px solid #e2e8f0;
+}
+
+.btnPrint {
+  flex: 2;
+  background: #0284c7;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 1rem;
+  border: none;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: background 0.15s ease;
+}
+
+.btnPrint:hover {
+  background: #0369a1;
+}
+
+.btnCerrar {
+  flex: 1;
+  background: #f1f5f9;
+  color: #334155;
+  font-weight: 600;
+  border: 1px solid #cbd5e1;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btnCerrar:hover {
+  background: #e2e8f0;
+}
+
+/* ═══════════════════════════════════════════════════════════════ */
+/* ESTILOS DE IMPRESIÓN DIRECTA PARA IMPRESORA TÉRMICA (80mm/58mm) */
+/* ═══════════════════════════════════════════════════════════════ */
+@media print {
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .printOnlyArea,
+  .printOnlyArea * {
+    visibility: visible;
+  }
+
+  .printOnlyArea {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 78mm !important;
+    max-width: 78mm !important;
+    padding: 2mm !important;
+    margin: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  .overlay,
+  .modalHeader,
+  .actions {
+    display: none !important;
+  }
+}

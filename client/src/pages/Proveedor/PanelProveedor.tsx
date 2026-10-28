@@ -46,6 +46,7 @@ export default function PanelProveedor() {
       </div>
 
       <nav className={styles.nav}>
+        <NavLink to="/proveedor/pos" className={claseLink}>🛒 Punto de Venta (POS)</NavLink>
         <NavLink to="/proveedor" end className={claseLink}>📦 Mis Repuestos</NavLink>
         <NavLink to="/proveedor/estadisticas" className={claseLink}>📊 Estadísticas</NavLink>
       </nav>

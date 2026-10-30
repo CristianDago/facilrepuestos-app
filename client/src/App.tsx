@@ -37,6 +37,7 @@ import EstadisticasProveedor from './pages/Proveedor/EstadisticasProveedor';
 import ProveedorPOS         from './pages/Proveedor/POS/ProveedorPOS';
 import EscalamientosIA      from './pages/Escalamientos/EscalamientosIA';
 import MesaCotizacionWsp    from './pages/MesaWsp/MesaCotizacionWsp';
+import AgenteOmnicanal      from './pages/AgenteOmnicanal/AgenteOmnicanal';
 import Mantenimiento     from './pages/Mantenimiento/Mantenimiento';
 
 export default function App() {
@@ -91,6 +92,7 @@ export default function App() {
             <Route path="vehiculos/:patente"       element={<PerfilVehiculo />} />
             <Route path="inventario"               element={<Inventario />} />
             <Route path="proveedores"              element={<Proveedores />} />
+            <Route path="agente-omnicanal"         element={<AgenteOmnicanal />} />
             <Route path="escalamientos-ia"         element={<EscalamientosIA modo="admin" />} />
             <Route path="mesa-wsp"                 element={<MesaCotizacionWsp />} />
             <Route path="costos-fijos"             element={<CostosFijos />} />

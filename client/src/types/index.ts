@@ -547,3 +547,81 @@ export interface SolicitudCotizacionWsp {
   updatedAt: string;
 }
 
+// ─── ETAPA 4: CEREBRO ORQUESTADOR AGENTE OMNICANAL (WEB + WHATSAPP CLIENTES) ───
+export interface VehiculoDetectadoAgente {
+  patente?: string;
+  marca: string;
+  modelo?: string;
+  anio?: number | null;
+  motor?: string;
+  vin?: string;
+  fuente?: string;
+}
+
+export interface CandidatoInventarioCascada {
+  id: string;
+  codigoInterno?: string;
+  skuPublicoFrp: string;
+  nombre: string;
+  fabricante?: string;
+  origen: 'soluparts_ailoo' | 'global_ailoo' | 'portal_proveedor_local' | 'mesa_whatsapp';
+  nodoAilooId?: string | null;
+  proveedorId?: string | null;
+  proveedorNombre: string;
+  stock: number;
+  precioCostoProveedor: number;
+  margenPct: number;
+  precioVentaNeto: number;
+  precioVentaConIva: number;
+}
+
+export interface ReglaAplicadaCascada {
+  id: string;
+  skuPublicoFrp: string;
+  nombreRepuesto: string;
+  explicacionExperta: string;
+  proveedorNombre: string;
+  precioVentaFrp: number;
+}
+
+export interface TrazaCascadaAgente {
+  accionTomada: 'cotizacion_directa' | 'escalamiento_experto' | 'mesa_whatsapp_viva';
+  vehiculoDetectado?: VehiculoDetectadoAgente | null;
+  reglasConocimientoAplicadas: ReglaAplicadaCascada[];
+  candidatosInventario: CandidatoInventarioCascada[];
+  escalamientoCreado?: {
+    id: string;
+    ticketRef: string;
+    destino: string;
+    candidatoSku?: string;
+  } | null;
+  solicitudWspCreada?: {
+    id: string;
+    codigoSolicitud: string;
+    proveedoresContactados: string[];
+  } | null;
+}
+
+export interface MensajeSesionAgente {
+  id: string;
+  autor: 'cliente' | 'agente_ia';
+  texto: string;
+  transcripcionAudio?: string;
+  fotoUrl?: string;
+  creadoEn: string;
+  trazaCascada?: TrazaCascadaAgente;
+}
+
+export interface SesionAgenteOmnicanal {
+  id: string;
+  canal: 'whatsapp_cliente' | 'web_cliente';
+  clienteNombre: string;
+  clienteTelefono?: string;
+  estado: 'activa' | 'cerrada';
+  vehiculoContexto?: VehiculoDetectadoAgente | null;
+  mensajes: MensajeSesionAgente[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+

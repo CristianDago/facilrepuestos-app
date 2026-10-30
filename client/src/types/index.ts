@@ -375,3 +375,87 @@ export const MESES_NOMBRE = [
   "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
   "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE",
 ];
+
+// ─── ESCALAMIENTO IA Y CONOCIMIENTO APRENDIDO ──────────────
+export interface NodoAiloo {
+  id: string;
+  nombre: string;
+  projectId: string;
+  datasetId: string;            // ej. "soluparts_ailoo" | "global_ailoo"
+  tablaEscalamientos: string;   // "escalamientos"
+  tablaConocimiento: string;    // "conocimiento_aprendido"
+  tablaCatalogo: string;        // "v_agente_catalogo"
+  prefijoSku: string;           // "FRP-SOL" | "FRP-GLB"
+  margenPct: number;            // % de margen comercial FácilRepuestos sobre costo proveedor
+  activo: boolean;
+  ultimaSync?: string;
+  updatedAt?: string;
+}
+
+export type EstadoEscalamientoIA = 'pendiente' | 'en_revision' | 'respondido' | 'cerrado';
+export type TipoAprendizajeIA = 'compatibilidad' | 'equivalencia' | 'correccion_catalogo' | 'disponibilidad_precio';
+
+export interface EscalamientoIA {
+  id: string;
+  ticketRef: string;            // ej. "FRP-ESC-1001" (oculta teléfono privado del cliente)
+  sessionId?: string;
+  canalOrigen: 'whatsapp' | 'web' | 'pos';
+  tipoDestino: 'proveedor_local' | 'nodo_ailoo';
+  proveedorId: string;
+  proveedorNombre: string;
+  nodoAilooId?: string | null;
+  datasetDestino?: string | null; // ej. "soluparts_ailoo.escalamientos" | "global_ailoo.escalamientos"
+  patente?: string;
+  marcaVehiculo: string;
+  modeloVehiculo: string;
+  anioVehiculo?: number | null;
+  motorVehiculo?: string;
+  vinVehiculo?: string;
+  mensajeCliente: string;
+  motivoEscalamiento: string;
+  respuestaAgentePreliminar?: string;
+  transcripcionAudio?: string;
+  imagenUrl?: string;
+  candidatoInventarioId?: string | null;
+  candidatoCodigo?: string;
+  candidatoNombre?: string;
+  estado: EstadoEscalamientoIA;
+  prioridad?: 'alta' | 'media' | 'baja';
+  respuestaMostrador?: string;
+  respondidoPor?: string;
+  respondidoEn?: string;
+  precioCostoProveedor?: number;
+  margenAplicadoPct?: number;
+  precioVentaFrp?: number;
+  skuPublicoFrp?: string;
+  mensajeFinalCliente?: string;
+  creadoEn: string;
+  updatedAt?: string;
+}
+
+export interface ReglaConocimientoAprendido {
+  id: string;
+  escalamientoId?: string;
+  origenTipo: 'proveedor_local' | 'nodo_ailoo';
+  nodoAilooId?: string | null;
+  datasetOrigen?: string;       // ej. "soluparts_ailoo.conocimiento_aprendido" | "global_ailoo.conocimiento_aprendido"
+  proveedorId: string;
+  proveedorNombre: string;
+  tipoAprendizaje: TipoAprendizajeIA;
+  preguntaResumen: string;
+  respuestaValidada: string;
+  terminosClave: string;
+  marcaVehiculo: string;
+  modeloVehiculo: string;
+  anioDesde: number | null;
+  anioHasta: number | null;
+  motor?: string;
+  categoriaRepuesto?: string;
+  skuProveedor?: string;
+  skuPublicoFrp?: string;
+  precioCostoRef?: number;
+  precioVentaFrpRef?: number;
+  validadoPor: string;
+  activo: boolean;
+  creadoEn: string;
+}

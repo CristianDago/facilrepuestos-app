@@ -24,6 +24,7 @@ import apiPublicaRouter           from './routes/apiPublica.js';
 import woocommerceRouter          from './routes/woocommerce.js';
 import mantenimientoRouter        from './routes/mantenimiento.js';
 import posRouter                  from './routes/pos.js';
+import escalamientosRouter        from './routes/escalamientos.js';
 
 import { errorHandler } from './middleware/errorHandler.js';
 import { requireAuth, requireStaff, requireAdmin, chain } from './middleware/auth.js';
@@ -105,6 +106,7 @@ app.use('/api/public', cors({
 app.use('/api/woocommerce', woocommerceRouter);
 app.use('/api/mantenimiento', mantenimientoRouter);
 app.use('/api/pos',           posRouter);
+app.use('/api/escalamientos', escalamientosRouter);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 app.use(errorHandler);

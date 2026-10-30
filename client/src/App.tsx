@@ -35,6 +35,7 @@ import Calendario        from './pages/Calendario/Calendario';
 import PanelProveedor    from './pages/Proveedor/PanelProveedor';
 import EstadisticasProveedor from './pages/Proveedor/EstadisticasProveedor';
 import ProveedorPOS         from './pages/Proveedor/POS/ProveedorPOS';
+import EscalamientosIA      from './pages/Escalamientos/EscalamientosIA';
 import Mantenimiento     from './pages/Mantenimiento/Mantenimiento';
 
 export default function App() {
@@ -58,7 +59,7 @@ export default function App() {
             <Route path="calendario"  element={<Calendario />} />
           </Route>
 
-          {/* Proveedor: menú con "Punto de Venta", "Mis Repuestos" y "Estadísticas" */}
+          {/* Proveedor: menú con "Punto de Venta", "Mis Repuestos", "Consultas IA" y "Estadísticas" */}
           <Route path="/proveedor" element={
             <ProtectedRoute roles={['proveedor', 'admin']}>
               <PanelProveedor />
@@ -66,6 +67,7 @@ export default function App() {
           }>
             <Route index                element={<Inventario modo="proveedor" />} />
             <Route path="pos"           element={<ProveedorPOS />} />
+            <Route path="consultas"     element={<EscalamientosIA modo="proveedor" />} />
             <Route path="estadisticas"  element={<EstadisticasProveedor />} />
           </Route>
 
@@ -88,6 +90,7 @@ export default function App() {
             <Route path="vehiculos/:patente"       element={<PerfilVehiculo />} />
             <Route path="inventario"               element={<Inventario />} />
             <Route path="proveedores"              element={<Proveedores />} />
+            <Route path="escalamientos-ia"         element={<EscalamientosIA modo="admin" />} />
             <Route path="costos-fijos"             element={<CostosFijos />} />
             <Route path="mantenimiento"            element={<Mantenimiento />} />
             <Route path="trabajadores"             element={<Trabajadores />} />

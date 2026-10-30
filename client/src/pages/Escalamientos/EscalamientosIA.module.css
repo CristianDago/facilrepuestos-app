@@ -1,0 +1,470 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.topBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.subtitle {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  color: #475569;
+}
+
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 14px;
+}
+
+.kpiCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.kpiLabel {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748b;
+}
+
+.kpiValue {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin-top: 6px;
+}
+
+.kpiSub {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+/* Nodos Ailoo (Admin) */
+.nodosSection {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.nodosHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.nodosTitle {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.nodosGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+  gap: 14px;
+}
+
+.nodoCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.nodoTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.nodoName {
+  font-weight: 800;
+  font-size: 1.02rem;
+  color: #0f172a;
+}
+
+.datasetBadge {
+  font-family: monospace;
+  font-size: 0.78rem;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.nodoMetaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  font-size: 0.83rem;
+  color: #334155;
+}
+
+.margenInputGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+
+.margenInput {
+  width: 58px;
+  padding: 4px 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-weight: 700;
+  text-align: center;
+}
+
+/* Tabs principales */
+.tabsBar {
+  display: flex;
+  gap: 10px;
+  border-bottom: 2px solid #e2e8f0;
+  padding-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.tabBtn {
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tabBtnActive {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
+/* Filtros */
+.filtersRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pillGroup {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pillBtn {
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #475569;
+  cursor: pointer;
+}
+
+.pillBtnActive {
+  background: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
+}
+
+/* Lista de Escalamientos */
+.cardsList {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.escCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-left: 5px solid #f59e0b;
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.escCardRespondido {
+  border-left-color: #10b981;
+}
+
+.escHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.escBadges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ticketRef {
+  font-family: monospace;
+  font-weight: 800;
+  font-size: 0.88rem;
+  background: #0f172a;
+  color: #ffffff;
+  padding: 4px 9px;
+  border-radius: 6px;
+}
+
+.destinoBadgeAiloo {
+  background: #ede9fe;
+  color: #5b21b6;
+  border: 1px solid #ddd6fe;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.destinoBadgeLocal {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.estadoBadgePendiente {
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 800;
+  font-size: 0.76rem;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.estadoBadgeRespondido {
+  background: #d1fae5;
+  color: #065f46;
+  font-weight: 800;
+  font-size: 0.76rem;
+  padding: 3px 9px;
+  border-radius: 999px;
+}
+
+.vehiculoBar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  padding: 10px 14px;
+  border-radius: 10px;
+}
+
+.patenteTag {
+  background: #ffffff;
+  border: 2px solid #0f172a;
+  border-radius: 6px;
+  padding: 2px 9px;
+  font-family: monospace;
+  font-weight: 900;
+  font-size: 0.9rem;
+  letter-spacing: 0.08em;
+  color: #0f172a;
+}
+
+.vehiculoInfo {
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 0.92rem;
+}
+
+.mensajeBox {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.mensajeLabel {
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #92400e;
+  margin-bottom: 4px;
+}
+
+.mensajeText {
+  font-size: 0.95rem;
+  color: #1e293b;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.motivoBox {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.87rem;
+  color: #1e3a8a;
+}
+
+/* Panel de Respuesta Experta */
+.replyPanel {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fieldLabel {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.input,
+.select,
+.textarea {
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  background: #ffffff;
+}
+
+.textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+/* Caja de Respuesta y Margen Comercial */
+.respuestaBox {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comercialBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #6ee7b7;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+/* Tabla / Tarjetas de Conocimiento Aprendido */
+.knowGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 14px;
+}
+
+.knowCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-top: 4px solid #2563eb;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.knowTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.knowTag {
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+}

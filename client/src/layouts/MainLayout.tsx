@@ -161,6 +161,15 @@ export default function MainLayout() {
               <span className="nav-icon">🏭</span> Proveedores
             </NavLink>
             <NavLink
+              to="/escalamientos-ia"
+              onClick={closeSidebar}
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+            >
+              <span className="nav-icon">🧠</span> Escalamientos IA
+            </NavLink>
+            <NavLink
               to="/costos-fijos"
               onClick={closeSidebar}
               className={({ isActive }) =>

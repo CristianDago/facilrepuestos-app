@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../config/firebase.js';
 import { requireAuth } from '../middleware/auth.js';
+import { calcularHashCatalogoItem } from '../services/ailooCatalogSync.js';
 
 const router = Router();
 
@@ -131,12 +132,16 @@ router.post('/venta', requireAuth, async (req, res, next) => {
         itemDocs.push({ docRef, currentData: data, cantidad: cantidadPedida });
       }
 
-      // 2. Descontar stock de cada ítem
+      // 2. Descontar stock de cada ítem y encolar sincronización incremental (Delta) a WooCommerce
       const ahora = new Date();
       for (const { docRef, currentData, cantidad } of itemDocs) {
         const nuevoStock = (Number(currentData.stock) || 0) - cantidad;
+        const nuevoHash = calcularHashCatalogoItem({ ...currentData, stock: nuevoStock });
         transaction.update(docRef, {
           stock: nuevoStock,
+          deltaHash: nuevoHash,
+          needsWooSync: true,
+          wooSyncMotivo: 'venta_pos',
           updatedAt: ahora.toISOString(),
         });
       }

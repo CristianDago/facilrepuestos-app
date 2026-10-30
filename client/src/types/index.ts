@@ -226,6 +226,17 @@ export interface ItemInventario {
   unidad: string;
   imagenUrl?: string;         // URL de la foto a usar al publicarlo en la tienda (solo se aplica al crear el producto)
   ocultarEnTienda?: boolean; // true = no se sincroniza/publica en la tienda WooCommerce
+  // ─── MULTI-AILOO & WOOCOMMERCE DELTA SYNC ────────────────
+  skuPublicoFrp?: string;     // SKU público unificado (FRP-SOL-..., FRP-GLB-..., FRP-LOC-...)
+  prefijoSku?: string;        // Prefijo del nodo o proveedor
+  origenDatos?: 'nodo_ailoo' | 'proveedor_local' | string;
+  nodoAilooId?: string | null;
+  datasetOrigen?: string;
+  needsWooSync?: boolean;     // true = en cola de sincronización incremental (Delta) a WooCommerce
+  wooSyncMotivo?: string | null;
+  lastWooSyncAt?: string | null;
+  wooProductId?: number | null;
+  deltaHash?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -389,6 +400,14 @@ export interface NodoAiloo {
   margenPct: number;            // % de margen comercial FácilRepuestos sobre costo proveedor
   activo: boolean;
   ultimaSync?: string;
+  ultimaSincronizacionCatalogo?: string;
+  ultimoResumenCatalogo?: {
+    totalLeidos: number;
+    nuevos: number;
+    actualizados: number;
+    sinCambiosOmitidos: number;
+    modoOrigen: string;
+  };
   updatedAt?: string;
 }
 

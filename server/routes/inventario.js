@@ -3,6 +3,8 @@ import { db } from '../config/firebase.js';
 import { requireAuth, requireAdmin, requireAuthOrLector, ROL_LECTOR_DRPARTES } from '../middleware/auth.js';
 import { eliminarProductoDeWooCommerce } from '../services/woocommerceSync.js';
 import { buscarRepuestoPorCodigo } from '../services/partLookup.js';
+import { generarSkuPublicoFrp } from '../services/ailooBridge.js';
+import { calcularHashCatalogoItem } from '../services/ailooCatalogSync.js';
 
 const router = Router();
 
@@ -416,18 +418,27 @@ router.post('/', requireAuth, async (req, res, next) => {
     }
 
     const now = new Date().toISOString();
-
-    const docRef = await db.collection('inventario').add({
+    const prefijoSku = rest.prefijoSku || 'FRP-LOC';
+    const skuPublicoFrp = rest.skuPublicoFrp || generarSkuPublicoFrp(prefijoSku, rest.codigo || nombre.slice(0, 12));
+    const nuevoItem = {
       nombre,
       categoria,
       stock: stock || 0,
       stockReservado: 0,
+      origenDatos: rest.origenDatos || 'proveedor_local',
+      prefijoSku,
+      skuPublicoFrp,
       ...rest,
+      needsWooSync: true,
+      wooSyncMotivo: 'creacion_inventario',
       createdAt: now,
       updatedAt: now,
-    });
+    };
+    nuevoItem.deltaHash = calcularHashCatalogoItem(nuevoItem);
 
-    res.json({ success: true, data: { id: docRef.id } });
+    const docRef = await db.collection('inventario').add(nuevoItem);
+
+    res.json({ success: true, data: { id: docRef.id, skuPublicoFrp } });
   } catch (error) {
     next(error);
   }
@@ -465,8 +476,15 @@ router.put('/:id', requireAuth, async (req, res, next) => {
       data.proveedorId = prov ? prov.id : null;
     }
 
+    const estadoPrevio = snapItem.data();
+    const estadoCombinado = { ...estadoPrevio, ...data };
+    const nuevoHash = calcularHashCatalogoItem(estadoCombinado);
+    const cambioRelevanteWoo = nuevoHash !== estadoPrevio.deltaHash;
+
     await db.collection('inventario').doc(id).update({
       ...data,
+      deltaHash: nuevoHash,
+      ...(cambioRelevanteWoo ? { needsWooSync: true, wooSyncMotivo: 'edicion_ficha_inventario' } : {}),
       updatedAt: new Date().toISOString(),
     });
 
@@ -493,6 +511,7 @@ router.put('/:id/stock', requireAuth, async (req, res, next) => {
 
     // Verificar que el nuevo stock no sea menor al reservado
     const snap = await db.collection('inventario').doc(id).get();
+    let nuevoHash = null;
     if (snap.exists) {
       const current = snap.data();
       const reservado = current.stockReservado || 0;
@@ -502,10 +521,14 @@ router.put('/:id/stock', requireAuth, async (req, res, next) => {
           error: `No puedes bajar el stock a ${stock}. Hay ${reservado} unidades reservadas en OTs activas.`,
         });
       }
+      nuevoHash = calcularHashCatalogoItem({ ...current, stock });
     }
 
     await db.collection('inventario').doc(id).update({
       stock,
+      ...(nuevoHash ? { deltaHash: nuevoHash } : {}),
+      needsWooSync: true,
+      wooSyncMotivo: 'ajuste_stock',
       updatedAt: new Date().toISOString(),
     });
 

@@ -1,5 +1,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import { api } from '../../services/api';
+import {
+  woocommerceService,
+  type EstadoColaWooCommerce,
+} from '../../services/woocommerce';
 import { useAppStore } from '../../store/useAppStore';
 import type {
   ApiResponse,
@@ -71,9 +75,13 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
     prioridad: 'alta' as 'alta' | 'media' | 'baja',
   });
 
-  // Edición de márgenes de Nodos Ailoo
+  // Edición de márgenes de Nodos Ailoo y Sincronización de Catálogo + WooCommerce Delta
   const [margenesEdit, setMargenesEdit] = useState<Record<string, number>>({});
   const [sincronizandoNodo, setSincronizandoNodo] = useState<string | null>(null);
+  const [sincronizandoCatalogoNodo, setSincronizandoCatalogoNodo] = useState<string | null>(null);
+  const [sincronizandoTodosCatalogos, setSincronizandoTodosCatalogos] = useState(false);
+  const [sincronizandoWooDelta, setSincronizandoWooDelta] = useState(false);
+  const [estadoWoo, setEstadoWoo] = useState<EstadoColaWooCommerce | null>(null);
 
   const cargarTodo = async () => {
     try {
@@ -87,13 +95,15 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
       ];
       if (!esProveedor) {
         promesas.push(api.get<ApiResponse<NodoAiloo[]>>('/escalamientos/nodos'));
+        promesas.push(woocommerceService.getStatus().catch(() => null));
       }
 
-      const [escRes, knowRes, invRes, nodosRes] = (await Promise.all(promesas)) as [
+      const [escRes, knowRes, invRes, nodosRes, wooRes] = (await Promise.all(promesas)) as [
         ApiResponse<EscalamientoIA[]>,
         ApiResponse<ReglaConocimientoAprendido[]>,
         ApiResponse<ItemInventario[]>,
-        ApiResponse<NodoAiloo[]> | undefined
+        ApiResponse<NodoAiloo[]> | undefined,
+        ApiResponse<EstadoColaWooCommerce> | null | undefined
       ];
 
       if (escRes.success && escRes.data) setEscalamientos(escRes.data);
@@ -106,6 +116,9 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
           mapMargen[n.id] = n.margenPct;
         });
         setMargenesEdit(mapMargen);
+      }
+      if (wooRes?.success && wooRes.data) {
+        setEstadoWoo(wooRes.data);
       }
     } catch (err) {
       notify((err as Error).message || 'Error al cargar escalamientos IA', 'error');
@@ -243,6 +256,78 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
       notify((err as Error).message || 'Error al sincronizar nodo Ailoo', 'error');
     } finally {
       setSincronizandoNodo(null);
+    }
+  };
+
+  const handleSincronizarCatalogoNodoAiloo = async (nodo: NodoAiloo) => {
+    try {
+      setSincronizandoCatalogoNodo(nodo.id);
+      const res = await woocommerceService.syncAilooNodo(nodo.id, { forzar: false });
+      if (res.success && res.data?.ingesta) {
+        const { nuevos, actualizados, sinCambiosOmitidos, totalLeidos } = res.data.ingesta;
+        if (nuevos + actualizados > 0) {
+          notify(
+            `📦 Catálogo ${nodo.nombre}: ${nuevos} nuevos, ${actualizados} actualizados (${sinCambiosOmitidos} sin cambios omitidos por Delta Hash)`,
+            'success'
+          );
+        } else {
+          notify(
+            `✓ Catálogo ${nodo.nombre} al día (${totalLeidos} SKUs revisados, 0 cambios detectados por Delta Hash)`,
+            'info'
+          );
+        }
+        await cargarTodo();
+      }
+    } catch (err) {
+      notify((err as Error).message || 'Error al ingestar catálogo Ailoo', 'error');
+    } finally {
+      setSincronizandoCatalogoNodo(null);
+    }
+  };
+
+  const handleSincronizarTodosCatalogosAiloo = async () => {
+    try {
+      setSincronizandoTodosCatalogos(true);
+      const res = await woocommerceService.syncAilooTodos({ forzar: false });
+      if (res.success && res.data?.ingesta) {
+        const { totalNuevos, totalActualizados, totalSinCambiosOmitidos, totalLeidos } =
+          res.data.ingesta;
+        if (totalNuevos + totalActualizados > 0) {
+          notify(
+            `📦 Multi-Ailoo → Firebase: ${totalNuevos} nuevos, ${totalActualizados} actualizados (${totalSinCambiosOmitidos} sin cambios)`,
+            'success'
+          );
+        } else {
+          notify(
+            `✓ Catálogos Soluparts + Global sin cambios (${totalLeidos} SKUs con Delta Hash idéntico)`,
+            'info'
+          );
+        }
+        await cargarTodo();
+      }
+    } catch (err) {
+      notify((err as Error).message || 'Error al sincronizar catálogos Ailoo', 'error');
+    } finally {
+      setSincronizandoTodosCatalogos(false);
+    }
+  };
+
+  const handleSincronizarDeltaWoo = async () => {
+    try {
+      setSincronizandoWooDelta(true);
+      const res = await woocommerceService.sync({ soloDelta: true });
+      if (res.success && res.data) {
+        const { creados, actualizados, omitidosSinCambio } = res.data;
+        notify(
+          `🛒 Sync Incremental WooCommerce: ${creados} creados, ${actualizados} actualizados (${omitidosSinCambio ?? 0} omitidos sin cambio)`,
+          'success'
+        );
+        await cargarTodo();
+      }
+    } catch (err) {
+      notify((err as Error).message || 'Error al sincronizar cola Delta con WooCommerce', 'error');
+    } finally {
+      setSincronizandoWooDelta(false);
     }
   };
 
@@ -438,6 +523,38 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
                     </span>
                   </div>
 
+                  {nodo.ultimoResumenCatalogo && (
+                    <div
+                      style={{
+                        fontSize: '0.75rem',
+                        color: '#334155',
+                        background: '#f1f5f9',
+                        padding: '6px 10px',
+                        borderRadius: 6,
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        gap: 8,
+                      }}
+                    >
+                      <span>
+                        📊 Catálogo ({nodo.tablaCatalogo || 'v_agente_catalogo'}):{' '}
+                        <strong>{nodo.ultimoResumenCatalogo.totalLeidos} SKUs</strong>
+                      </span>
+                      <span>·</span>
+                      <span style={{ color: '#059669', fontWeight: 700 }}>
+                        +{nodo.ultimoResumenCatalogo.nuevos} nuevos
+                      </span>
+                      <span>·</span>
+                      <span style={{ color: '#0284c7', fontWeight: 700 }}>
+                        ↻ {nodo.ultimoResumenCatalogo.actualizados} mod.
+                      </span>
+                      <span>·</span>
+                      <span style={{ color: '#64748b' }}>
+                        ✓ {nodo.ultimoResumenCatalogo.sinCambiosOmitidos} sin cambio (Delta Hash)
+                      </span>
+                    </div>
+                  )}
+
                   <div
                     style={{
                       display: 'flex',
@@ -469,20 +586,121 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
                       </button>
                     </div>
 
-                    <button
-                      className="btn btn-sm btn-primary"
-                      disabled={sincronizandoNodo === nodo.id}
-                      onClick={() => handleSincronizarNodoAiloo(nodo)}
-                    >
-                      {sincronizandoNodo === nodo.id
-                        ? 'Sincronizando...'
-                        : `🔄 Sincronizar ${nodo.datasetId}`}
-                    </button>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button
+                        className="btn btn-sm btn-outline"
+                        style={{
+                          borderColor: '#0284c7',
+                          color: '#0369a1',
+                          background: '#f0f9ff',
+                          fontWeight: 700,
+                        }}
+                        disabled={sincronizandoCatalogoNodo === nodo.id}
+                        onClick={() => handleSincronizarCatalogoNodoAiloo(nodo)}
+                      >
+                        {sincronizandoCatalogoNodo === nodo.id
+                          ? 'Ingestando...'
+                          : '📦 Ingestar Catálogo (Delta)'}
+                      </button>
+
+                      <button
+                        className="btn btn-sm btn-primary"
+                        disabled={sincronizandoNodo === nodo.id}
+                        onClick={() => handleSincronizarNodoAiloo(nodo)}
+                      >
+                        {sincronizandoNodo === nodo.id
+                          ? 'Sincronizando...'
+                          : `🔄 Sync Escalamientos`}
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
             })}
           </div>
+
+          {/* Panel Etapa 2: Conector Catálogo Multi-Ailoo → Firebase → Sync Incremental WooCommerce */}
+          {estadoWoo && (
+            <div
+              style={{
+                marginTop: 14,
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                borderRadius: 10,
+                padding: '12px 14px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 12,
+              }}
+            >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#0f172a' }}>
+                  🛒 Pipeline Multi-Ailoo → Firebase (`inventario`) → WooCommerce (Sync Incremental por Delta Hash)
+                </div>
+                <div
+                  style={{
+                    fontSize: '0.78rem',
+                    color: '#475569',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 10,
+                  }}
+                >
+                  <span>
+                    Total en Firebase: <strong>{estadoWoo.totalInventario} SKUs</strong>
+                  </span>
+                  <span>·</span>
+                  <span>
+                    🔵 Soluparts: <strong>{estadoWoo.desglosePorOrigen.soluparts.total}</strong> (
+                    {estadoWoo.desglosePorOrigen.soluparts.pendientes} pend.)
+                  </span>
+                  <span>·</span>
+                  <span>
+                    🟣 Global: <strong>{estadoWoo.desglosePorOrigen.global.total}</strong> (
+                    {estadoWoo.desglosePorOrigen.global.pendientes} pend.)
+                  </span>
+                  <span>·</span>
+                  <span>
+                    🟢 Locales/Bodega: <strong>{estadoWoo.desglosePorOrigen.locales.total}</strong> (
+                    {estadoWoo.desglosePorOrigen.locales.pendientes} pend.)
+                  </span>
+                  <span>·</span>
+                  <span
+                    style={{
+                      fontWeight: 700,
+                      color: estadoWoo.pendientesSync > 0 ? '#d97706' : '#059669',
+                    }}
+                  >
+                    Cola Delta WooCommerce: {estadoWoo.pendientesSync} pendiente(s)
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button
+                  className="btn btn-sm btn-outline"
+                  disabled={sincronizandoTodosCatalogos}
+                  onClick={handleSincronizarTodosCatalogosAiloo}
+                >
+                  {sincronizandoTodosCatalogos
+                    ? 'Ingestando Nodos...'
+                    : '⚡ Ingestar Todos los Nodos Ailoo'}
+                </button>
+                <button
+                  className="btn btn-sm btn-primary"
+                  style={{ background: '#059669', borderColor: '#059669' }}
+                  disabled={sincronizandoWooDelta}
+                  onClick={handleSincronizarDeltaWoo}
+                >
+                  {sincronizandoWooDelta
+                    ? 'Sincronizando Delta...'
+                    : `🛒 Sincronizar Delta a WooCommerce (${estadoWoo.pendientesSync})`}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

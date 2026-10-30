@@ -158,6 +158,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
   const [marcasPersistidas, setMarcasPersistidas] = useState<MarcaVehiculo[]>([]);
   const [guardandoMarca, setGuardandoMarca]       = useState(false);
   const [sincronizando, setSincronizando]         = useState(false);
+  const [sincronizandoAiloo, setSincronizandoAiloo] = useState(false);
   const [modeloInputs, setModeloInputs]           = useState<{ [marca: string]: string }>({});
   const [marcasExpandidas, setMarcasExpandidas]   = useState<{ [marca: string]: boolean }>({});
 
@@ -172,13 +173,50 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
   const loadCategorias  = async () => { try { const r = await categoriasService.getAll(); if (r.success && r.data) setCategoriasList(r.data); } catch {} };
   const loadMarcas      = async () => { try { const r = await marcasVehiculoService.getAll(); if (r.success && r.data) setMarcasPersistidas(r.data); } catch {} };
 
+  const handleSyncAilooCatalogo = async () => {
+    setSincronizandoAiloo(true);
+    try {
+      const r = await woocommerceService.syncAilooTodos({ forzar: false });
+      if (r.success && r.data?.ingesta) {
+        const { totalNuevos, totalActualizados, totalSinCambiosOmitidos, totalLeidos } =
+          r.data.ingesta;
+        if (totalNuevos + totalActualizados > 0) {
+          notify(
+            `📦 Catálogo Multi-Ailoo → Firebase: ${totalNuevos} nuevos, ${totalActualizados} actualizados (${totalSinCambiosOmitidos} sin cambios)`,
+            "success"
+          );
+        } else {
+          notify(
+            `✓ Catálogo Multi-Ailoo al día (${totalLeidos} SKUs revisados, 0 cambios en Delta Hash)`,
+            "info"
+          );
+        }
+        await loadInventario();
+      } else {
+        notify(r.error || "Error al ingestar catálogo Multi-Ailoo", "error");
+      }
+    } catch {
+      notify("Error al ingestar catálogo Multi-Ailoo", "error");
+    } finally {
+      setSincronizandoAiloo(false);
+    }
+  };
+
   const handleSyncWoo = async () => {
     setSincronizando(true);
     try {
-      const r = await woocommerceService.sync();
+      const r = await woocommerceService.sync({ soloDelta: true });
       if (r.success && r.data) {
         const ocultadosTxt = r.data.ocultados ? `, ${r.data.ocultados} ocultados` : "";
-        notify(`Sincronizado ✓ — ${r.data.creados} nuevos, ${r.data.actualizados} actualizados${ocultadosTxt}`, "success");
+        const omitidosTxt =
+          typeof r.data.omitidosSinCambio === "number"
+            ? ` (${r.data.omitidosSinCambio} omitidos sin cambio)`
+            : "";
+        notify(
+          `🛒 Sync Incremental WooCommerce ✓ — ${r.data.creados} nuevos, ${r.data.actualizados} actualizados${ocultadosTxt}${omitidosTxt}`,
+          "success"
+        );
+        await loadInventario();
       } else {
         notify(r.error || "Error al sincronizar con WooCommerce", "error");
       }
@@ -427,6 +465,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
 
   const lowStock   = inventario.filter(i => getStockInfo(i).disponible <= (i.stockMinimo || 0));
   const reservados = inventario.filter(i => (i.stockReservado || 0) > 0);
+  const pendientesWooCount = inventario.filter(i => i.needsWooSync === true).length;
   const totalValue = inventario.reduce((s, i) => s + (i.precioCompra || 0) * (i.stock || 0), 0);
   const cats       = [...new Set(inventario.map(i => i.categoria).filter(Boolean))].length;
 
@@ -462,6 +501,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
     const matchSearch = !q
       || i.nombre.toLowerCase().includes(q)
       || (i.codigo || "").toLowerCase().includes(q)
+      || (i.skuPublicoFrp || "").toLowerCase().includes(q)
       || (i.fabricante || "").toLowerCase().includes(q)
       || (i.origen || "").toLowerCase().includes(q)
       || (i.descripcion || "").toLowerCase().includes(q)
@@ -682,8 +722,32 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
           <button className="btn btn-dark" onClick={() => setModalExcel(true)}>⬆ Importar Excel</button>
           <button className="btn btn-dark" onClick={exportarExcel} disabled={filtered.length === 0}>⬇ Exportar Excel</button>
           {!esProveedor && (
-            <button className="btn btn-dark" onClick={handleSyncWoo} disabled={sincronizando}>
-              {sincronizando ? "Sincronizando..." : "🛒 Sincronizar con WooCommerce"}
+            <button
+              className="btn btn-dark"
+              style={{ background: '#4f46e5', borderColor: '#4f46e5', color: '#ffffff', fontWeight: 700 }}
+              onClick={handleSyncAilooCatalogo}
+              disabled={sincronizandoAiloo}
+              title="Ingestar catálogos normalizados desde Soluparts (soluparts_ailoo) y Global (global_ailoo) hacia Firebase con Delta Hash"
+            >
+              {sincronizandoAiloo ? "Ingestando Ailoo..." : "📦 Ingestar Catálogo Ailoo"}
+            </button>
+          )}
+          {!esProveedor && (
+            <button
+              className="btn btn-dark"
+              style={{
+                background: pendientesWooCount > 0 ? '#059669' : undefined,
+                borderColor: pendientesWooCount > 0 ? '#059669' : undefined,
+                color: pendientesWooCount > 0 ? '#ffffff' : undefined,
+                fontWeight: pendientesWooCount > 0 ? 700 : undefined,
+              }}
+              onClick={handleSyncWoo}
+              disabled={sincronizando}
+              title="Sincroniza incrementalmente hacia WooCommerce solo los productos con cambios (Delta Hash)"
+            >
+              {sincronizando
+                ? "Sincronizando..."
+                : `🛒 Sync Delta WooCommerce${pendientesWooCount > 0 ? ` (${pendientesWooCount})` : ""}`}
             </button>
           )}
           <button className="btn btn-primary" onClick={openNuevo}>+ Agregar Repuesto</button>
@@ -737,6 +801,16 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
                   {modResumen && <div className={styles.cardModelos}>🚗 {modResumen}</div>}
                   {(item.anioDesde || item.anioHasta) && <div className={styles.cardAnios}>Años: {item.anioDesde||"?"} — {item.anioHasta||"actual"}</div>}
                   {item.codigo    && <div className={styles.cardCodigo}>Código: {item.codigo}</div>}
+                  {!esProveedor && item.skuPublicoFrp && (
+                    <div style={{ fontSize: '0.73rem', fontFamily: 'monospace', color: '#0369a1', fontWeight: 700, marginTop: 2 }}>
+                      SKU Público: {item.skuPublicoFrp}{' '}
+                      {item.needsWooSync ? (
+                        <span style={{ color: '#d97706', marginLeft: 4 }}>⚡ Pend. Woo</span>
+                      ) : item.wooProductId ? (
+                        <span style={{ color: '#059669', marginLeft: 4 }}>✓ Woo #{item.wooProductId}</span>
+                      ) : null}
+                    </div>
+                  )}
                   {!esProveedor && item.proveedor && <div className={styles.cardProveedor}>📦 {item.proveedor}</div>}
                   <StockBar item={item} />
                   <div className="inv-prices">

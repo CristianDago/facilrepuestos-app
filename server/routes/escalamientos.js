@@ -8,6 +8,10 @@ import {
   generarTerminosClave,
   despacharEscalamientoANodoAiloo,
 } from '../services/ailooBridge.js';
+import {
+  sincronizarCatalogoNodoAiloo,
+  calcularHashCatalogoItem,
+} from '../services/ailooCatalogSync.js';
 
 const router = Router();
 
@@ -488,13 +492,23 @@ router.post('/:id/responder', async (req, res, next) => {
         }
       }
 
+      const nuevoHash = calcularHashCatalogoItem({
+        ...itemInvData,
+        marcasCompatibles: marcasActuales,
+        modelosCompatibles: modelosActuales,
+        anioDesde: nuevoAnioDesde,
+        anioHasta: nuevoAnioHasta,
+      });
+
       await db.collection('inventario').doc(inventarioId).update({
         marcasCompatibles: marcasActuales,
         modelosCompatibles: modelosActuales,
         anioDesde: nuevoAnioDesde,
         anioHasta: nuevoAnioHasta,
         equivalencias: equivalenciasActuales,
+        deltaHash: nuevoHash,
         needsWooSync: true,
+        wooSyncMotivo: 'enriquecimiento_compatibilidad_ia',
         updatedAt: now,
       });
       inventarioActualizado = true;
@@ -625,6 +639,23 @@ router.post('/nodos/:id/sync', requireAdmin, async (req, res, next) => {
         resueltos,
         ultimaSync: now,
       },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── POST /api/escalamientos/nodos/:id/sync-catalogo ────────────────────
+// Ingesta incrementalmente (Delta) el catálogo del nodo Ailoo (`soluparts_ailoo.v_agente_catalogo`
+// o `global_ailoo.v_agente_catalogo`) hacia Firebase `inventario`.
+router.post('/nodos/:id/sync-catalogo', requireAdmin, async (req, res, next) => {
+  try {
+    const { id: nodoId } = req.params;
+    const forzar = Boolean(req.body?.forzar);
+    const resultado = await sincronizarCatalogoNodoAiloo(nodoId, { forzar });
+    res.json({
+      success: true,
+      data: resultado,
     });
   } catch (err) {
     next(err);

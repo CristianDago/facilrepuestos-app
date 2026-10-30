@@ -2,7 +2,16 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import { db } from '../config/firebase.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
-import { sincronizarInventarioConWooCommerce, exportarCatalogoCSV } from '../services/woocommerceSync.js';
+import {
+  sincronizarInventarioConWooCommerce,
+  obtenerEstadoColaWooCommerce,
+  exportarCatalogoCSV,
+} from '../services/woocommerceSync.js';
+import {
+  sincronizarCatalogoNodoAiloo,
+  sincronizarTodosLosNodosAiloo,
+  calcularHashCatalogoItem,
+} from '../services/ailooCatalogSync.js';
 
 const router = Router();
 
@@ -20,11 +29,62 @@ function requireSyncAccess(req, res, next) {
   return requireAuth(req, res, () => requireAdmin(req, res, next));
 }
 
+// GET /api/woocommerce/status
+// Estado de la cola de sincronización incremental (Delta) y desglose por origen (Soluparts, Global, Locales)
+router.get('/status', requireAuth, async (req, res, next) => {
+  try {
+    const estado = await obtenerEstadoColaWooCommerce();
+    res.json({ success: true, data: estado });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /api/woocommerce/sync
+// Por defecto ejecuta sincronización incremental (`soloDelta: true`), enviando únicamente
+// los productos con `needsWooSync === true`. Si se envía `{ soloDelta: false }`, fuerza catálogo completo.
 router.post('/sync', requireSyncAccess, async (req, res, next) => {
   try {
-    const resultado = await sincronizarInventarioConWooCommerce();
+    const soloDelta = req.body?.soloDelta !== false && req.query?.soloDelta !== 'false';
+    const resultado = await sincronizarInventarioConWooCommerce({ soloDelta });
     res.json({ success: true, data: resultado });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/woocommerce/sync-ailoo
+// Ingesta incrementalmente (Delta) los catálogos de TODOS los nodos Ailoo activos (`soluparts` + `global`)
+// hacia Firebase `inventario`. Si `autoSyncWoo: true`, dispara inmediatamente el Delta Sync a WooCommerce.
+router.post('/sync-ailoo', requireSyncAccess, async (req, res, next) => {
+  try {
+    const forzar = Boolean(req.body?.forzar);
+    const autoSyncWoo = Boolean(req.body?.autoSyncWoo);
+    const ingesta = await sincronizarTodosLosNodosAiloo({ forzar });
+    let wooSync = null;
+    if (autoSyncWoo) {
+      wooSync = await sincronizarInventarioConWooCommerce({ soloDelta: true });
+    }
+    res.json({ success: true, data: { ingesta, wooSync } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/woocommerce/sync-ailoo/:nodoId
+// Ingesta incrementalmente (Delta) el catálogo de un nodo Ailoo específico (`soluparts` o `global`)
+// hacia Firebase `inventario`.
+router.post('/sync-ailoo/:nodoId', requireSyncAccess, async (req, res, next) => {
+  try {
+    const { nodoId } = req.params;
+    const forzar = Boolean(req.body?.forzar);
+    const autoSyncWoo = Boolean(req.body?.autoSyncWoo);
+    const ingesta = await sincronizarCatalogoNodoAiloo(nodoId, { forzar });
+    let wooSync = null;
+    if (autoSyncWoo) {
+      wooSync = await sincronizarInventarioConWooCommerce({ soloDelta: true });
+    }
+    res.json({ success: true, data: { ingesta, wooSync } });
   } catch (error) {
     next(error);
   }
@@ -48,6 +108,37 @@ function verificarFirmaWebhook(req) {
   } catch {
     return false; // largos distintos, etc.
   }
+}
+
+/**
+ * Busca un documento en `inventario` por `skuPublicoFrp` (`FRP-SOL-...`, `FRP-GLB-...`, `FRP-LOC-...`)
+ * o por `codigo` interno del proveedor.
+ */
+async function buscarProductoPorSkuWebhook(skuRaw) {
+  const sku = String(skuRaw || '').trim().toUpperCase();
+  if (!sku) return null;
+
+  const snapSkuPublico = await db
+    .collection('inventario')
+    .where('skuPublicoFrp', '==', sku)
+    .limit(1)
+    .get();
+  if (!snapSkuPublico.empty) return snapSkuPublico.docs[0];
+
+  const snapCodigo = await db
+    .collection('inventario')
+    .where('codigo', '==', sku)
+    .limit(1)
+    .get();
+  if (!snapCodigo.empty) return snapCodigo.docs[0];
+
+  if (sku.startsWith('DRM-')) {
+    const docId = sku.slice(4);
+    const d = await db.collection('inventario').doc(docId).get();
+    if (d.exists) return d;
+  }
+
+  return null;
 }
 
 // POST /api/woocommerce/webhook/pedido
@@ -89,24 +180,38 @@ router.post('/webhook/pedido', async (req, res, next) => {
       const lineItems = pedido.line_items || [];
       const batch = db.batch();
       const itemsProcesados = [];
+      const ahora = new Date().toISOString();
 
       for (const li of lineItems) {
         const sku = (li.sku || '').toUpperCase();
         if (!sku) continue;
 
-        const snap = await db.collection('inventario').where('codigo', '==', sku).limit(1).get();
-        if (snap.empty) continue; // no era un producto que viene del inventario (ej: uno cargado a mano)
+        const doc = await buscarProductoPorSkuWebhook(sku);
+        if (!doc) continue; // no era un producto que viene del inventario (ej: uno cargado a mano)
 
-        const doc = snap.docs[0];
         const actual = doc.data();
         const cantidad = li.quantity || 0;
         const nuevoStock = Math.max(0, round2((actual.stock || 0) - cantidad));
-        batch.update(doc.ref, { stock: nuevoStock, updatedAt: new Date().toISOString() });
-        itemsProcesados.push({ inventarioId: doc.id, codigo: sku, cantidad });
+        const nuevoHash = calcularHashCatalogoItem({ ...actual, stock: nuevoStock });
+        batch.update(doc.ref, {
+          stock: nuevoStock,
+          deltaHash: nuevoHash,
+          updatedAt: ahora,
+          lastWooSyncAt: ahora,
+          needsWooSync: false,
+        });
+        itemsProcesados.push({
+          inventarioId: doc.id,
+          codigo: actual.codigo || sku,
+          skuPublicoFrp: actual.skuPublicoFrp || sku,
+          proveedorId: actual.proveedorId || null,
+          origenDatos: actual.origenDatos || 'proveedor_local',
+          cantidad,
+        });
       }
 
       batch.set(procesadoRef, {
-        procesadoEn: new Date().toISOString(),
+        procesadoEn: ahora,
         items: itemsProcesados,
         totalPedido: pedido.total || null,
       });
@@ -126,6 +231,7 @@ router.post('/webhook/pedido', async (req, res, next) => {
 
       const { items: itemsProcesados = [] } = procesadoSnap.data();
       const batch = db.batch();
+      const ahora = new Date().toISOString();
 
       for (const item of itemsProcesados) {
         const ref = db.collection('inventario').doc(item.inventarioId);
@@ -133,7 +239,14 @@ router.post('/webhook/pedido', async (req, res, next) => {
         if (!snap.exists) continue;
         const actual = snap.data();
         const stockRestaurado = round2((actual.stock || 0) + (item.cantidad || 0));
-        batch.update(ref, { stock: stockRestaurado, updatedAt: new Date().toISOString() });
+        const nuevoHash = calcularHashCatalogoItem({ ...actual, stock: stockRestaurado });
+        batch.update(ref, {
+          stock: stockRestaurado,
+          deltaHash: nuevoHash,
+          updatedAt: ahora,
+          lastWooSyncAt: ahora,
+          needsWooSync: false,
+        });
       }
 
       batch.delete(procesadoRef); // permite volver a procesarlo si el pedido reaparece

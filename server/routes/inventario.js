@@ -190,13 +190,15 @@ router.get('/mis-estadisticas', requireAuth, async (req, res, next) => {
       stockBajo: 0,
       unidadesReservadas: 0, valorReservado: 0,
       unidadesVendidas: 0, montoVendido: 0,
+      ticketsPos: 0, unidadesPos: 0, montoPos: 0,
+      ordenesTaller: 0, unidadesTaller: 0, montoTaller: 0,
       itemsSinVentas: 0,
     };
     const stockBajoItems = [];
     for (const it of items.values()) {
       const stock     = Number(it.stock) || 0;
       const reservado = Number(it.stockReservado) || 0;
-      const precio    = Number(it.precioCompra) || 0;
+      const precio    = Number(it.precioCompra || it.precioLista) || 0;
       const disponible = Math.max(0, round2(stock - reservado));
       resumen.unidadesStock     += stock;
       resumen.valorStock        += precio * stock;
@@ -211,13 +213,13 @@ router.get('/mis-estadisticas', requireAuth, async (req, res, next) => {
       }
     }
 
-    // Ventas: repuestos de este proveedor en órdenes de trabajo ENTREGADAS
+    // 1. Ventas por Órdenes de Trabajo ENTREGADAS (Taller)
     const otSnap = await db.collection('ordenes_trabajo')
       .select('estado', 'repuestos', 'fechaEntregaReal', 'fechaEntregaEstimada', 'createdAt')
       .get();
 
-    const porItem = new Map();   // inventarioId -> { unidades, monto }
-    const porMes  = new Map();   // "YYYY-MM"   -> { unidades, monto, ordenes }
+    const porItem = new Map();   // inventarioId -> { unidades, monto, nombre, codigo }
+    const porMes  = new Map();   // "YYYY-MM"   -> { unidades, monto, ordenes, ticketsPos }
     for (const doc of otSnap.docs) {
       const ot = doc.data();
       if (ot.estado !== 'Entregado') continue;
@@ -229,27 +231,87 @@ router.get('/mis-estadisticas', requireAuth, async (req, res, next) => {
 
       let unidadesOT = 0, montoOT = 0;
       for (const rep of propios) {
+        const itemInv = items.get(rep.inventarioId);
         const cant  = Number(rep.cantidad) || 0;
-        const monto = cant * (Number(items.get(rep.inventarioId).precioCompra) || 0);
-        const acc = porItem.get(rep.inventarioId) || { unidades: 0, monto: 0 };
+        const monto = cant * (Number(itemInv.precioCompra || itemInv.precioLista) || 0);
+        const acc = porItem.get(rep.inventarioId) || {
+          unidades: 0, monto: 0, nombre: itemInv.nombre || '', codigo: itemInv.codigo || '',
+        };
         acc.unidades += cant; acc.monto += monto;
         porItem.set(rep.inventarioId, acc);
         unidadesOT += cant; montoOT += monto;
       }
       resumen.unidadesVendidas += unidadesOT;
       resumen.montoVendido     += montoOT;
+      resumen.ordenesTaller    += 1;
+      resumen.unidadesTaller   += unidadesOT;
+      resumen.montoTaller      += montoOT;
 
       if (mesKey) {
-        const m = porMes.get(mesKey) || { unidades: 0, monto: 0, ordenes: 0 };
+        const m = porMes.get(mesKey) || { unidades: 0, monto: 0, ordenes: 0, ticketsPos: 0 };
         m.unidades += unidadesOT; m.monto += montoOT; m.ordenes += 1;
+        porMes.set(mesKey, m);
+      }
+    }
+
+    // 2. Ventas directas de Mostrador (Punto de Venta POS)
+    const posSnap = await db.collection('ventas_pos').get();
+    for (const doc of posSnap.docs) {
+      const v = doc.data();
+      // Ignorar cotizaciones o tickets anulados
+      if (v.tipoDocumento === 'COTIZACION' || v.estado === 'PENDIENTE' || v.estado === 'ANULADO') continue;
+
+      const itemsVenta = (v.items || []).filter(it => it && (items.has(it.id) || v.proveedorId === proveedorId));
+      if (!itemsVenta.length) continue;
+
+      const f = anioMesDeFecha(v.fecha || v.createdAt);
+      const mesKey = f ? `${f.y}-${String(f.m).padStart(2, '0')}` : null;
+
+      let unidadesTicket = 0, montoTicket = 0;
+      for (const it of itemsVenta) {
+        const itemInv = items.get(it.id);
+        const cant = Number(it.cantidad) || 0;
+        const precioUnit = Number(
+          it.precioNeto || it.precio || itemInv?.precioLista || itemInv?.precioCompra || 0
+        );
+        const monto = cant * precioUnit;
+        const itemId = it.id || it.codigo || it.nombre;
+        const acc = porItem.get(itemId) || {
+          unidades: 0,
+          monto: 0,
+          nombre: itemInv?.nombre || it.nombre || '',
+          codigo: itemInv?.codigo || it.codigo || '',
+        };
+        acc.unidades += cant;
+        acc.monto += monto;
+        porItem.set(itemId, acc);
+        unidadesTicket += cant;
+        montoTicket += monto;
+      }
+
+      resumen.unidadesVendidas += unidadesTicket;
+      resumen.montoVendido     += montoTicket;
+      resumen.ticketsPos       += 1;
+      resumen.unidadesPos      += unidadesTicket;
+      resumen.montoPos         += montoTicket;
+
+      if (mesKey) {
+        const m = porMes.get(mesKey) || { unidades: 0, monto: 0, ordenes: 0, ticketsPos: 0 };
+        m.unidades   += unidadesTicket;
+        m.monto      += montoTicket;
+        m.ordenes    += 1;
+        m.ticketsPos += 1;
         porMes.set(mesKey, m);
       }
     }
 
     const masVendidos = [...porItem.entries()]
       .map(([id, v]) => ({
-        id, nombre: items.get(id).nombre || '', codigo: items.get(id).codigo || '',
-        unidades: round2(v.unidades), monto: Math.round(v.monto),
+        id,
+        nombre: v.nombre || items.get(id)?.nombre || '',
+        codigo: v.codigo || items.get(id)?.codigo || '',
+        unidades: round2(v.unidades),
+        monto: Math.round(v.monto),
       }))
       .sort((a, b) => b.unidades - a.unidades)
       .slice(0, 10);
@@ -260,13 +322,23 @@ router.get('/mis-estadisticas', requireAuth, async (req, res, next) => {
     resumen.itemsSinVentas = sinVentas.length;
 
     const ventasPorMes = [...porMes.entries()]
-      .map(([mes, v]) => ({ mes, unidades: round2(v.unidades), monto: Math.round(v.monto), ordenes: v.ordenes }))
+      .map(([mes, v]) => ({
+        mes,
+        unidades: round2(v.unidades),
+        monto: Math.round(v.monto),
+        ordenes: v.ordenes,
+        ticketsPos: v.ticketsPos || 0,
+      }))
       .sort((a, b) => a.mes.localeCompare(b.mes));
 
-    resumen.valorStock     = Math.round(resumen.valorStock);
-    resumen.valorReservado = Math.round(resumen.valorReservado);
-    resumen.montoVendido   = Math.round(resumen.montoVendido);
+    resumen.valorStock       = Math.round(resumen.valorStock);
+    resumen.valorReservado   = Math.round(resumen.valorReservado);
+    resumen.montoVendido     = Math.round(resumen.montoVendido);
     resumen.unidadesVendidas = round2(resumen.unidadesVendidas);
+    resumen.montoPos         = Math.round(resumen.montoPos);
+    resumen.unidadesPos      = round2(resumen.unidadesPos);
+    resumen.montoTaller      = Math.round(resumen.montoTaller);
+    resumen.unidadesTaller   = round2(resumen.unidadesTaller);
 
     res.json({
       success: true,

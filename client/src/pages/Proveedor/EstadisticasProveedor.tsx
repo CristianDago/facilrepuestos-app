@@ -43,11 +43,11 @@ export default function EstadisticasProveedor() {
   const meses = useMemo(() => {
     const porMes = new Map((datos?.ventasPorMes || []).map(m => [m.mes, m]));
     const hoy = new Date();
-    const lista: { mes: string; unidades: number; monto: number; ordenes: number }[] = [];
+    const lista: { mes: string; unidades: number; monto: number; ordenes: number; ticketsPos?: number }[] = [];
     for (let i = 0; i < 12; i++) {
       const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
       const k = keyMes(d);
-      lista.push(porMes.get(k) || { mes: k, unidades: 0, monto: 0, ordenes: 0 });
+      lista.push(porMes.get(k) || { mes: k, unidades: 0, monto: 0, ordenes: 0, ticketsPos: 0 });
     }
     return lista;
   }, [datos]);
@@ -76,9 +76,7 @@ export default function EstadisticasProveedor() {
       </div>
 
       <div className={styles.nota}>
-        Todos los montos son <strong>netos</strong> (sin IVA); el IVA 19% se agrega encima al facturar. Se calculan con el precio que tienes ingresado en cada repuesto y cuentan solo los
-        repuestos de trabajos <strong>entregados</strong> al cliente. Las unidades reservadas son las que
-        el taller tiene comprometidas en trabajos aún en curso.
+        Todos los montos son <strong>netos</strong> (sin IVA); el IVA 19% se agrega encima al facturar. Incluye tanto tus ventas directas por <strong>Punto de Venta (POS Mostrador)</strong> como los repuestos utilizados en <strong>Órdenes de Trabajo entregadas</strong> del taller. Las unidades reservadas son las comprometidas en trabajos aún en curso.
       </div>
 
       {/* Resumen */}
@@ -97,27 +95,35 @@ export default function EstadisticasProveedor() {
         </div>
         <div className="stat-card">
           <div className="stat-value">{fmtCLP(resumen.montoVendido)}</div>
-          <div className="stat-label">Vendido en total neto ({fmtNum(resumen.unidadesVendidas)} un.) · c/IVA {fmtCLP(conIva(resumen.montoVendido))}</div>
+          <div className="stat-label">
+            Vendido en total neto ({fmtNum(resumen.unidadesVendidas)} un.) · c/IVA {fmtCLP(conIva(resumen.montoVendido))}
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value" style={{ color: "#1E8449" }}>
+            {fmtCLP(resumen.montoPos || 0)}
+          </div>
+          <div className="stat-label">
+            Ventas Mostrador POS ({resumen.ticketsPos || 0} tickets · {fmtNum(resumen.unidadesPos || 0)} un.)
+          </div>
         </div>
         <div className="stat-card">
           <div className={`stat-value ${styles.valorAviso}`}>{fmtNum(resumen.unidadesReservadas)}</div>
-          <div className="stat-label">Unidades Reservadas ({fmtCLP(resumen.valorReservado)})</div>
-        </div>
-        <div className="stat-card">
-          <div className={`stat-value ${resumen.stockBajo > 0 ? styles.valorAlerta : ""}`}>{resumen.stockBajo}</div>
-          <div className="stat-label">Con Stock Bajo</div>
+          <div className="stat-label">
+            Unidades Reservadas ({fmtCLP(resumen.valorReservado)}) · Stock Bajo: <strong className={resumen.stockBajo > 0 ? styles.valorAlerta : ""}>{resumen.stockBajo}</strong>
+          </div>
         </div>
       </div>
 
       {/* Ventas por mes */}
       <div className={styles.seccion}>
-        <div className={styles.seccionTitulo}>Ventas por mes · últimos 12 meses</div>
+        <div className={styles.seccionTitulo}>Ventas por mes · últimos 12 meses (Mostrador POS + Taller)</div>
         <div className="tbl-wrap">
           <table>
             <thead>
               <tr>
                 <th>Mes</th>
-                <th className="r">Trabajos</th>
+                <th className="r">Operaciones (POS / OT)</th>
                 <th className="r">Unidades</th>
                 <th className="r">Monto neto</th>
                 <th className={styles.colBarra}></th>
@@ -127,7 +133,14 @@ export default function EstadisticasProveedor() {
               {meses.map(m => (
                 <tr key={m.mes}>
                   <td data-label="Mes">{labelMes(m.mes)}</td>
-                  <td data-label="Trabajos" className="r">{m.ordenes || "—"}</td>
+                  <td data-label="Operaciones" className="r">
+                    {m.ordenes ? (
+                      <span>
+                        {m.ordenes}
+                        {m.ticketsPos ? <small style={{ color: "#666", marginLeft: "4px" }}>({m.ticketsPos} POS)</small> : null}
+                      </span>
+                    ) : "—"}
+                  </td>
                   <td data-label="Unidades" className="r">{m.unidades ? fmtNum(m.unidades) : "—"}</td>
                   <td data-label="Monto" className="r price-cell">{m.monto ? fmtCLP(m.monto) : "—"}</td>
                   <td className={`${styles.colBarra} hide-mobile`}>

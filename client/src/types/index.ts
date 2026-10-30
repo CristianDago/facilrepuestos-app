@@ -242,11 +242,17 @@ export interface EstadisticasProveedor {
     stockBajo:          number;
     unidadesReservadas: number;   // comprometidas en órdenes de trabajo activas
     valorReservado:     number;
-    unidadesVendidas:   number;   // en órdenes de trabajo entregadas
-    montoVendido:       number;   // a su precio actual
+    unidadesVendidas:   number;   // total (taller + POS mostrador)
+    montoVendido:       number;   // total neto vendido
+    ticketsPos?:        number;   // cantidad de tickets de mostrador POS
+    unidadesPos?:       number;   // unidades vendidas por POS mostrador
+    montoPos?:          number;   // monto neto vendido por POS mostrador
+    ordenesTaller?:     number;   // órdenes de trabajo entregadas
+    unidadesTaller?:    number;   // unidades vendidas en taller
+    montoTaller?:       number;   // monto neto vendido en taller
     itemsSinVentas:     number;
   };
-  ventasPorMes:   { mes: string; unidades: number; monto: number; ordenes: number }[];   // mes = "YYYY-MM"
+  ventasPorMes:   { mes: string; unidades: number; monto: number; ordenes: number; ticketsPos?: number }[];   // mes = "YYYY-MM"
   masVendidos:    { id: string; nombre: string; codigo: string; unidades: number; monto: number }[];
   stockBajoItems: { id: string; nombre: string; codigo: string; disponible: number; stockMinimo: number }[];
   sinVentas:      { id: string; nombre: string; codigo: string; stock: number }[];

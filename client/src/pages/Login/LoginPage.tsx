@@ -29,8 +29,10 @@ function LoginAdmin({ onBack }: { onBack: () => void }) {
     try {
       await loginAdmin(email, password);
       // No llamar navigate aquí — LoginPage lo hace cuando user queda seteado
-    } catch {
-      setError('Email o contraseña incorrectos');
+    } catch (err: any) {
+      console.error('Error al iniciar sesión admin:', err);
+      const code = err?.code ? ` (${err.code})` : '';
+      setError((err?.message || 'Email o contraseña incorrectos') + code);
     } finally {
       setSubmitting(false);
     }
@@ -152,8 +154,10 @@ function LoginProveedor({ onBack }: { onBack: () => void }) {
     try {
       await loginProveedor(rut, password);
       // No llamar navigate aquí — LoginPage lo hace cuando user queda seteado
-    } catch {
-      setError('RUT o contraseña incorrectos');
+    } catch (err: any) {
+      console.error('Error al iniciar sesión proveedor:', err);
+      const code = err?.code ? ` (${err.code})` : '';
+      setError((err?.message || 'RUT o contraseña incorrectos') + code);
     } finally {
       setSubmitting(false);
     }
@@ -199,7 +203,7 @@ function LoginProveedor({ onBack }: { onBack: () => void }) {
 export default function LoginPage() {
   const [vista, setVista] = useState<Vista>('selector');
   const navigate          = useNavigate();
-  const { user, loading } = useAuth();
+  const { user, loading, loginDev } = useAuth();
 
   // FIX: navegar solo cuando el perfil ya está confirmado en el contexto.
   // Antes, navigate() se llamaba justo después de signInWithEmailAndPassword,
@@ -277,6 +281,30 @@ export default function LoginPage() {
         {vista === 'admin'    && <LoginAdmin    onBack={() => setVista('selector')} />}
         {vista === 'mecanico' && <LoginMecanico onBack={() => setVista('selector')} />}
         {vista === 'proveedor' && <LoginProveedor onBack={() => setVista('selector')} />}
+
+        {import.meta.env.DEV && (
+          <div style={{ marginTop: '1.25rem', padding: '0.85rem', background: '#f0fdf4', border: '1px dashed #22c55e', borderRadius: '8px', textAlign: 'center' }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#15803d', marginBottom: '0.5rem', textTransform: 'uppercase' }}>
+              ⚡ Acceso Rápido Desarrollo Local (1 Clic)
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-sm btn-dark"
+                onClick={() => loginDev('admin', 'Taller Dr. Motors')}
+              >
+                🛠 Entrar como Admin
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-primary"
+                onClick={() => loginDev('proveedor', 'Proveedor Demo')}
+              >
+                📦 Entrar como Proveedor
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className={styles.cardFooter}>
           <span className={styles.version}>Dr. Motors © 2025</span>

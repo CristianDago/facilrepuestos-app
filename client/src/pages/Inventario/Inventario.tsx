@@ -24,6 +24,7 @@ import { usePagination } from '../../hooks/usePagination';
 import styles from './Inventario.module.css';
 import * as XLSX from 'xlsx';
 import ImportarExcelModal from './ImportarExcelModal';
+import IngresoRapidoModal from './IngresoRapidoModal';
 import {
   getStockInfo,
   MARCAS_VEHICULOS,
@@ -132,6 +133,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
   const [form, setForm]           = useState<Omit<ItemInventario, "id">>(emptyItem());
 
   const [modalExcel, setModalExcel] = useState(false);
+  const [modalPistola, setModalPistola] = useState(false);
 
   const [categoriasList, setCategoriasList]         = useState<Categoria[]>([]);
   const [categoriaCustom, setCategoriaCustom]       = useState("");
@@ -583,6 +585,14 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
         </div>
         {/* FILA 2: acciones */}
         <div className={styles.toolbarFila2}>
+          <button
+            className="btn btn-dark"
+            style={{ background: '#0284c7', borderColor: '#0284c7', color: '#ffffff', fontWeight: 700 }}
+            onClick={() => setModalPistola(true)}
+            title="Escanear códigos con pistola e ingresar a bodega con búsqueda web automática"
+          >
+            ⚡ Ingreso con Pistola (QR/EAN)
+          </button>
           <button className="btn btn-dark" onClick={() => setModalExcel(true)}>⬆ Importar Excel</button>
           <button className="btn btn-dark" onClick={exportarExcel} disabled={filtered.length === 0}>⬇ Exportar Excel</button>
           {!esProveedor && (
@@ -1129,6 +1139,15 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
           inventarioActual={inventario}
           onClose={() => setModalExcel(false)}
           onSuccess={() => { setModalExcel(false); loadInventario(); }}
+        />
+      )}
+
+      {/* MODAL INGRESO RÁPIDO CON PISTOLA */}
+      {modalPistola && (
+        <IngresoRapidoModal
+          onCerrar={() => setModalPistola(false)}
+          onItemGuardado={() => loadInventario()}
+          modo="admin"
         />
       )}
     </div>

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../config/firebase.js';
 import { requireAuth, requireAdmin, requireAuthOrLector, ROL_LECTOR_DRPARTES } from '../middleware/auth.js';
 import { eliminarProductoDeWooCommerce } from '../services/woocommerceSync.js';
+import { buscarRepuestoPorCodigo } from '../services/partLookup.js';
 
 const router = Router();
 
@@ -126,6 +127,19 @@ router.get('/', requireAuthOrLector, async (req, res, next) => {
     }
 
     res.json({ success: true, data: items });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/inventario/lookup/:codigo
+// Búsqueda inteligente por código de barra / OEM / QR con enriquecimiento automático
+router.get('/lookup/:codigo', requireAuth, async (req, res, next) => {
+  try {
+    const { codigo } = req.params;
+    const proveedorId = req.user?.rol === 'proveedor' ? req.user.docId : null;
+    const resultado = await buscarRepuestoPorCodigo(codigo, proveedorId);
+    res.json({ success: true, data: resultado });
   } catch (error) {
     next(error);
   }

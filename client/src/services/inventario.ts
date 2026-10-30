@@ -8,6 +8,13 @@ export const inventarioService = {
   getById: (id: string) =>
     api.get<ApiResponse<ItemInventario>>(`/inventario/${id}`),
 
+  lookupCodigo: (codigo: string) =>
+    api.get<ApiResponse<{
+      encontrado: boolean;
+      origen: 'inventario_existente' | 'nuevo_sugerido';
+      item: Partial<ItemInventario> & { esMio?: boolean; fuenteInfo?: string };
+    }>>(`/inventario/lookup/${encodeURIComponent(codigo)}`),
+
   create: (data: Omit<ItemInventario, 'id'>) =>
     api.post<ApiResponse<{ id: string }>>('/inventario', data),
 

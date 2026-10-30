@@ -3,6 +3,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import 'dotenv/config';
+import { createLocalDb } from './localDb.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -25,8 +26,13 @@ try {
   db = admin.firestore();
   console.log('✓ Firebase conectado');
 } catch (error) {
-  console.error('✕ Error conectando Firebase:', error.message);
-  console.log('  Asegúrate de tener serviceAccount.json en la carpeta server/, o FIREBASE_SERVICE_ACCOUNT configurado.');
+  if (process.env.NODE_ENV !== 'production') {
+    db = createLocalDb();
+    console.log('⚡ Modo Desarrollo Local activo: Base de datos local en server/.local-db.json');
+  } else {
+    console.error('✕ Error conectando Firebase:', error.message);
+    console.log('  Asegúrate de tener serviceAccount.json en la carpeta server/, o FIREBASE_SERVICE_ACCOUNT configurado.');
+  }
 }
 
 export { db };

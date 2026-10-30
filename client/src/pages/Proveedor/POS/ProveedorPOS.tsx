@@ -4,6 +4,7 @@ import { inventarioService } from '../../../services/inventario';
 import { posService, type ItemVentaPOS, type MetodoPagoPOS, type VentaPOSRegistrada } from '../../../services/pos';
 import type { ItemInventario } from '../../../types';
 import TicketTermicoModal from './TicketTermicoModal';
+import IngresoRapidoModal from '../../Inventario/IngresoRapidoModal';
 import styles from './ProveedorPOS.module.css';
 
 const fmtCLP = (n: number) => '$' + Math.round(n || 0).toLocaleString('es-CL');
@@ -54,6 +55,58 @@ export default function ProveedorPOS() {
   const [procesandoVenta, setProcesandoVenta] = useState(false);
   const [ventaCompletada, setVentaCompletada] = useState<VentaPOSRegistrada | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // Historial POS y modal de ingreso rápido con pistola
+  const [mostrarHistorial, setMostrarHistorial] = useState(false);
+  const [historialVentas, setHistorialVentas] = useState<VentaPOSRegistrada[]>([]);
+  const [cargandoHistorial, setCargandoHistorial] = useState(false);
+  const [modalPistolaCodigo, setModalPistolaCodigo] = useState<string | null>(null);
+
+  const cargarHistorialVentas = async () => {
+    try {
+      setCargandoHistorial(true);
+      const res = await posService.obtenerVentas();
+      setHistorialVentas(res.data || []);
+    } catch {
+      // Silencioso en caso de fallo de red puntual
+    } finally {
+      setCargandoHistorial(false);
+    }
+  };
+
+  const abrirHistorial = () => {
+    setMostrarHistorial(true);
+    cargarHistorialVentas();
+  };
+
+  const cargarCotizacionAlCarro = (cot: VentaPOSRegistrada) => {
+    const nuevosItems: ItemVentaPOS[] = [];
+    for (const it of cot.items) {
+      const invItem = inventario.find((x) => x.id === it.id);
+      const disponible = invItem ? Math.max(0, (invItem.stock || 0) - (invItem.stockReservado || 0)) : it.cantidad;
+      const precioNeto = Number(it.precioNeto) || 0;
+      const precioConIva = conIva(precioNeto);
+      nuevosItems.push({
+        id: it.id,
+        nombre: it.nombre,
+        codigo: it.codigo || '',
+        fabricante: invItem?.fabricante || '',
+        precioNeto,
+        precioConIva,
+        cantidad: Math.min(it.cantidad, Math.max(1, disponible)),
+        subtotalNeto: precioNeto * Math.min(it.cantidad, Math.max(1, disponible)),
+        subtotalConIva: precioConIva * Math.min(it.cantidad, Math.max(1, disponible)),
+        disponible,
+      });
+    }
+    setCarro(nuevosItems);
+    setClienteNombre(cot.cliente?.nombre || '');
+    setClienteRut(cot.cliente?.rut || '');
+    setClientePatente(cot.cliente?.patente || '');
+    setClienteTelefono(cot.cliente?.telefono || '');
+    setMostrarHistorial(false);
+    playBeep('ok');
+  };
 
   // Cargar inventario al montar
   const cargarInventario = async () => {
@@ -294,14 +347,33 @@ export default function ProveedorPOS() {
       {/* ── PANEL IZQUIERDO: BÚSQUEDA Y LISTA DE REPUESTOS ── */}
       <div className={styles.leftPanel}>
         <div className={styles.searchHeader}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
             <div className={styles.scannerBadge}>
               <span className={styles.scannerDot} />
               <span>Lector de Código de Barra / Pistola Activo</span>
             </div>
-            <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-              Atajos: <strong>[Enter]</strong> agregar | <strong>[F4]</strong> cobrar
-            </span>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                className="btn btn-sm btn-dark"
+                style={{ background: '#0284c7', borderColor: '#0284c7', color: '#fff', fontWeight: 700 }}
+                onClick={() => setModalPistolaCodigo('')}
+                title="Escanear mercadería nueva o sumar stock a bodega"
+              >
+                ⚡ Ingreso Pistola Bodega
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-dark"
+                onClick={abrirHistorial}
+                title="Ver ventas del día, cotizaciones y reimprimir tickets"
+              >
+                🧾 Historial / Tickets
+              </button>
+              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                <strong>[Enter]</strong> agregar | <strong>[F4]</strong> cobrar
+              </span>
+            </div>
           </div>
 
           <div className={styles.searchBarWrap}>
@@ -329,8 +401,20 @@ export default function ProveedorPOS() {
               Cargando catálogo de repuestos...
             </div>
           ) : repuestosFiltrados.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>
-              No se encontraron repuestos con "{busqueda}"
+            <div style={{ textAlign: 'center', padding: '2.5rem', color: '#64748b' }}>
+              <div style={{ marginBottom: '0.85rem', fontSize: '0.95rem' }}>
+                No se encontraron repuestos en bodega con <strong>"{busqueda}"</strong>
+              </div>
+              {busqueda.trim() && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ background: '#0284c7', borderColor: '#0284c7' }}
+                  onClick={() => setModalPistolaCodigo(busqueda.trim().toUpperCase())}
+                >
+                  ✨ ¿Mercadería nueva? Buscar e Ingresar "{busqueda.trim().toUpperCase()}" con Pistola
+                </button>
+              )}
             </div>
           ) : (
             <table className={styles.tableWrap}>
@@ -572,6 +656,212 @@ export default function ProveedorPOS() {
           nombreLocal={user?.nombre ? `REPUESTOS ${user.nombre.toUpperCase()}` : 'FACIL REPUESTOS CHILE'}
           onCerrar={() => setVentaCompletada(null)}
         />
+      )}
+
+      {/* ── MODAL DE INGRESO RÁPIDO CON PISTOLA (DESDE MOSTRADOR) ── */}
+      {modalPistolaCodigo !== null && (
+        <IngresoRapidoModal
+          codigoInicial={modalPistolaCodigo}
+          modo={user?.rol === 'admin' ? 'admin' : 'proveedor'}
+          onCerrar={() => {
+            setModalPistolaCodigo(null);
+            setTimeout(() => searchInputRef.current?.focus(), 50);
+          }}
+          onItemGuardado={() => {
+            cargarInventario();
+          }}
+        />
+      )}
+
+      {/* ── MODAL DE HISTORIAL DE VENTAS Y COTIZACIONES POS ── */}
+      {mostrarHistorial && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '1rem',
+          }}
+          onClick={() => setMostrarHistorial(false)}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: '14px',
+              width: '100%',
+              maxWidth: '860px',
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.3)',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                padding: '1rem 1.25rem',
+                background: '#0f172a',
+                color: '#fff',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+              }}
+            >
+              <div style={{ fontWeight: 800, fontSize: '1.05rem' }}>
+                🧾 Historial de Mostrador (Ventas y Cotizaciones Recientes)
+              </div>
+              <button
+                onClick={() => setMostrarHistorial(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#94a3b8',
+                  fontSize: '1.2rem',
+                  cursor: 'pointer',
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div style={{ padding: '1.25rem', overflowY: 'auto', flex: 1 }}>
+              {/* Resumen rápido */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                  gap: '0.75rem',
+                  marginBottom: '1rem',
+                }}
+              >
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '0.75rem 1rem' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#15803d', textTransform: 'uppercase' }}>
+                    Ventas Completadas
+                  </div>
+                  <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#166534' }}>
+                    {historialVentas.filter((v) => v.tipoDocumento !== 'COTIZACION').length}
+                  </div>
+                </div>
+                <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '0.75rem 1rem' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase' }}>
+                    Total Recaudado (IVA inc.)
+                  </div>
+                  <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#1e40af' }}>
+                    {fmtCLP(
+                      historialVentas
+                        .filter((v) => v.tipoDocumento !== 'COTIZACION')
+                        .reduce((acc, v) => acc + (Number(v.total) || 0), 0)
+                    )}
+                  </div>
+                </div>
+                <div style={{ background: '#fefce8', border: '1px solid #fef08a', borderRadius: '10px', padding: '0.75rem 1rem' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#a16207', textTransform: 'uppercase' }}>
+                    Cotizaciones Emitidas
+                  </div>
+                  <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#854d0e' }}>
+                    {historialVentas.filter((v) => v.tipoDocumento === 'COTIZACION').length}
+                  </div>
+                </div>
+              </div>
+
+              {cargandoHistorial ? (
+                <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                  Cargando historial de ventas...
+                </div>
+              ) : historialVentas.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '2.5rem', color: '#94a3b8' }}>
+                  Aún no hay ventas ni cotizaciones registradas en mostrador.
+                </div>
+              ) : (
+                <table className={styles.tableWrap}>
+                  <thead>
+                    <tr>
+                      <th>N° Ticket</th>
+                      <th>Tipo</th>
+                      <th>Fecha / Hora</th>
+                      <th>Cliente / Patente</th>
+                      <th>Pago</th>
+                      <th style={{ textAlign: 'right' }}>Total</th>
+                      <th style={{ textAlign: 'right' }}>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historialVentas.map((v) => {
+                      const esCot = v.tipoDocumento === 'COTIZACION';
+                      return (
+                        <tr key={v.id} className={styles.tableRow} style={{ cursor: 'default' }}>
+                          <td className={styles.tableCell}>
+                            <span className={styles.itemCodeBadge}>{v.numeroTicket}</span>
+                          </td>
+                          <td className={styles.tableCell}>
+                            <span
+                              style={{
+                                fontSize: '0.72rem',
+                                fontWeight: 800,
+                                padding: '2px 8px',
+                                borderRadius: '999px',
+                                background: esCot ? '#fef9c3' : '#dcfce7',
+                                color: esCot ? '#854d0e' : '#166534',
+                              }}
+                            >
+                              {esCot ? 'COTIZACIÓN' : 'VENTA'}
+                            </span>
+                          </td>
+                          <td className={styles.tableCell} style={{ fontSize: '0.8rem', color: '#475569' }}>
+                            {new Date(v.fecha).toLocaleString('es-CL')}
+                          </td>
+                          <td className={styles.tableCell} style={{ fontSize: '0.82rem' }}>
+                            <strong>{v.cliente?.nombre || 'Cliente Mostrador'}</strong>
+                            {v.cliente?.patente && (
+                              <span style={{ marginLeft: '6px', color: '#0284c7', fontWeight: 700 }}>
+                                [{v.cliente.patente}]
+                              </span>
+                            )}
+                          </td>
+                          <td className={styles.tableCell} style={{ fontSize: '0.78rem', fontWeight: 600 }}>
+                            {v.metodoPago}
+                          </td>
+                          <td className={styles.tableCell} style={{ textAlign: 'right', fontWeight: 800 }}>
+                            {fmtCLP(v.total)}
+                          </td>
+                          <td className={styles.tableCell} style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'flex-end' }}>
+                              {esCot && (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-primary"
+                                  onClick={() => cargarCotizacionAlCarro(v)}
+                                  title="Cargar productos de esta cotización al carro para cobrar"
+                                >
+                                  🛒 Pasar a Venta
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-dark"
+                                onClick={() => {
+                                  setMostrarHistorial(false);
+                                  setVentaCompletada(v);
+                                }}
+                              >
+                                🖨️ Ticket
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

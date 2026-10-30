@@ -18,6 +18,9 @@ export async function requireAuthOrLector(req, res, next) {
     return res.status(401).json({ success: false, error: 'No autenticado' });
   }
   const token = header.split('Bearer ')[1];
+  if (process.env.NODE_ENV !== 'production' && token.startsWith('dev-token:')) {
+    return requireAuth(req, res, next);
+  }
   try {
     const decoded = await admin.auth().verifyIdToken(token);
     if (decoded.rol === ROL_LECTOR_DRPARTES) {
@@ -48,6 +51,30 @@ export async function requireAuth(req, res, next) {
   }
 
   const token = header.split('Bearer ')[1];
+
+  // Soporte de acceso rápido en desarrollo local (nunca activo en producción)
+  if (process.env.NODE_ENV !== 'production' && token.startsWith('dev-token:')) {
+    try {
+      const payloadJson = Buffer.from(token.slice('dev-token:'.length), 'base64').toString('utf8');
+      const devUser = JSON.parse(payloadJson);
+      const rol = devUser.rol || 'admin';
+      const isProv = rol === 'proveedor';
+      req.uid = devUser.uid || (isProv ? 'dev-user-proveedor' : 'dev-user-admin');
+      req.user = {
+        uid: req.uid,
+        email: devUser.email || (isProv ? 'proveedor@facilrepuestos.cl' : 'taller@drmotors.cl'),
+        rol,
+        nombre: devUser.nombre || (isProv ? 'Proveedor Demo' : 'Taller Dr. Motors'),
+        apellido: devUser.apellido || '(Local)',
+        docId: isProv ? 'prov-demo-001' : 'dev-admin-doc',
+        activo: true,
+      };
+      return next();
+    } catch {
+      return res.status(401).json({ success: false, error: 'Token de desarrollo inválido' });
+    }
+  }
+
   try {
     const decoded = await admin.auth().verifyIdToken(token);
 

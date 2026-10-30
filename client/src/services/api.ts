@@ -2,14 +2,23 @@ import { getAuth } from 'firebase/auth';
 
 const BASE_URL = `${import.meta.env.VITE_API_URL}/api`;
 
-// Obtiene el token del usuario autenticado
+// Obtiene el token del usuario autenticado (Firebase o sesión local de desarrollo)
 async function getAuthHeaders(): Promise<Record<string, string>> {
   try {
     const auth = getAuth();
     const user = auth.currentUser;
-    if (!user) return {};
-    const token = await user.getIdToken();
-    return { Authorization: `Bearer ${token}` };
+    if (user) {
+      const token = await user.getIdToken();
+      return { Authorization: `Bearer ${token}` };
+    }
+    if (import.meta.env.DEV) {
+      const devStored = localStorage.getItem('facilrepuestos_dev_user');
+      if (devStored) {
+        const encoded = btoa(unescape(encodeURIComponent(devStored)));
+        return { Authorization: `Bearer dev-token:${encoded}` };
+      }
+    }
+    return {};
   } catch {
     return {};
   }

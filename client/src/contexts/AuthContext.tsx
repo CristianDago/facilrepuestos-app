@@ -6,6 +6,7 @@ import {
   type User as FirebaseUser,
 } from 'firebase/auth';
 import { auth } from '../firebase';
+import { rutToEmail } from '../utils/rutUtils';
 
 // ─── TIPOS ────────────────────────────────────────────────
 export type Rol = 'admin' | 'mecanico' | 'administrativo' | 'proveedor';
@@ -25,17 +26,13 @@ interface AuthContextType {
   loginAdmin:    (email: string, password: string) => Promise<void>;
   loginMecanico: (rut: string, password: string) => Promise<void>;
   loginProveedor: (rut: string, password: string) => Promise<void>;
+  loginDev:      (rol?: Rol, nombre?: string) => void;
   logout:        () => Promise<void>;
   getToken:      () => Promise<string | null>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-// ─── HELPER RUT → EMAIL ───────────────────────────────────
-export const rutToEmail = (rut: string): string => {
-  const clean = rut.replace(/\./g, '').replace(/-/g, '').toLowerCase();
-  return `${clean}@drmotors.internal`;
-};
 
 // ─── PROVIDER ─────────────────────────────────────────────
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -49,9 +46,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/api/usuarios/me`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        console.error('Error al obtener perfil /api/usuarios/me:', res.status, await res.text());
+        return null;
+      }
       const data = await res.json();
-      if (!data.success) return null;
+      if (!data.success) {
+        console.error('Respuesta no exitosa en /api/usuarios/me:', data);
+        return null;
+      }
       return {
         uid:      fbUser.uid,
         email:    fbUser.email,
@@ -59,7 +62,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         nombre:   data.data.nombre,
         apellido: data.data.apellido || '',
       };
-    } catch {
+    } catch (e) {
+      console.error('Excepción de red al obtener perfil:', e);
       return null;
     }
   };
@@ -76,7 +80,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const perfil = await fetchPerfil(fbUser);
         setUser(perfil);
       } else {
-        setUser(null);
+        const stored = localStorage.getItem('facilrepuestos_dev_user');
+        if (stored) {
+          try {
+            setUser(JSON.parse(stored));
+          } catch {
+            setUser(null);
+          }
+        } else {
+          setUser(null);
+        }
       }
       setLoading(false);
     });
@@ -100,7 +113,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // onAuthStateChanged se encarga del resto
   };
 
+  const loginDev = (rol: Rol = 'admin', nombre: string = 'Taller Dr. Motors') => {
+    const devUser: AuthUser = {
+      uid: 'dev-user-001',
+      email: 'taller@drmotors.cl',
+      rol,
+      nombre,
+      apellido: '(Local)',
+    };
+    setUser(devUser);
+    localStorage.setItem('facilrepuestos_dev_user', JSON.stringify(devUser));
+  };
+
   const logout = async () => {
+    localStorage.removeItem('facilrepuestos_dev_user');
     await signOut(auth);
     setUser(null);
   };
@@ -113,7 +139,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user, firebaseUser, loading,
-      loginAdmin, loginMecanico, loginProveedor, logout, getToken,
+      loginAdmin, loginMecanico, loginProveedor, loginDev, logout, getToken,
     }}>
       {children}
     </AuthContext.Provider>

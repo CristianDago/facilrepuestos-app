@@ -145,14 +145,17 @@ router.post('/venta', requireAuth, async (req, res, next) => {
 // Listado de ventas recientes del mostrador
 router.get('/ventas', requireAuth, async (req, res, next) => {
   try {
-    let query = db.collection('ventas_pos').orderBy('fecha', 'desc').limit(50);
-
+    let snap;
     if (req.user.rol === 'proveedor') {
-      query = query.where('proveedorId', '==', req.user.docId);
+      snap = await db.collection('ventas_pos').where('proveedorId', '==', req.user.docId).get();
+    } else {
+      snap = await db.collection('ventas_pos').orderBy('fecha', 'desc').limit(50).get();
     }
 
-    const snap = await query.get();
-    const ventas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const ventas = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')))
+      .slice(0, 50);
 
     res.json({ success: true, data: ventas });
   } catch (error) {

@@ -36,6 +36,8 @@ export interface VentaPOSPayload {
   tipoDocumento?: 'TICKET' | 'COTIZACION';
   notas?: string;
   proveedorId?: string | null;
+  descuentoTipo?: 'PORCENTAJE' | 'MONTO';
+  descuentoValor?: number;
 }
 
 export interface VentaPOSRegistrada {
@@ -53,6 +55,11 @@ export interface VentaPOSRegistrada {
     precioNeto: number;
     cantidad: number;
   }>;
+  subtotalNeto?: number;
+  descuentoTipo?: 'PORCENTAJE' | 'MONTO' | null;
+  descuentoValor?: number;
+  descuentoPorcentaje?: number;
+  descuentoNeto?: number;
   totalNeto: number;
   totalIva: number;
   total: number;

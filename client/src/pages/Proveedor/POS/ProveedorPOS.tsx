@@ -42,10 +42,14 @@ export default function ProveedorPOS() {
   const [inventario, setInventario] = useState<ItemInventario[]>([]);
   const [loading, setLoading] = useState(true);
   const [busqueda, setBusqueda] = useState('');
+  const [filtroCategoria, setFiltroCategoria] = useState('');
+  const [filtroMarcaVehiculo, setFiltroMarcaVehiculo] = useState('');
   const [carro, setCarro] = useState<ItemVentaPOS[]>([]);
 
-  // Datos de venta
+  // Datos de venta y descuento sobre el total
   const [metodoPago, setMetodoPago] = useState<MetodoPagoPOS>('EFECTIVO');
+  const [descuentoTipo, setDescuentoTipo] = useState<'PORCENTAJE' | 'MONTO'>('PORCENTAJE');
+  const [descuentoValor, setDescuentoValor] = useState<number>(0);
   const [clienteNombre, setClienteNombre] = useState('');
   const [clienteRut, setClienteRut] = useState('');
   const [clientePatente, setClientePatente] = useState('');
@@ -104,6 +108,8 @@ export default function ProveedorPOS() {
     setClienteRut(cot.cliente?.rut || '');
     setClientePatente(cot.cliente?.patente || '');
     setClienteTelefono(cot.cliente?.telefono || '');
+    setDescuentoTipo(cot.descuentoTipo === 'MONTO' ? 'MONTO' : 'PORCENTAJE');
+    setDescuentoValor(Number(cot.descuentoValor) || 0);
     setMostrarHistorial(false);
     playBeep('ok');
   };
@@ -221,6 +227,7 @@ export default function ProveedorPOS() {
     setClienteRut('');
     setClientePatente('');
     setClienteTelefono('');
+    setDescuentoValor(0);
     setErrorMsg(null);
     searchInputRef.current?.focus();
   };
@@ -274,30 +281,95 @@ export default function ProveedorPOS() {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [carro, procesandoVenta, ventaCompletada]);
 
-  // Filtrado de repuestos para el catálogo visual
+  // Categorías disponibles en el inventario actual
+  const categoriasDisponibles = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const it of inventario) {
+      const cat = (it.categoria || '').trim().toUpperCase();
+      if (!cat) continue;
+      counts.set(cat, (counts.get(cat) || 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [inventario]);
+
+  // Marcas de vehículo compatibles disponibles en el inventario actual
+  const marcasVehiculoDisponibles = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const it of inventario) {
+      for (const m of it.marcasCompatibles || []) {
+        const marca = (m || '').trim().toUpperCase();
+        if (!marca) continue;
+        counts.set(marca, (counts.get(marca) || 0) + 1);
+      }
+    }
+    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [inventario]);
+
+  // Filtrado de repuestos para el catálogo visual (combina Búsqueda + Categoría + Marca de Vehículo)
   const repuestosFiltrados = useMemo(() => {
-    if (!busqueda.trim()) return inventario.slice(0, 40);
     const q = busqueda.toLowerCase().trim();
     return inventario
       .filter((it) => {
+        if (filtroCategoria && (it.categoria || '').toUpperCase() !== filtroCategoria) {
+          return false;
+        }
+        if (
+          filtroMarcaVehiculo &&
+          !(it.marcasCompatibles || []).some((m) => m.toUpperCase() === filtroMarcaVehiculo)
+        ) {
+          return false;
+        }
+        if (!q) return true;
         const nom = (it.nombre || '').toLowerCase();
         const cod = (it.codigo || '').toLowerCase();
         const fab = (it.fabricante || '').toLowerCase();
         const cat = (it.categoria || '').toLowerCase();
+        const marcas = (it.marcasCompatibles || []).some((m) => m.toLowerCase().includes(q));
         const equiv = (it.equivalencias || []).some((eq) => eq.codigo.toLowerCase().includes(q));
-        return nom.includes(q) || cod.includes(q) || fab.includes(q) || cat.includes(q) || equiv;
+        return nom.includes(q) || cod.includes(q) || fab.includes(q) || cat.includes(q) || marcas || equiv;
       })
-      .slice(0, 40);
-  }, [inventario, busqueda]);
+      .slice(0, 60);
+  }, [inventario, busqueda, filtroCategoria, filtroMarcaVehiculo]);
 
-  // Totales del carro
+  // Totales del carro incluyendo descuento en la compra total
   const totales = useMemo(() => {
-    const neto = carro.reduce((sum, it) => sum + it.subtotalNeto, 0);
+    const subtotalNeto = carro.reduce((sum, it) => sum + it.subtotalNeto, 0);
+    const subtotalConIva = Math.round(subtotalNeto * 1.19);
+    const val = Math.max(0, Number(descuentoValor) || 0);
+
+    let descuentoNeto = 0;
+    let descuentoPorcentaje = 0;
+
+    if (val > 0 && subtotalNeto > 0) {
+      if (descuentoTipo === 'PORCENTAJE') {
+        const pct = Math.min(100, val);
+        descuentoPorcentaje = Math.round(pct * 100) / 100;
+        descuentoNeto = Math.round(subtotalNeto * (pct / 100));
+      } else {
+        const montoBruto = Math.min(subtotalConIva, val);
+        descuentoNeto = Math.min(subtotalNeto, Math.round(montoBruto / 1.19));
+        descuentoPorcentaje = Math.round((descuentoNeto / subtotalNeto) * 10000) / 100;
+      }
+    }
+
+    const neto = Math.max(0, subtotalNeto - descuentoNeto);
     const iva = Math.round(neto * 0.19);
     const total = neto + iva;
+    const descuentoConIva = Math.max(0, subtotalConIva - total);
     const totalUnidades = carro.reduce((sum, it) => sum + it.cantidad, 0);
-    return { neto, iva, total, totalUnidades };
-  }, [carro]);
+
+    return {
+      subtotalNeto,
+      subtotalConIva,
+      descuentoNeto,
+      descuentoConIva,
+      descuentoPorcentaje,
+      neto,
+      iva,
+      total,
+      totalUnidades,
+    };
+  }, [carro, descuentoTipo, descuentoValor]);
 
   // Procesar venta en backend y desplegar ticket térmico
   const ejecutarVenta = async (tipoDocumento: 'TICKET' | 'COTIZACION') => {
@@ -317,6 +389,8 @@ export default function ProveedorPOS() {
         })),
         metodoPago,
         tipoDocumento,
+        descuentoTipo,
+        descuentoValor: Math.max(0, Number(descuentoValor) || 0),
         cliente: {
           nombre: clienteNombre.trim() || undefined,
           rut: clienteRut.trim() || undefined,
@@ -393,6 +467,70 @@ export default function ProveedorPOS() {
               </button>
             )}
           </div>
+
+          {/* ── FILTROS DESPLEGADOS A LA IZQUIERDA (CATEGORÍA + MARCA DE VEHÍCULO COMBINABLES) ── */}
+          <div className={styles.filtersPanel}>
+            <div className={styles.filterGroupRow}>
+              <span className={styles.filterGroupLabel}>📂 Categoría:</span>
+              <div className={styles.filterChipsRow}>
+                <button
+                  type="button"
+                  className={`${styles.filterChip} ${filtroCategoria === '' ? styles.filterChipActive : ''}`}
+                  onClick={() => setFiltroCategoria('')}
+                >
+                  Todas las categorías
+                  <span className={styles.filterChipCount}>({inventario.length})</span>
+                </button>
+                {categoriasDisponibles.map(([cat, count]) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    className={`${styles.filterChip} ${filtroCategoria === cat ? styles.filterChipActive : ''}`}
+                    onClick={() => setFiltroCategoria(filtroCategoria === cat ? '' : cat)}
+                  >
+                    {cat}
+                    <span className={styles.filterChipCount}>({count})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className={styles.filterGroupRow}>
+              <span className={styles.filterGroupLabel}>🚗 Marca Auto:</span>
+              <div className={styles.filterChipsRow}>
+                <button
+                  type="button"
+                  className={`${styles.filterChip} ${filtroMarcaVehiculo === '' ? styles.filterChipMarcaActive : ''}`}
+                  onClick={() => setFiltroMarcaVehiculo('')}
+                >
+                  Todas las marcas
+                </button>
+                {marcasVehiculoDisponibles.map(([marca, count]) => (
+                  <button
+                    key={marca}
+                    type="button"
+                    className={`${styles.filterChip} ${filtroMarcaVehiculo === marca ? styles.filterChipMarcaActive : ''}`}
+                    onClick={() => setFiltroMarcaVehiculo(filtroMarcaVehiculo === marca ? '' : marca)}
+                  >
+                    {marca}
+                    <span className={styles.filterChipCount}>({count})</span>
+                  </button>
+                ))}
+                {(filtroCategoria !== '' || filtroMarcaVehiculo !== '') && (
+                  <button
+                    type="button"
+                    className={styles.btnClearFilters}
+                    onClick={() => {
+                      setFiltroCategoria('');
+                      setFiltroMarcaVehiculo('');
+                    }}
+                  >
+                    ✕ Limpiar filtros
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className={styles.catalogContent}>
@@ -453,7 +591,24 @@ export default function ProveedorPOS() {
                       </td>
                       <td className={styles.tableCell}>
                         <span className={styles.itemTitle}>{it.nombre}</span>
-                        <span className={styles.itemSub}>{it.categoria}</span>
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center', marginTop: '2px' }}>
+                          <span className={styles.itemSub}>{it.categoria}</span>
+                          {(it.marcasCompatibles || []).map((m) => (
+                            <span
+                              key={m}
+                              style={{
+                                fontSize: '0.65rem',
+                                fontWeight: 700,
+                                background: filtroMarcaVehiculo === m.toUpperCase() ? '#15803d' : '#dcfce7',
+                                color: filtroMarcaVehiculo === m.toUpperCase() ? '#ffffff' : '#166534',
+                                padding: '1px 5px',
+                                borderRadius: '4px',
+                              }}
+                            >
+                              {m}
+                            </span>
+                          ))}
+                        </div>
                       </td>
                       <td className={styles.tableCell}>
                         <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#475569' }}>
@@ -597,6 +752,70 @@ export default function ProveedorPOS() {
             </div>
           )}
 
+          {/* Descuento en la compra total (visible cuando hay productos en mostrador) */}
+          {carro.length > 0 && (
+            <div className={styles.discountBox}>
+              <div className={styles.discountHeaderRow}>
+                <span className={styles.discountTitle}>🏷️ Descuento en Compra Total:</span>
+                <div className={styles.discountModeToggle}>
+                  <button
+                    type="button"
+                    className={`${styles.discountModeBtn} ${descuentoTipo === 'PORCENTAJE' ? styles.discountModeBtnActive : ''}`}
+                    onClick={() => {
+                      setDescuentoTipo('PORCENTAJE');
+                      setDescuentoValor(0);
+                    }}
+                  >
+                    % Porcentaje
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.discountModeBtn} ${descuentoTipo === 'MONTO' ? styles.discountModeBtnActive : ''}`}
+                    onClick={() => {
+                      setDescuentoTipo('MONTO');
+                      setDescuentoValor(0);
+                    }}
+                  >
+                    $ Monto CLP
+                  </button>
+                </div>
+              </div>
+
+              <div className={styles.discountControlsRow}>
+                {descuentoTipo === 'PORCENTAJE'
+                  ? [0, 5, 10, 15, 20].map((pct) => (
+                      <button
+                        key={pct}
+                        type="button"
+                        className={`${styles.discountPresetBtn} ${descuentoValor === pct ? styles.discountPresetBtnActive : ''}`}
+                        onClick={() => setDescuentoValor(pct)}
+                      >
+                        {pct === 0 ? 'Sin dcto' : `-${pct}%`}
+                      </button>
+                    ))
+                  : [0, 1000, 2000, 5000, 10000].map((monto) => (
+                      <button
+                        key={monto}
+                        type="button"
+                        className={`${styles.discountPresetBtn} ${descuentoValor === monto ? styles.discountPresetBtnActive : ''}`}
+                        onClick={() => setDescuentoValor(monto)}
+                      >
+                        {monto === 0 ? 'Sin dcto' : `-${fmtCLP(monto)}`}
+                      </button>
+                    ))}
+                <input
+                  type="number"
+                  min={0}
+                  max={descuentoTipo === 'PORCENTAJE' ? 100 : totales.subtotalConIva}
+                  className={styles.discountInput}
+                  placeholder={descuentoTipo === 'PORCENTAJE' ? '% dcto' : '$ dcto'}
+                  value={descuentoValor || ''}
+                  onChange={(e) => setDescuentoValor(Math.max(0, Number(e.target.value) || 0))}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Selector de medio de pago */}
           <div>
             <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', marginBottom: '4px', textTransform: 'uppercase' }}>
@@ -616,10 +835,31 @@ export default function ProveedorPOS() {
           </div>
 
           <div className={styles.summaryRows}>
-            <div className={styles.summaryRow}>
-              <span>Subtotal Neto:</span>
-              <strong>{fmtCLP(totales.neto)}</strong>
-            </div>
+            {totales.descuentoNeto > 0 ? (
+              <>
+                <div className={styles.summaryRow}>
+                  <span>Subtotal Original (c/IVA):</span>
+                  <span style={{ textDecoration: 'line-through', color: '#94a3b8' }}>
+                    {fmtCLP(totales.subtotalConIva)}
+                  </span>
+                </div>
+                <div className={styles.discountRowHighlight}>
+                  <span>
+                    Descuento aplicado ({totales.descuentoPorcentaje}%):
+                  </span>
+                  <span>-{fmtCLP(totales.descuentoConIva)}</span>
+                </div>
+                <div className={styles.summaryRow}>
+                  <span>Neto con Descuento:</span>
+                  <strong>{fmtCLP(totales.neto)}</strong>
+                </div>
+              </>
+            ) : (
+              <div className={styles.summaryRow}>
+                <span>Subtotal Neto:</span>
+                <strong>{fmtCLP(totales.neto)}</strong>
+              </div>
+            )}
             <div className={styles.summaryRow}>
               <span>IVA (19%):</span>
               <span>{fmtCLP(totales.iva)}</span>

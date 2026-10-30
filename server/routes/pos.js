@@ -16,6 +16,8 @@ router.post('/venta', requireAuth, async (req, res, next) => {
       cliente = {},
       tipoDocumento = 'TICKET', // 'TICKET' | 'COTIZACION'
       notas = '',
+      descuentoTipo = 'PORCENTAJE', // 'PORCENTAJE' | 'MONTO'
+      descuentoValor = 0,
     } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -26,14 +28,50 @@ router.post('/venta', requireAuth, async (req, res, next) => {
     const esProveedor = req.user.rol === 'proveedor';
     const proveedorId = esProveedor ? req.user.docId : (req.body.proveedorId || null);
 
+    // Helper para calcular totales con descuento sobre la compra total
+    const calcularTotalesConDescuento = (listaItems) => {
+      const subtotalNeto = Math.round(
+        listaItems.reduce((sum, it) => sum + (Number(it.precioNeto || it.precio) || 0) * (Number(it.cantidad) || 1), 0)
+      );
+      const val = Math.max(0, Number(descuentoValor) || 0);
+      let descuentoNeto = 0;
+      let descuentoPorcentaje = 0;
+
+      if (val > 0 && subtotalNeto > 0) {
+        if (descuentoTipo === 'PORCENTAJE') {
+          const pct = Math.min(100, val);
+          descuentoPorcentaje = round2(pct);
+          descuentoNeto = Math.round(subtotalNeto * (pct / 100));
+        } else {
+          // Descuento ingresado como monto en pesos (con IVA incluido en mostrador -> pasamos a neto)
+          const subtotalConIva = Math.round(subtotalNeto * 1.19);
+          const montoBruto = Math.min(subtotalConIva, val);
+          descuentoNeto = Math.min(subtotalNeto, Math.round(montoBruto / 1.19));
+          descuentoPorcentaje = round2((descuentoNeto / subtotalNeto) * 100);
+        }
+      }
+
+      const totalNeto = Math.max(0, subtotalNeto - descuentoNeto);
+      const totalIva  = Math.round(totalNeto * 0.19);
+      const total     = totalNeto + totalIva;
+
+      return {
+        subtotalNeto,
+        descuentoTipo: val > 0 ? descuentoTipo : null,
+        descuentoValor: val > 0 ? val : 0,
+        descuentoPorcentaje,
+        descuentoNeto,
+        totalNeto,
+        totalIva,
+        total,
+      };
+    };
+
     // Si es solo cotización, no descuenta stock en base de datos
     if (esCotizacion) {
       const ahora = new Date();
       const numTicket = `COT-${ahora.getFullYear()}${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(Math.floor(1000 + Math.random() * 9000))}`;
-
-      const totalNeto = items.reduce((sum, it) => sum + (Number(it.precioNeto || it.precio) || 0) * (Number(it.cantidad) || 1), 0);
-      const totalIva  = Math.round(totalNeto * 0.19);
-      const total     = totalNeto + totalIva;
+      const calc = calcularTotalesConDescuento(items);
 
       const cotizacionData = {
         numeroTicket: numTicket,
@@ -43,9 +81,7 @@ router.post('/venta', requireAuth, async (req, res, next) => {
         vendedorNombre: `${req.user.nombre || ''} ${req.user.apellido || ''}`.trim() || 'Vendedor',
         proveedorId,
         items,
-        totalNeto,
-        totalIva,
-        total,
+        ...calc,
         metodoPago,
         cliente,
         notas,
@@ -107,10 +143,7 @@ router.post('/venta', requireAuth, async (req, res, next) => {
 
       // 3. Crear registro de venta POS con número de ticket consecutivo
       const numTicket = `T-${ahora.getFullYear()}${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(Math.floor(1000 + Math.random() * 9000))}`;
-
-      const totalNeto = items.reduce((sum, it) => sum + (Number(it.precioNeto || it.precio) || 0) * (Number(it.cantidad) || 1), 0);
-      const totalIva  = Math.round(totalNeto * 0.19);
-      const total     = totalNeto + totalIva;
+      const calc = calcularTotalesConDescuento(items);
 
       const ventaData = {
         numeroTicket: numTicket,
@@ -120,9 +153,7 @@ router.post('/venta', requireAuth, async (req, res, next) => {
         vendedorNombre: `${req.user.nombre || ''} ${req.user.apellido || ''}`.trim() || 'Vendedor',
         proveedorId,
         items,
-        totalNeto,
-        totalIva,
-        total,
+        ...calc,
         metodoPago,
         cliente,
         notas,

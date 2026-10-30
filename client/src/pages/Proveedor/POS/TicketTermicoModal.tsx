@@ -117,10 +117,29 @@ export default function TicketTermicoModal({
             <div className={styles.divider} />
 
             <div className={styles.totalesSection}>
-              <div className={styles.totalRow}>
-                <span>Subtotal Neto:</span>
-                <span>{fmtCLP(venta.totalNeto)}</span>
-              </div>
+              {venta.descuentoNeto && venta.descuentoNeto > 0 ? (
+                <>
+                  <div className={styles.totalRow}>
+                    <span>Subtotal Neto:</span>
+                    <span>{fmtCLP(venta.subtotalNeto || venta.totalNeto + venta.descuentoNeto)}</span>
+                  </div>
+                  <div className={styles.totalRow} style={{ fontWeight: 700 }}>
+                    <span>
+                      Descuento{venta.descuentoPorcentaje ? ` (${venta.descuentoPorcentaje}%)` : ''}:
+                    </span>
+                    <span>-{fmtCLP(venta.descuentoNeto)}</span>
+                  </div>
+                  <div className={styles.totalRow}>
+                    <span>Neto c/Descuento:</span>
+                    <span>{fmtCLP(venta.totalNeto)}</span>
+                  </div>
+                </>
+              ) : (
+                <div className={styles.totalRow}>
+                  <span>Subtotal Neto:</span>
+                  <span>{fmtCLP(venta.totalNeto)}</span>
+                </div>
+              )}
               <div className={styles.totalRow}>
                 <span>IVA (19%):</span>
                 <span>{fmtCLP(venta.totalIva)}</span>

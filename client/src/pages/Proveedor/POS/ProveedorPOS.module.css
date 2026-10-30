@@ -114,6 +114,194 @@
   color: #334155;
 }
 
+/* ── FILTROS DESPLEGADOS A LA IZQUIERDA (CATEGORÍAS + MARCA VEHÍCULO) ── */
+.filtersPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+.filterGroupRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.filterGroupLabel {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #475569;
+  min-width: 90px;
+}
+
+.filterChipsRow {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  flex: 1;
+}
+
+.filterChip {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  padding: 0.28rem 0.65rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.filterChip:hover {
+  border-color: #0284c7;
+  color: #0284c7;
+  background: #f0f9ff;
+}
+
+.filterChipActive {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff !important;
+}
+
+.filterChipMarcaActive {
+  background: #15803d;
+  border-color: #15803d;
+  color: #ffffff !important;
+}
+
+.filterChipCount {
+  font-size: 0.68rem;
+  opacity: 0.8;
+  font-weight: 600;
+}
+
+.btnClearFilters {
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btnClearFilters:hover {
+  background: #fecaca;
+}
+
+/* ── CAJA DE DESCUENTO EN COMPRA TOTAL ── */
+.discountBox {
+  background: #ffffff;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.discountHeaderRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.discountTitle {
+  font-size: 0.74rem;
+  font-weight: 800;
+  color: #334155;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.discountModeToggle {
+  display: inline-flex;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.discountModeBtn {
+  background: #f8fafc;
+  border: none;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #475569;
+  cursor: pointer;
+}
+
+.discountModeBtnActive {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.discountControlsRow {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.discountPresetBtn {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  padding: 0.25rem 0.48rem;
+  border-radius: 5px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.discountPresetBtn:hover {
+  border-color: #16a34a;
+  color: #15803d;
+}
+
+.discountPresetBtnActive {
+  background: #16a34a;
+  border-color: #16a34a;
+  color: #ffffff !important;
+}
+
+.discountInput {
+  width: 82px;
+  margin-left: auto;
+  padding: 0.26rem 0.45rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: right;
+  outline: none;
+}
+
+.discountInput:focus {
+  border-color: #16a34a;
+}
+
+.discountRowHighlight {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #15803d;
+}
+
 .catalogContent {
   flex: 1;
   overflow-y: auto;

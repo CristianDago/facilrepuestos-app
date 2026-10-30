@@ -267,6 +267,12 @@ router.get('/mis-estadisticas', requireAuth, async (req, res, next) => {
       const f = anioMesDeFecha(v.fecha || v.createdAt);
       const mesKey = f ? `${f.y}-${String(f.m).padStart(2, '0')}` : null;
 
+      // Si el ticket tuvo descuento en la compra total, aplicar el factor proporcional al neto de cada ítem
+      const factorDescuento =
+        v.subtotalNeto > 0 && typeof v.totalNeto === 'number'
+          ? Math.max(0, Math.min(1, v.totalNeto / v.subtotalNeto))
+          : 1;
+
       let unidadesTicket = 0, montoTicket = 0;
       for (const it of itemsVenta) {
         const itemInv = items.get(it.id);
@@ -274,7 +280,7 @@ router.get('/mis-estadisticas', requireAuth, async (req, res, next) => {
         const precioUnit = Number(
           it.precioNeto || it.precio || itemInv?.precioLista || itemInv?.precioCompra || 0
         );
-        const monto = cant * precioUnit;
+        const monto = Math.round(cant * precioUnit * factorDescuento);
         const itemId = it.id || it.codigo || it.nombre;
         const acc = porItem.get(itemId) || {
           unidades: 0,

@@ -127,6 +127,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
   const { inventario, setInventario, setLoading, notify } = useAppStore();
   const [search, setSearch]       = useState("");
   const [filtrocat, setFiltrocat] = useState("");
+  const [filtroMarca, setFiltroMarca] = useState("");
   const [vista, setVista]         = useState<"grid" | "tabla">("grid");
   const [modal, setModal]         = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -429,6 +430,33 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
   const totalValue = inventario.reduce((s, i) => s + (i.precioCompra || 0) * (i.stock || 0), 0);
   const cats       = [...new Set(inventario.map(i => i.categoria).filter(Boolean))].length;
 
+  // Contadores de categorías y marcas de vehículo presentes en el inventario
+  const categoriasConConteo = (() => {
+    const map = new Map<string, number>();
+    for (const c of allCategorias) {
+      map.set(c.nombre, 0);
+    }
+    for (const it of inventario) {
+      if (it.categoria) {
+        map.set(it.categoria, (map.get(it.categoria) || 0) + 1);
+      }
+    }
+    // Mostrar primero las que tienen repuestos o todas las categorías activas
+    return [...map.entries()];
+  })();
+
+  const marcasVehiculoConConteo = (() => {
+    const map = new Map<string, number>();
+    for (const it of inventario) {
+      for (const m of it.marcasCompatibles || []) {
+        const marca = (m || "").trim().toUpperCase();
+        if (!marca) continue;
+        map.set(marca, (map.get(marca) || 0) + 1);
+      }
+    }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  })();
+
   const filtered = inventario.filter(i => {
     const q = search.toLowerCase();
     const matchSearch = !q
@@ -442,7 +470,8 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
       || (i.tipoPieza || "").toLowerCase().includes(q)
       || (i.marcasCompatibles || []).some(m => m.toLowerCase().includes(q));
     const matchCat = !filtrocat || i.categoria === filtrocat;
-    return matchSearch && matchCat;
+    const matchMarca = !filtroMarca || (i.marcasCompatibles || []).some(m => m.toUpperCase() === filtroMarca);
+    return matchSearch && matchCat && matchMarca;
   });
   const { paged, page, pageSize, totalPages, goTo, changeSize } = usePagination(filtered);
 
@@ -551,26 +580,18 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
 
   return (
     <div>
-      {/* ── HEADER: TÍTULO + FILA 1 (búsqueda/filtro/vista) ── */}
+      {/* ── HEADER: TÍTULO + FILA 1 (búsqueda/vista) + FILTROS DESPLEGADOS A LA IZQUIERDA ── */}
       <div className={styles.pageHeaderWrap}>
         <div className="page-header">
           <div className="page-title">{esProveedor ? <>Mis <span>Repuestos</span></> : <>Inventario <span>Bodega</span></>}</div>
           <div className={styles.toolbarFila1}>
             <input
               type="text"
-              placeholder="Buscar repuesto, marca..."
+              placeholder="Buscar repuesto, código, marca..."
               className={styles.searchInput}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
-            <select
-              className={styles.filtroCategoria}
-              value={filtrocat}
-              onChange={e => setFiltrocat(e.target.value)}
-            >
-              <option value="">Todas las categorías</option>
-              {allCategorias.map(c => <option key={c.nombre} value={c.nombre}>{c.nombre}</option>)}
-            </select>
             <div className={styles.vistaToggle}>
               <button
                 className={`btn btn-sm ${styles.vistaBtn} ${vista === "grid" ? styles.vistaBtnActive : ""}`}
@@ -583,6 +604,71 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
             </div>
           </div>
         </div>
+
+        {/* FILTROS DESPLEGADOS INICIALMENTE A LA IZQUIERDA (Categorías + Marca Vehículo combinables) */}
+        <div className={styles.filtrosDesplegadosWrap}>
+          <div className={styles.filtroGrupoFila}>
+            <span className={styles.filtroGrupoLabel}>📂 Categorías:</span>
+            <div className={styles.filtroBotonesFila}>
+              <button
+                type="button"
+                className={`${styles.filtroBotonChip} ${filtrocat === "" ? styles.filtroBotonChipActivo : ""}`}
+                onClick={() => setFiltrocat("")}
+              >
+                Todas las categorías
+                <span className={styles.filtroChipCount}>({inventario.length})</span>
+              </button>
+              {categoriasConConteo.map(([nombreCat, cant]) => (
+                <button
+                  key={nombreCat}
+                  type="button"
+                  className={`${styles.filtroBotonChip} ${filtrocat === nombreCat ? styles.filtroBotonChipActivo : ""}`}
+                  onClick={() => setFiltrocat(filtrocat === nombreCat ? "" : nombreCat)}
+                >
+                  {nombreCat}
+                  {cant > 0 && <span className={styles.filtroChipCount}>({cant})</span>}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className={styles.filtroGrupoFila}>
+            <span className={styles.filtroGrupoLabel}>🚗 Marca Auto:</span>
+            <div className={styles.filtroBotonesFila}>
+              <button
+                type="button"
+                className={`${styles.filtroBotonChip} ${filtroMarca === "" ? styles.filtroBotonMarcaActivo : ""}`}
+                onClick={() => setFiltroMarca("")}
+              >
+                Todas las marcas
+              </button>
+              {marcasVehiculoConConteo.map(([marca, cant]) => (
+                <button
+                  key={marca}
+                  type="button"
+                  className={`${styles.filtroBotonChip} ${filtroMarca === marca ? styles.filtroBotonMarcaActivo : ""}`}
+                  onClick={() => setFiltroMarca(filtroMarca === marca ? "" : marca)}
+                >
+                  {marca}
+                  <span className={styles.filtroChipCount}>({cant})</span>
+                </button>
+              ))}
+              {(filtrocat !== "" || filtroMarca !== "") && (
+                <button
+                  type="button"
+                  className={styles.btnLimpiarFiltros}
+                  onClick={() => {
+                    setFiltrocat("");
+                    setFiltroMarca("");
+                  }}
+                >
+                  ✕ Limpiar filtros
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* FILA 2: acciones */}
         <div className={styles.toolbarFila2}>
           <button

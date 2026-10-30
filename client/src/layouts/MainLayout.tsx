@@ -170,6 +170,15 @@ export default function MainLayout() {
               <span className="nav-icon">🧠</span> Escalamientos IA
             </NavLink>
             <NavLink
+              to="/mesa-wsp"
+              onClick={closeSidebar}
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+            >
+              <span className="nav-icon">📲</span> Mesa Cotización WSP
+            </NavLink>
+            <NavLink
               to="/costos-fijos"
               onClick={closeSidebar}
               className={({ isActive }) =>

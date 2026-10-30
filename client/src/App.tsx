@@ -36,6 +36,7 @@ import PanelProveedor    from './pages/Proveedor/PanelProveedor';
 import EstadisticasProveedor from './pages/Proveedor/EstadisticasProveedor';
 import ProveedorPOS         from './pages/Proveedor/POS/ProveedorPOS';
 import EscalamientosIA      from './pages/Escalamientos/EscalamientosIA';
+import MesaCotizacionWsp    from './pages/MesaWsp/MesaCotizacionWsp';
 import Mantenimiento     from './pages/Mantenimiento/Mantenimiento';
 
 export default function App() {
@@ -91,6 +92,7 @@ export default function App() {
             <Route path="inventario"               element={<Inventario />} />
             <Route path="proveedores"              element={<Proveedores />} />
             <Route path="escalamientos-ia"         element={<EscalamientosIA modo="admin" />} />
+            <Route path="mesa-wsp"                 element={<MesaCotizacionWsp />} />
             <Route path="costos-fijos"             element={<CostosFijos />} />
             <Route path="mantenimiento"            element={<Mantenimiento />} />
             <Route path="trabajadores"             element={<Trabajadores />} />

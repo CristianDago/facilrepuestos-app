@@ -478,3 +478,72 @@ export interface ReglaConocimientoAprendido {
   activo: boolean;
   creadoEn: string;
 }
+
+// ─── ETAPA 3: MESA DE COTIZACIÓN EN VIVO POR WHATSAPP (META CLOUD API) ───
+export interface ProveedorContactadoWsp {
+  proveedorId: string;
+  proveedorNombre: string;
+  contacto: string;
+  telefono: string;
+  especialidadMarcas: string[];
+  estadoContacto: 'enviado' | 'respondido' | 'sin_stock';
+  modoEnvio: 'meta_cloud_api_live' | 'meta_cloud_api_fallback' | 'simulacion_meta_local';
+  metaMessageId: string;
+  mensajeEnviado: string;
+  enviadoEn: string;
+  respondidoEn?: string | null;
+}
+
+export interface OfertaRecibidaWsp {
+  id: string;
+  proveedorId: string;
+  proveedorNombre: string;
+  telefonoProveedor: string;
+  mensajeOriginalWsp: string;
+  transcripcionAudio?: string;
+  fotoUrl?: string;
+  tieneStock: boolean;
+  fabricante: string;
+  origen: string;
+  disponibilidad: string;
+  garantia: string;
+  precioCostoNeto: number;
+  margenAplicadoPct: number;
+  precioVentaFrpNeto: number;
+  precioVentaFrpConIva: number;
+  confianzaIa: number;
+  ganadora: boolean;
+  recibidoEn: string;
+}
+
+export interface SolicitudCotizacionWsp {
+  id: string;
+  codigoSolicitud: string;
+  estado: 'esperando_respuestas' | 'con_ofertas' | 'adjudicada' | 'cerrada';
+  canalCliente: 'whatsapp' | 'web' | 'pos';
+  clienteNombre: string;
+  clienteTelefono?: string;
+  patente: string;
+  vin?: string;
+  marcaVehiculo: string;
+  modeloVehiculo: string;
+  anioVehiculo?: number | null;
+  motorVehiculo?: string;
+  categoriaRepuesto: string;
+  repuestoBuscado: string;
+  codigoReferencia?: string;
+  notasAdicionales?: string;
+  margenPct: number;
+  escalamientoOrigenId?: string | null;
+  proveedoresContactados: ProveedorContactadoWsp[];
+  ofertasRecibidas: OfertaRecibidaWsp[];
+  ofertaGanadoraId?: string | null;
+  skuPublicoGenerado?: string | null;
+  inventarioCreadoId?: string | null;
+  conocimientoCreadoId?: string | null;
+  mensajeCotizacionCliente?: string;
+  adjudicadaEn?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+

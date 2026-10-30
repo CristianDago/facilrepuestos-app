@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import {
   woocommerceService,
@@ -21,6 +22,7 @@ interface Props {
 
 export default function EscalamientosIA({ modo = 'admin' }: Props) {
   const { notify } = useAppStore();
+  const navigate = useNavigate();
   const esProveedor = modo === 'proveedor';
 
   const [tabActiva, setTabActiva] = useState<'escalamientos' | 'conocimiento'>('escalamientos');
@@ -1082,7 +1084,37 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
 
                   {/* Acciones si está pendiente */}
                   {esc.estado === 'pendiente' && (
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
+                      {!esProveedor && (
+                        <button
+                          type="button"
+                          className="btn btn-outline btn-sm"
+                          style={{
+                            borderColor: '#16a34a',
+                            color: '#15803d',
+                            background: '#f0fdf4',
+                            fontWeight: 700,
+                          }}
+                          onClick={() =>
+                            navigate('/mesa-wsp', {
+                              state: {
+                                desdeEscalamiento: true,
+                                escalamientoId: esc.id,
+                                patente: esc.patente || '',
+                                marcaVehiculo: esc.marcaVehiculo || '',
+                                modeloVehiculo: esc.modeloVehiculo || '',
+                                anioVehiculo: esc.anioVehiculo || '',
+                                motorVehiculo: esc.motorVehiculo || '',
+                                repuestoBuscado: esc.candidatoNombre || esc.mensajeCliente,
+                                codigoReferencia: esc.candidatoCodigo || '',
+                                motivoEscalamiento: esc.motivoEscalamiento || '',
+                              },
+                            })
+                          }
+                        >
+                          📲 Derivar a Mesa WhatsApp en Vivo (Etapa 3)
+                        </button>
+                      )}
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"

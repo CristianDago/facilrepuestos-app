@@ -189,6 +189,14 @@ export default function AgenteOmnicanal() {
         <div className={styles.headerActions}>
           <button
             type="button"
+            className="btn btn-primary btn-sm"
+            style={{ background: '#10b981', color: '#052e16', fontWeight: 800, border: 'none' }}
+            onClick={() => navigate('/chat-cliente')}
+          >
+            🛍️ Abrir Vista Web Cliente (/chat-cliente)
+          </button>
+          <button
+            type="button"
             className="btn btn-outline btn-sm"
             style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', borderColor: '#64748b' }}
             onClick={() => setMostrarNuevaSesion((v) => !v)}

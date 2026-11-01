@@ -170,6 +170,15 @@ export default function MainLayout() {
               <span className="nav-icon">🤖</span> Agente Omnicanal
             </NavLink>
             <NavLink
+              to="/chat-cliente"
+              onClick={closeSidebar}
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+            >
+              <span className="nav-icon">🛍️</span> Vista Web Cliente
+            </NavLink>
+            <NavLink
               to="/escalamientos-ia"
               onClick={closeSidebar}
               className={({ isActive }) =>

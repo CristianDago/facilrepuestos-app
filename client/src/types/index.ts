@@ -578,15 +578,17 @@ export interface CandidatoInventarioCascada {
   skuPublicoFrp: string;
   nombre: string;
   fabricante?: string;
-  origen: 'soluparts_ailoo' | 'global_ailoo' | 'portal_proveedor_local' | 'mesa_whatsapp';
+  origen: 'soluparts_ailoo' | 'global_ailoo' | 'portal_proveedor_local' | 'mesa_whatsapp' | 'escalamiento_experto';
   nodoAilooId?: string | null;
   proveedorId?: string | null;
   proveedorNombre: string;
   stock: number;
+  cantidad?: number;
   precioCostoProveedor: number;
   margenPct: number;
   precioVentaNeto: number;
   precioVentaConIva: number;
+  subConsultaResumen?: string;
 }
 
 export interface ReglaAplicadaCascada {
@@ -598,9 +600,51 @@ export interface ReglaAplicadaCascada {
   precioVentaFrp: number;
 }
 
+export interface PedidoSimuladoAgente {
+  id?: string;
+  codigoPedido: string;
+  sesionId: string;
+  canal: string;
+  clienteNombre: string;
+  clienteTelefono?: string;
+  vehiculo?: VehiculoDetectadoAgente | null;
+  items: {
+    skuPublicoFrp: string;
+    nombre: string;
+    fabricante?: string;
+    origen?: string;
+    proveedorNombre?: string;
+    cantidad: number;
+    precioVentaNeto: number;
+    precioVentaConIva: number;
+  }[];
+  modalidadEntrega: 'retiro_bodega' | 'despacho_domicilio' | string;
+  comunaEntrega: string;
+  sucursalRetiro?: string;
+  metodoPagoSimulado: string;
+  estadoPago: 'pendiente_simulacion' | 'pagado_sandbox' | string;
+  estadoLogistico: string;
+  codigoAutorizacionSandbox?: string;
+  subtotalNeto: number;
+  totalConIva: number;
+  urlCheckoutSimulado?: string;
+  pagadoEn?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TrazaCascadaAgente {
-  accionTomada: 'cotizacion_directa' | 'escalamiento_experto' | 'mesa_whatsapp_viva';
+  accionTomada:
+    | 'cotizacion_directa'
+    | 'cotizacion_parcial_con_mesa_wsp'
+    | 'escalamiento_experto'
+    | 'mesa_whatsapp_viva'
+    | 'seguimiento_sin_duplicar'
+    | 'respuesta_proveedor_en_vivo'
+    | 'checkout_simulado_creado'
+    | 'checkout_simulado_pagado';
   vehiculoDetectado?: VehiculoDetectadoAgente | null;
+  subConsultasDetectadas?: string[];
   reglasConocimientoAplicadas: ReglaAplicadaCascada[];
   candidatosInventario: CandidatoInventarioCascada[];
   escalamientoCreado?: {
@@ -608,12 +652,17 @@ export interface TrazaCascadaAgente {
     ticketRef: string;
     destino: string;
     candidatoSku?: string;
+    resumenRepuesto?: string;
+    patente?: string;
   } | null;
   solicitudWspCreada?: {
     id: string;
     codigoSolicitud: string;
     proveedoresContactados: string[];
+    resumenRepuesto?: string;
+    patente?: string;
   } | null;
+  pedidoSimulado?: PedidoSimuladoAgente | null;
 }
 
 export interface MensajeSesionAgente {
@@ -633,6 +682,25 @@ export interface SesionAgenteOmnicanal {
   clienteTelefono?: string;
   estado: 'activa' | 'cerrada';
   vehiculoContexto?: VehiculoDetectadoAgente | null;
+  carritoCotizado?: CandidatoInventarioCascada[];
+  comunaCliente?: string | null;
+  modalidadEntrega?: string | null;
+  pedidoActivo?: PedidoSimuladoAgente | null;
+  escalamientosAbiertos?: {
+    id: string;
+    ticketRef: string;
+    destino: string;
+    candidatoSku?: string;
+    resumenRepuesto?: string;
+    patente?: string;
+  }[];
+  solicitudesWspAbiertas?: {
+    id: string;
+    codigoSolicitud: string;
+    proveedoresContactados: string[];
+    resumenRepuesto?: string;
+    patente?: string;
+  }[];
   mensajes: MensajeSesionAgente[];
   createdAt: string;
   updatedAt: string;

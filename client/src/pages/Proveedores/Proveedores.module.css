@@ -2,6 +2,13 @@
    Proveedores.module.css
    ═══════════════════════════════════════════════════════════ */
 
+.pageSub {
+  font-size: 0.82rem;
+  color: var(--gray);
+  margin-top: 2px;
+  max-width: 680px;
+}
+
 /* ── ERROR DE VALIDACIÓN (teléfono) ─────────────────────── */
 .fieldError {
   font-size: .7rem;
@@ -16,20 +23,26 @@
 /* ── TOOLBAR (buscar, filtro, nuevo) ────────────────────── */
 .toolbarRight {
   display: flex;
-  gap: .8rem;
+  gap: .65rem;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .searchInput {
   width: 240px;
 }
 
+.filtroCanal {
+  width: 210px;
+}
+
 .filtroCategoria {
-  width: 150px;
+  width: 170px;
 }
 
 @media (max-width: 600px) {
   .searchInput,
+  .filtroCanal,
   .filtroCategoria {
     width: 100%;
   }
@@ -52,12 +65,110 @@
 }
 
 .cellNombre {
-  font-weight: 600;
+  font-weight: 700;
+  color: var(--dark);
 }
 
 .cellRut {
   font-family: monospace;
-  font-size: .82rem;
+  font-size: .75rem;
+  color: var(--gray);
+  margin-top: 2px;
+}
+
+/* ── CANALES OMNICANAL ──────────────────────────────────── */
+.canalCellCol {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  align-items: flex-start;
+}
+
+.badgeCanal {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+
+.canalWsp {
+  background: #DCFCE7;
+  color: #166534;
+  border: 1px solid #86EFAC;
+}
+
+.canalErp {
+  background: #EFF6FF;
+  color: #1D4ED8;
+  border: 1px solid #BFDBFE;
+}
+
+.canalHibrido {
+  background: #FEF3C7;
+  color: #B45309;
+  border: 1px solid #FDE68A;
+}
+
+.canalAiloo {
+  background: #F3E8FF;
+  color: #6B21A8;
+  border: 1px solid #D8B4FE;
+}
+
+.wspTogglePill {
+  border: none;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 9px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.wspToggleOn {
+  background: #ECFDF5;
+  color: #047857;
+  border: 1px solid #6EE7B7;
+}
+
+.wspToggleOn:hover {
+  background: #D1FAE5;
+}
+
+.wspToggleOff {
+  background: #F3F4F6;
+  color: #6B7280;
+  border: 1px solid #D1D5DB;
+}
+
+.wspToggleOff:hover {
+  background: #E5E7EB;
+}
+
+/* ── ESPECIALIDADES Y MARCAS ────────────────────────────── */
+.catsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.badgeCat {
+  background: #F3F4F6;
+  color: #374151;
+  border: 1px solid #E5E7EB;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
 }
 
 .marcasRow {
@@ -88,10 +199,71 @@
   font-size: .8rem;
 }
 
+/* ── REGLA COMERCIAL FRP ────────────────────────────────── */
+.comercialCell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: flex-start;
+}
+
+.margenBadge {
+  background: #FEF2F2;
+  color: var(--red);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  padding: 2px 7px;
+  border-radius: 3px;
+}
+
+.prefijoBadge {
+  font-family: monospace;
+  font-size: 0.72rem;
+  color: var(--gray);
+}
+
+/* ── CONTACTO ───────────────────────────────────────────── */
+.contactoNombre {
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.contactoTel {
+  font-family: monospace;
+  font-size: 0.78rem;
+  color: #047857;
+  font-weight: 600;
+}
+
+.contactoEmail {
+  font-size: 0.73rem;
+  color: var(--gray);
+}
+
 .accionesCol {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.btnWspAction {
+  background: #16A34A;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 4px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.btnWspAction:hover {
+  background: #15803D;
 }
 
 .btnDanger {
@@ -115,11 +287,46 @@
 
 /* ── MODAL: FORMULARIO PROVEEDOR ─────────────────────────── */
 .modalProveedorForm {
-  max-width: 640px;
+  max-width: 700px;
 }
 
 .fullWidth {
   grid-column: 1 / -1;
+}
+
+.helperText {
+  display: block;
+  font-size: 0.74rem;
+  color: var(--gray);
+  margin-top: 4px;
+}
+
+.wspCheckboxBox {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 10px;
+  background: #F0FDF4;
+  border: 1.5px solid #86EFAC;
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #14532D !important;
+  text-transform: none !important;
+  letter-spacing: 0 !important;
+}
+
+.wspCheckboxBox input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: #16A34A;
+}
+
+.wspCheckboxSub {
+  font-size: 0.75rem;
+  color: #166534;
+  font-weight: 400;
+  margin-top: 2px;
 }
 
 /* ── SECCIÓN MARCAS ──────────────────────────────────────── */

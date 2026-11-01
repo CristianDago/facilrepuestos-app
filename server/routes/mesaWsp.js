@@ -273,9 +273,9 @@ async function enviarMensajeMetaWhatsApp({ telefono, textoMensaje, codigoSolicit
 
 /**
  * Asegura que existan proveedores especialistas con WhatsApp activo para demostrar el
- * enrutamiento por Marca + Categoría en la Etapa 3.
+ * enrutamiento por Marca + Categoría en la Etapa 3 y que aparezcan enriquecidos en `/proveedores`.
  */
-async function asegurarProveedoresWspDemo() {
+export async function asegurarProveedoresWspDemo() {
   const snap = await db.collection(COLECCION_PROVEEDORES).get();
   const existentes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
@@ -289,9 +289,14 @@ async function asegurarProveedoresWspDemo() {
       email: 'ventas@coreaparts.cl',
       direccion: 'Av. 10 de Julio 482, Santiago',
       categoria: 'Embrague',
+      categoriasEspecialidad: ['Embrague', 'Motor', 'Transmisión', 'Filtros'],
       marcas: ['HYUNDAI', 'KIA', 'CHEVROLET', 'SSANGYONG'],
+      marcasVehiculo: ['HYUNDAI', 'KIA', 'CHEVROLET', 'SSANGYONG'],
       notas: 'Especialista en embragues, cajas y motores diésel coreanos (D4CB, D4BH, G4FD). Responde WhatsApp con fotos de mesón.',
+      tipoIntegracion: 'cotizacion_whatsapp',
       canalWspActivo: true,
+      margenPct: 28,
+      prefijoSku: 'FRP-WSP',
       tiempoRespuestaPromMin: 4,
     },
     {
@@ -303,9 +308,14 @@ async function asegurarProveedoresWspDemo() {
       email: 'meson@nipponfrenos.cl',
       direccion: 'Lira 615, Santiago',
       categoria: 'Frenos',
+      categoriasEspecialidad: ['Frenos', 'Suspensión', 'Embrague'],
       marcas: ['TOYOTA', 'NISSAN', 'MITSUBISHI', 'MAZDA', 'SUZUKI', 'SUBARU'],
+      marcasVehiculo: ['TOYOTA', 'NISSAN', 'MITSUBISHI', 'MAZDA', 'SUZUKI', 'SUBARU'],
       notas: 'Importador directo de frenos, amortiguadores KYB y embragues Aisin/Exedy para japoneses y camionetas.',
+      tipoIntegracion: 'cotizacion_whatsapp',
       canalWspActivo: true,
+      margenPct: 30,
+      prefijoSku: 'FRP-WSP',
       tiempoRespuestaPromMin: 6,
     },
     {
@@ -317,21 +327,77 @@ async function asegurarProveedoresWspDemo() {
       email: 'wsp@europsa.cl',
       direccion: 'Lira 840, Santiago',
       categoria: 'Distribución',
+      categoriasEspecialidad: ['Distribución', 'Embrague', 'Motor', 'Suspensión'],
       marcas: ['PEUGEOT', 'CITROËN', 'RENAULT', 'VOLKSWAGEN', 'HYUNDAI', 'FORD'],
+      marcasVehiculo: ['PEUGEOT', 'CITROËN', 'RENAULT', 'VOLKSWAGEN', 'HYUNDAI', 'FORD'],
       notas: 'Especialistas en kits de distribución, bombas de agua, embragues bimasa Luk/Valeo y tren delantero.',
+      tipoIntegracion: 'cotizacion_whatsapp',
       canalWspActivo: true,
+      margenPct: 28,
+      prefijoSku: 'FRP-WSP',
       tiempoRespuestaPromMin: 5,
+    },
+    {
+      id: 'prov-ailoo-soluparts',
+      nombre: 'Soluparts (Nodo Enterprise Ailoo)',
+      rut: '76.890.110-2',
+      contacto: 'Mesa Técnica Soluparts Ailoo',
+      telefono: '+56988112233',
+      email: 'escalamientos@soluparts.cl',
+      direccion: 'Nodo BigQuery: soluparts_ailoo',
+      categoria: 'Frenos',
+      categoriasEspecialidad: ['Frenos', 'Embrague', 'Suspensión', 'Filtros', 'Motor'],
+      marcas: ['HYUNDAI', 'KIA', 'NISSAN', 'TOYOTA', 'CHEVROLET', 'MITSUBISHI', 'SUZUKI'],
+      marcasVehiculo: ['HYUNDAI', 'KIA', 'NISSAN', 'TOYOTA', 'CHEVROLET', 'MITSUBISHI', 'SUZUKI'],
+      notas: 'Proveedor Enterprise conectado vía BigQuery (soluparts_ailoo.inventario y soluparts_ailoo.escalamientos). Sincroniza stock en tiempo real.',
+      tipoIntegracion: 'nodo_ailoo',
+      nodoAilooId: 'soluparts',
+      canalWspActivo: false,
+      margenPct: 28,
+      prefijoSku: 'FRP-SOL',
+      tiempoRespuestaPromMin: 3,
+    },
+    {
+      id: 'prov-ailoo-global',
+      nombre: 'Global Repuestos (Nodo Enterprise Ailoo)',
+      rut: '76.940.220-8',
+      contacto: 'Soporte Técnico Global Ailoo',
+      telefono: '+56977445566',
+      email: 'meson@globalrepuestos.cl',
+      direccion: 'Nodo BigQuery: global_ailoo',
+      categoria: 'Motor',
+      categoriasEspecialidad: ['Motor', 'Distribución', 'Suspensión', 'Eléctrico', 'Embrague'],
+      marcas: ['PEUGEOT', 'CITROËN', 'TOYOTA', 'MITSUBISHI', 'NISSAN', 'VOLKSWAGEN', 'FORD'],
+      marcasVehiculo: ['PEUGEOT', 'CITROËN', 'TOYOTA', 'MITSUBISHI', 'NISSAN', 'VOLKSWAGEN', 'FORD'],
+      notas: 'Proveedor Enterprise conectado vía BigQuery (global_ailoo.inventario y global_ailoo.escalamientos). Especialista en europeos y camionetas diésel.',
+      tipoIntegracion: 'nodo_ailoo',
+      nodoAilooId: 'global',
+      canalWspActivo: false,
+      margenPct: 30,
+      prefijoSku: 'FRP-GLB',
+      tiempoRespuestaPromMin: 4,
     },
   ];
 
   const now = new Date().toISOString();
   for (const demo of demosWsp) {
-    const yaExiste = existentes.some((p) => p.id === demo.id || p.rut === demo.rut);
-    if (!yaExiste) {
+    const existente = existentes.find((p) => p.id === demo.id || p.rut === demo.rut);
+    if (!existente) {
       await db.collection(COLECCION_PROVEEDORES).doc(demo.id).set({
         ...demo,
         createdAt: now,
         updatedAt: now,
+      });
+    } else if (!existente.tipoIntegracion || !existente.categoriasEspecialidad) {
+      await db.collection(COLECCION_PROVEEDORES).doc(existente.id).update({
+        tipoIntegracion: existente.tipoIntegracion || demo.tipoIntegracion,
+        categoriasEspecialidad: existente.categoriasEspecialidad || demo.categoriasEspecialidad,
+        marcasVehiculo: existente.marcasVehiculo || demo.marcasVehiculo,
+        margenPct: existente.margenPct ?? demo.margenPct,
+        prefijoSku: existente.prefijoSku || demo.prefijoSku,
+        nodoAilooId: existente.nodoAilooId ?? demo.nodoAilooId ?? null,
+        canalWspActivo: existente.canalWspActivo ?? demo.canalWspActivo,
+        tiempoRespuestaPromMin: existente.tiempoRespuestaPromMin ?? demo.tiempoRespuestaPromMin,
       });
     }
   }
@@ -497,7 +563,7 @@ router.get('/solicitudes', requireAuth, async (req, res, next) => {
 
     const proveedoresWsp = provSnap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((p) => Boolean(p.telefono))
+      .filter((p) => Boolean(p.telefono) && p.canalWspActivo !== false)
       .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || '')));
 
     const credencialesMetaActivas = Boolean(
@@ -558,20 +624,35 @@ router.post('/solicitudes', requireAuth, async (req, res, next) => {
     const provSnap = await db.collection(COLECCION_PROVEEDORES).get();
     const todosProveedores = provSnap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((p) => Boolean(p.telefono));
+      .filter((p) => Boolean(p.telefono) && p.canalWspActivo !== false);
 
     const marcaUpper = String(marcaVehiculo || '').trim().toUpperCase();
+    const catUpper = String(categoriaRepuesto || '').trim().toUpperCase();
 
-    // Si el usuario seleccionó proveedores específicos, usarlos; si no, filtrar por marca compatible
+    // Si el usuario seleccionó proveedores específicos, usarlos; si no, filtrar por marca y especialidad compatible
     let seleccionados = [];
     if (Array.isArray(proveedorIds) && proveedorIds.length > 0) {
       seleccionados = todosProveedores.filter((p) => proveedorIds.includes(p.id));
     } else {
-      seleccionados = todosProveedores.filter((p) =>
-        marcaUpper
-          ? (p.marcas || []).map((m) => String(m).toUpperCase()).includes(marcaUpper)
-          : true
-      );
+      seleccionados = todosProveedores.filter((p) => {
+        const marcasProv = (p.marcas || p.marcasVehiculo || []).map((m) => String(m).toUpperCase());
+        const catsProv = [
+          p.categoria,
+          ...(Array.isArray(p.categoriasEspecialidad) ? p.categoriasEspecialidad : []),
+        ]
+          .filter(Boolean)
+          .map((c) => String(c).toUpperCase());
+
+        const matchMarca = !marcaUpper || marcasProv.includes(marcaUpper);
+        const matchCat =
+          !catUpper || catUpper === 'GENERAL' || catsProv.length === 0 || catsProv.includes(catUpper);
+        return matchMarca && matchCat;
+      });
+      if (seleccionados.length === 0 && marcaUpper) {
+        seleccionados = todosProveedores.filter((p) =>
+          (p.marcas || p.marcasVehiculo || []).map((m) => String(m).toUpperCase()).includes(marcaUpper)
+        );
+      }
       if (seleccionados.length === 0) {
         seleccionados = todosProveedores.slice(0, 3);
       }

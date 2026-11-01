@@ -829,15 +829,32 @@ async function ejecutarCascadaAgenteOmnicanal({
     const provSnap = await db.collection(COLECCION_PROVEEDORES).get();
     const proveedores = provSnap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((p) => p.activo !== false && p.telefono);
+      .filter((p) => p.activo !== false && p.canalWspActivo !== false && p.telefono);
 
     const marcaUpper = String(vehiculo?.marca || '').toUpperCase();
+    const catUpper = String(categoria || '').toUpperCase();
     let seleccionados = proveedores.filter((p) => {
-      const marcas = (p.marcasVehiculo || p.marcasEspecialidad || []).map((m) =>
+      const marcas = (p.marcas || p.marcasVehiculo || p.marcasEspecialidad || []).map((m) =>
         String(m).toUpperCase()
       );
-      return marcaUpper && marcas.includes(marcaUpper);
+      const cats = [
+        p.categoria,
+        ...(Array.isArray(p.categoriasEspecialidad) ? p.categoriasEspecialidad : []),
+      ]
+        .filter(Boolean)
+        .map((c) => String(c).toUpperCase());
+      const matchMarca = !marcaUpper || marcas.includes(marcaUpper);
+      const matchCat = !catUpper || cats.length === 0 || cats.includes(catUpper);
+      return matchMarca && matchCat;
     });
+    if (seleccionados.length === 0 && marcaUpper) {
+      seleccionados = proveedores.filter((p) => {
+        const marcas = (p.marcas || p.marcasVehiculo || p.marcasEspecialidad || []).map((m) =>
+          String(m).toUpperCase()
+        );
+        return marcas.includes(marcaUpper);
+      });
+    }
     if (seleccionados.length === 0) {
       seleccionados = proveedores.slice(0, 2);
     }
@@ -849,9 +866,9 @@ async function ejecutarCascadaAgenteOmnicanal({
       proveedorNombre: p.nombre,
       contacto: p.contacto || 'Mesón WhatsApp',
       telefono: p.telefono,
-      especialidad: p.especialidad || 'Multimarca',
-      especialidadMarcas: p.marcasVehiculo || p.marcasEspecialidad || ['MULTIMARCA'],
-      marcasVehiculo: p.marcasVehiculo || [],
+      especialidad: p.categoria || p.especialidad || 'Multimarca',
+      especialidadMarcas: p.marcas || p.marcasVehiculo || p.marcasEspecialidad || ['MULTIMARCA'],
+      marcasVehiculo: p.marcas || p.marcasVehiculo || [],
       estadoContacto: 'enviado',
       modoEnvio: 'simulacion_meta_local',
       metaMessageId: `wamid.AUTO.${Date.now()}`,

@@ -283,6 +283,12 @@ export const getStockInfo = (item: ItemInventario): StockInfo => {
 };
 
 // ─── PROVEEDOR ────────────────────────────────────────────
+export type TipoIntegracionProveedor =
+  | 'portal_erp_local'
+  | 'cotizacion_whatsapp'
+  | 'hibrido_erp_wsp'
+  | 'nodo_ailoo';
+
 export interface Proveedor {
   id?: string;
   uid?: string;          // presente si tiene acceso creado al Panel Proveedor
@@ -293,8 +299,16 @@ export interface Proveedor {
   email: string;
   direccion: string;
   categoria: string;
+  categoriasEspecialidad?: string[]; // especialidades técnicas múltiples (Frenos, Embrague, Motor, etc.)
   marcas: string[];
+  marcasVehiculo?: string[];
   notas: string;
+  tipoIntegracion?: TipoIntegracionProveedor;
+  canalWspActivo?: boolean;          // habilitado para recibir cotizaciones automáticas por WhatsApp (Etapa 3)
+  margenPct?: number;                // margen comercial por defecto de FácilRepuestos (%)
+  prefijoSku?: string;               // ej: FRP-LOC, FRP-WSP, FRP-SOL, FRP-GLB
+  nodoAilooId?: string | null;       // 'soluparts' | 'global' cuando es nodo enterprise Ailoo
+  tiempoRespuestaPromMin?: number;   // SLA promedio de respuesta en mesón (minutos)
   createdAt?: string;
   updatedAt?: string;
 }

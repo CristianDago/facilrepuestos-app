@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../config/firebase.js';
 import admin from 'firebase-admin';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { asegurarProveedoresWspDemo } from './mesaWsp.js';
 
 const router = Router();
 
@@ -10,13 +11,108 @@ const rutToEmail = (rut) => {
   return `${clean}@drmotors.internal`;
 };
 
+function normalizarProveedorPayload(body = {}) {
+  const marcas = Array.isArray(body.marcas)
+    ? body.marcas.map((m) => String(m).trim().toUpperCase()).filter(Boolean)
+    : Array.isArray(body.marcasVehiculo)
+      ? body.marcasVehiculo.map((m) => String(m).trim().toUpperCase()).filter(Boolean)
+      : [];
+
+  const categoriaPrincipal = String(body.categoria || 'General').trim();
+  const categoriasEspecialidad = Array.isArray(body.categoriasEspecialidad) && body.categoriasEspecialidad.length > 0
+    ? [...new Set(body.categoriasEspecialidad.map((c) => String(c).trim()).filter(Boolean))]
+    : [categoriaPrincipal];
+
+  const tipoIntegracion = body.tipoIntegracion || (body.uid ? 'portal_erp_local' : 'cotizacion_whatsapp');
+  const canalWspActivo =
+    body.canalWspActivo !== undefined
+      ? Boolean(body.canalWspActivo)
+      : tipoIntegracion === 'cotizacion_whatsapp' || tipoIntegracion === 'hibrido_erp_wsp';
+
+  const margenPct = Number(body.margenPct) > 0 ? Number(body.margenPct) : 28;
+  const prefijoSku = String(
+    body.prefijoSku ||
+      (tipoIntegracion === 'nodo_ailoo'
+        ? 'FRP-AIL'
+        : tipoIntegracion === 'cotizacion_whatsapp'
+          ? 'FRP-WSP'
+          : 'FRP-LOC')
+  )
+    .trim()
+    .toUpperCase();
+
+  const tiempoRespuestaPromMin =
+    Number(body.tiempoRespuestaPromMin) > 0 ? Number(body.tiempoRespuestaPromMin) : 5;
+
+  return {
+    ...body,
+    categoria: categoriaPrincipal,
+    categoriasEspecialidad,
+    marcas,
+    marcasVehiculo: marcas,
+    tipoIntegracion,
+    canalWspActivo,
+    margenPct,
+    prefijoSku,
+    tiempoRespuestaPromMin,
+  };
+}
+
+function enriquecerProveedorLectura(p = {}) {
+  const marcas = Array.isArray(p.marcas) && p.marcas.length > 0
+    ? p.marcas
+    : Array.isArray(p.marcasVehiculo)
+      ? p.marcasVehiculo
+      : [];
+  const categoriasEspecialidad =
+    Array.isArray(p.categoriasEspecialidad) && p.categoriasEspecialidad.length > 0
+      ? p.categoriasEspecialidad
+      : p.categoria
+        ? [p.categoria]
+        : ['General'];
+  const tipoIntegracion =
+    p.tipoIntegracion ||
+    (p.nodoAilooId
+      ? 'nodo_ailoo'
+      : p.uid && p.canalWspActivo
+        ? 'hibrido_erp_wsp'
+        : p.uid
+          ? 'portal_erp_local'
+          : p.canalWspActivo
+            ? 'cotizacion_whatsapp'
+            : 'portal_erp_local');
+  const canalWspActivo =
+    p.canalWspActivo !== undefined
+      ? Boolean(p.canalWspActivo)
+      : tipoIntegracion === 'cotizacion_whatsapp' || tipoIntegracion === 'hibrido_erp_wsp';
+
+  return {
+    ...p,
+    marcas,
+    marcasVehiculo: marcas,
+    categoriasEspecialidad,
+    tipoIntegracion,
+    canalWspActivo,
+    margenPct: Number(p.margenPct) > 0 ? Number(p.margenPct) : 28,
+    prefijoSku:
+      p.prefijoSku ||
+      (tipoIntegracion === 'nodo_ailoo'
+        ? 'FRP-AIL'
+        : tipoIntegracion === 'cotizacion_whatsapp'
+          ? 'FRP-WSP'
+          : 'FRP-LOC'),
+    tiempoRespuestaPromMin: Number(p.tiempoRespuestaPromMin) > 0 ? Number(p.tiempoRespuestaPromMin) : 5,
+  };
+}
+
 // GET /api/proveedores
 router.get('/', async (req, res, next) => {
   try {
+    await asegurarProveedoresWspDemo();
     const snap = await db.collection('proveedores')
       .orderBy('nombre', 'asc')
       .get();
-    const proveedores = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const proveedores = snap.docs.map(doc => enriquecerProveedorLectura({ id: doc.id, ...doc.data() }));
     res.json({ success: true, data: proveedores });
   } catch (error) {
     next(error);
@@ -30,7 +126,7 @@ router.get('/:id', async (req, res, next) => {
     if (!snap.exists) {
       return res.status(404).json({ success: false, error: 'Proveedor no encontrado' });
     }
-    res.json({ success: true, data: { id: snap.id, ...snap.data() } });
+    res.json({ success: true, data: enriquecerProveedorLectura({ id: snap.id, ...snap.data() }) });
   } catch (error) {
     next(error);
   }
@@ -39,17 +135,18 @@ router.get('/:id', async (req, res, next) => {
 // POST /api/proveedores
 router.post('/', async (req, res, next) => {
   try {
-    const { nombre, ...rest } = req.body;
+    const { nombre } = req.body;
     if (!nombre) {
       return res.status(400).json({ success: false, error: 'El nombre es requerido' });
     }
     const now = new Date().toISOString();
+    const payload = normalizarProveedorPayload(req.body);
     const docRef = await db.collection('proveedores').add({
-      nombre, ...rest,
+      ...payload,
       createdAt: now,
       updatedAt: now,
     });
-    res.json({ success: true, data: { id: docRef.id } });
+    res.json({ success: true, data: { id: docRef.id, ...payload } });
   } catch (error) {
     next(error);
   }
@@ -58,11 +155,12 @@ router.post('/', async (req, res, next) => {
 // PUT /api/proveedores/:id
 router.put('/:id', async (req, res, next) => {
   try {
+    const payload = normalizarProveedorPayload(req.body);
     await db.collection('proveedores').doc(req.params.id).update({
-      ...req.body,
+      ...payload,
       updatedAt: new Date().toISOString(),
     });
-    res.json({ success: true });
+    res.json({ success: true, data: payload });
   } catch (error) {
     next(error);
   }

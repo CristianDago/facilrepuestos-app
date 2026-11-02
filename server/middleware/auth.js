@@ -21,6 +21,21 @@ export async function requireAuthOrLector(req, res, next) {
   if (process.env.NODE_ENV !== 'production' && token.startsWith('dev-token:')) {
     return requireAuth(req, res, next);
   }
+  // En desarrollo local sin Firebase Admin configurado (.local-db.json), permitir cualquier token como admin local
+  if (process.env.NODE_ENV !== 'production' && !admin.apps.length) {
+    req.uid = 'dev-user-admin';
+    req.user = {
+      uid: 'dev-user-admin',
+      email: 'taller@drmotors.cl',
+      rol: 'admin',
+      nombre: 'Taller Dr. Motors',
+      apellido: '(Local)',
+      docId: 'dev-admin-doc',
+      activo: true,
+    };
+    return next();
+  }
+
   try {
     const decoded = await admin.auth().verifyIdToken(token);
     if (decoded.rol === ROL_LECTOR_DRPARTES) {
@@ -73,6 +88,21 @@ export async function requireAuth(req, res, next) {
     } catch {
       return res.status(401).json({ success: false, error: 'Token de desarrollo inválido' });
     }
+  }
+
+  // En desarrollo local sin Firebase Admin configurado (.local-db.json), permitir cualquier token como admin local
+  if (process.env.NODE_ENV !== 'production' && !admin.apps.length) {
+    req.uid = 'dev-user-admin';
+    req.user = {
+      uid: 'dev-user-admin',
+      email: 'taller@drmotors.cl',
+      rol: 'admin',
+      nombre: 'Taller Dr. Motors',
+      apellido: '(Local)',
+      docId: 'dev-admin-doc',
+      activo: true,
+    };
+    return next();
   }
 
   try {
@@ -157,6 +187,21 @@ export async function optionalAuth(req, res, next) {
   if (!header.startsWith('Bearer ')) { return next(); }
 
   const token = header.split('Bearer ')[1];
+  // En desarrollo local sin Firebase Admin configurado (.local-db.json), permitir cualquier token como admin local
+  if (process.env.NODE_ENV !== 'production' && !admin.apps.length) {
+    req.uid = 'dev-user-admin';
+    req.user = {
+      uid: 'dev-user-admin',
+      email: 'taller@drmotors.cl',
+      rol: 'admin',
+      nombre: 'Taller Dr. Motors',
+      apellido: '(Local)',
+      docId: 'dev-admin-doc',
+      activo: true,
+    };
+    return next();
+  }
+
   try {
     const decoded = await admin.auth().verifyIdToken(token);
     if (decoded.rol === ROL_LECTOR_DRPARTES) return next(); // sin identidad en rutas opcionales

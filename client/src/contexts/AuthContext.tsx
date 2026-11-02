@@ -34,11 +34,37 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 
+function getInitialDevUser(): AuthUser | null {
+  if (!import.meta.env.DEV) return null;
+  if (typeof window === 'undefined') return null;
+  if (sessionStorage.getItem('facilrepuestos_dev_logout') === 'true') return null;
+
+  const stored = localStorage.getItem('facilrepuestos_dev_user');
+  if (stored) {
+    try {
+      return JSON.parse(stored) as AuthUser;
+    } catch {
+      // Continuar a usuario por defecto
+    }
+  }
+
+  const defaultDevUser: AuthUser = {
+    uid: 'dev-user-001',
+    email: 'taller@drmotors.cl',
+    rol: 'admin',
+    nombre: 'Taller Dr. Motors',
+    apellido: '(Local)',
+  };
+  localStorage.setItem('facilrepuestos_dev_user', JSON.stringify(defaultDevUser));
+  return defaultDevUser;
+}
+
 // ─── PROVIDER ─────────────────────────────────────────────
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const initialDevUser = getInitialDevUser();
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [user, setUser]                 = useState<AuthUser | null>(null);
-  const [loading, setLoading]           = useState(true);
+  const [user, setUser]                 = useState<AuthUser | null>(initialDevUser);
+  const [loading, setLoading]           = useState<boolean>(!initialDevUser);
 
   const fetchPerfil = async (fbUser: FirebaseUser): Promise<AuthUser | null> => {
     try {
@@ -72,13 +98,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser) {
-        // ← FIX: mantener loading=true mientras se obtiene el perfil.
-        // Sin esto, hay una ventana donde loading=false y user=null al mismo
-        // tiempo, lo que hace que ProtectedRoute redirija a /login antes de
-        // que fetchPerfil termine.
-        setLoading(true);
+        if (!import.meta.env.DEV) {
+          setLoading(true);
+        }
         const perfil = await fetchPerfil(fbUser);
-        setUser(perfil);
+        setUser(perfil || getInitialDevUser());
       } else {
         const stored = localStorage.getItem('facilrepuestos_dev_user');
         if (stored) {
@@ -87,6 +111,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } catch {
             setUser(null);
           }
+        } else if (import.meta.env.DEV && sessionStorage.getItem('facilrepuestos_dev_logout') !== 'true') {
+          const defaultDevUser: AuthUser = {
+            uid: 'dev-user-001',
+            email: 'taller@drmotors.cl',
+            rol: 'admin',
+            nombre: 'Taller Dr. Motors',
+            apellido: '(Local)',
+          };
+          localStorage.setItem('facilrepuestos_dev_user', JSON.stringify(defaultDevUser));
+          setUser(defaultDevUser);
         } else {
           setUser(null);
         }
@@ -121,11 +155,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       nombre,
       apellido: '(Local)',
     };
+    sessionStorage.removeItem('facilrepuestos_dev_logout');
     setUser(devUser);
     localStorage.setItem('facilrepuestos_dev_user', JSON.stringify(devUser));
   };
 
   const logout = async () => {
+    sessionStorage.setItem('facilrepuestos_dev_logout', 'true');
     localStorage.removeItem('facilrepuestos_dev_user');
     await signOut(auth);
     setUser(null);

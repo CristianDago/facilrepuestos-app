@@ -7,6 +7,7 @@ import {
   construirMensajeFinalCliente,
   generarTerminosClave,
   despacharEscalamientoANodoAiloo,
+  sanitizarTextoParaProveedor,
 } from '../services/ailooBridge.js';
 import {
   sincronizarCatalogoNodoAiloo,
@@ -138,10 +139,24 @@ router.get('/conocimiento', async (req, res, next) => {
 
 // ─── GET /api/escalamientos ─────────────────────────────────────────────
 // Lista los escalamientos técnicos. Si es proveedor, filtra estrictamente los asignados a su proveedorId.
+// REGLA ANTI-BYPASS ETAPA 1: Jamás se incluye el nombre ni el teléfono del cliente final hacia los proveedores;
+// el solicitante es siempre FácilRepuestos SpA y el texto se sanitiza contra teléfonos/emails/nombres propios.
 router.get('/', async (req, res, next) => {
   try {
     const snap = await db.collection('escalamientos_ia').get();
-    let items = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    let items = snap.docs.map((doc) => {
+      const raw = doc.data();
+      // Eliminar cualquier campo de identidad del cliente final y sanitizar texto técnico
+      const { clienteNombre, clienteTelefono, telefonoCliente, nombreCliente, ...safeData } = raw;
+      return {
+        id: doc.id,
+        ...safeData,
+        solicitante: 'FácilRepuestos SpA (Mesa Técnica)',
+        mensajeCliente: sanitizarTextoParaProveedor(raw.mensajeCliente || ''),
+        motivoEscalamiento: sanitizarTextoParaProveedor(raw.motivoEscalamiento || ''),
+        transcripcionAudio: sanitizarTextoParaProveedor(raw.transcripcionAudio || ''),
+      };
+    });
 
     if (req.user?.rol === 'proveedor') {
       items = items.filter((item) => item.proveedorId === req.user.proveedorId);
@@ -204,6 +219,10 @@ router.post('/', async (req, res, next) => {
     let resolvedDatasetDestino = null;
     let bridgeResult = null;
 
+    const mensajeTecnicoSanitizado = sanitizarTextoParaProveedor(mensajeCliente);
+    const motivoSanitizado = sanitizarTextoParaProveedor(motivoEscalamiento);
+    const audioSanitizado = sanitizarTextoParaProveedor(transcripcionAudio);
+
     if (tipoDestino === 'nodo_ailoo') {
       const targetNodeId = nodoAilooId || proveedorId || 'soluparts';
       const nodoSnap = await db.collection('nodos_ailoo').doc(targetNodeId).get();
@@ -229,10 +248,10 @@ router.post('/', async (req, res, next) => {
         anioVehiculo,
         motorVehiculo,
         vinVehiculo,
-        mensajeCliente,
-        motivoEscalamiento,
+        mensajeCliente: mensajeTecnicoSanitizado,
+        motivoEscalamiento: motivoSanitizado,
         respuestaAgentePreliminar,
-        transcripcionAudio,
+        transcripcionAudio: audioSanitizado,
         candidatoCodigo,
         candidatoNombre,
         creadoEn: now,
@@ -242,6 +261,7 @@ router.post('/', async (req, res, next) => {
     const docData = {
       ticketRef,
       sessionId: `${canalOrigen}-${Date.now().toString(36)}`,
+      solicitante: 'FácilRepuestos SpA (Mesa Técnica)',
       canalOrigen,
       tipoDestino,
       proveedorId: resolvedProveedorId,
@@ -254,10 +274,10 @@ router.post('/', async (req, res, next) => {
       anioVehiculo: anioVehiculo ? Number(anioVehiculo) : null,
       motorVehiculo: String(motorVehiculo || '').toUpperCase(),
       vinVehiculo: String(vinVehiculo || '').toUpperCase(),
-      mensajeCliente: String(mensajeCliente).trim(),
-      motivoEscalamiento: String(motivoEscalamiento).trim(),
+      mensajeCliente: mensajeTecnicoSanitizado,
+      motivoEscalamiento: motivoSanitizado,
       respuestaAgentePreliminar: String(respuestaAgentePreliminar || '').trim(),
-      transcripcionAudio: String(transcripcionAudio || '').trim(),
+      transcripcionAudio: audioSanitizado,
       imagenUrl: String(imagenUrl || '').trim(),
       candidatoInventarioId: candidatoInventarioId || null,
       candidatoCodigo: String(candidatoCodigo || '').trim().toUpperCase(),

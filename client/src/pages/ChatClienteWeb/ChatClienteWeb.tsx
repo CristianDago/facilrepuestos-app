@@ -27,39 +27,39 @@ const ESCENARIOS_REALES_LUNA = [
   },
   {
     id: 'luna-patente-typos',
-    tag: 'Mejora Luna #2 · Patente + Typos (C02/C43)',
+    tag: 'Mejora #2 · Patente + Typos (C02/C43)',
     titulo: 'Patente LPGW76 ("Donfen" → DFM)',
     descripcion:
-      'Normaliza "Donfen" → DFM, detecta patente LPGW76 (Joyear X3 2019) y cotiza pastillas desde Soluparts.',
+      'Normaliza "Donfen" → DFM, detecta patente LPGW76 (Joyear X3 2019) y cotiza pastillas gestionadas directamente por FácilRepuestos.',
     patente: 'LPGW76',
     texto: 'Hola, busco pastillas de freno delanteras para mi Donfen Joyear X3 patente LPGW76',
   },
   {
     id: 'luna-duda-calce',
-    tag: 'Mejora Luna #3 · Duda Técnica (C20/C73)',
+    tag: 'Mejora #3 · Duda Técnica (C20/C73)',
     titulo: 'Calce Estrías + ABS ("Greatwall Vorex")',
     descripcion:
-      'Normaliza "Greatwall Vorex" → GREAT WALL VOLEEX, pre-selecciona homocinética y escala validación de estrías.',
+      'Normaliza "Greatwall Vorex" → GREAT WALL VOLEEX, pre-selecciona homocinética y escala validación de estrías sin exponer proveedor.',
     patente: '',
     texto: '¿Cuántas estrías trae la homocinética del Greatwall Vorex C30 2015? ¿Le sirve con ABS?',
   },
   {
     id: 'luna-antispam-espero',
-    tag: 'Mejora Luna #4 · Anti-Duplicación (C25/C36)',
+    tag: 'Mejora #4 · Anti-Duplicación (C25/C36)',
     titulo: 'Cliente dice "Sigo esperando, ¿aún nada?"',
     descripcion:
-      'Evita crear 20 tickets repetidos como pasaba en Luna y verifica en tiempo real si el proveedor ya respondió.',
+      'Evita crear tickets repetidos y verifica en tiempo real si la Mesa Técnica FácilRepuestos ya confirmó el repuesto.',
     patente: '',
     texto: 'Sigo esperando, ¿tienen respuesta o aún nada?',
   },
   {
     id: 'luna-comuna-comprar',
-    tag: 'Mejora Luna #5 · Comuna + Retiro/Despacho',
-    titulo: 'Indicar Comuna ("Soy de San Bernardo")',
+    tag: 'Mejora #5 · Retiro La Florida / Despacho Chile',
+    titulo: 'Retiro en Enrique Olivares 224 o Despacho',
     descripcion:
-      'Arma el resumen final del pedido con opción de Retiro Gratis en Bodega o Despacho y prepara el comando COMPRAR.',
+      'Arma el resumen final con Retiro en Enrique Olivares 224, La Florida o Despacho en Santiago y todo Chile.',
     patente: '',
-    texto: 'Soy de San Bernardo, prefiero retiro en bodega',
+    texto: 'Soy de La Florida, prefiero retiro en Enrique Olivares 224',
   },
 ];
 
@@ -79,7 +79,7 @@ export default function ChatClienteWeb() {
   const [modalidadSeleccionada, setModalidadSeleccionada] = useState<'retiro_bodega' | 'despacho_domicilio'>(
     'retiro_bodega'
   );
-  const [comunaInput, setComunaInput] = useState('San Bernardo (RM)');
+  const [comunaInput, setComunaInput] = useState('La Florida, Santiago (RM)');
 
   const cargarSesiones = async (seleccionarId?: string) => {
     try {
@@ -279,8 +279,8 @@ export default function ChatClienteWeb() {
               </span>
             </h1>
             <p className={styles.brandSubtitle}>
-              Prueba como cliente final el flujo conversacional completo con las mejoras aprendidas de las 98
-              conversaciones reales de Luna (Soluparts).
+              Despacho a domicilio en Santiago y todo Chile · Retiro exclusivo en Sucursal FácilRepuestos: Enrique
+              Olivares 224, La Florida, Santiago de Chile (identidad y dirección de proveedores 100% blindadas).
             </p>
           </div>
         </div>
@@ -311,14 +311,14 @@ export default function ChatClienteWeb() {
         </div>
       </header>
 
-      {/* Laboratorio 1-Clic con los 5 casos reales extraídos de Luna */}
+      {/* Laboratorio 1-Clic con los 5 casos reales */}
       <section className={styles.scenariosCard}>
         <div className={styles.scenariosHeader}>
           <div className={styles.scenariosTitle}>
-            🧪 Casos Reales Aprendidos de Luna (Soluparts) — Haz clic para probar en el chat:
+            🧪 Escenarios de Prueba en Vivo (1-Clic) — Haz clic para probar en el chat:
           </div>
           <span className={styles.scenariosHint}>
-            Incluye corrección de typos (&quot;Donfen&quot;, &quot;Greatwall Vorex&quot;, &quot;fujias&quot;), stock parcial y anti-spam
+            Incluye corrección de typos (&quot;Donfen&quot;, &quot;Greatwall Vorex&quot;, &quot;fujias&quot;), blindaje anti-bypass y retiro en Enrique Olivares 224
           </span>
         </div>
         <div className={styles.scenariosGrid}>
@@ -350,10 +350,10 @@ export default function ChatClienteWeb() {
               <span className={styles.onlineDot} />
               <div>
                 <h2 className={styles.chatAgentName}>
-                  Luna 2.0 · Especialista FácilRepuestos (Soluparts + Global + Red WSP)
+                  Asistente Especialista FácilRepuestos.cl
                 </h2>
                 <p className={styles.chatAgentStatus}>
-                  En línea · Conectada a Padrón por Patente, Catálogo Multi-Ailoo y Mesa WhatsApp
+                  En línea · Despacho en Santiago y todo Chile · Retiro en Enrique Olivares 224, La Florida, Santiago
                 </p>
               </div>
             </div>
@@ -438,17 +438,17 @@ export default function ChatClienteWeb() {
               type="button"
               className={styles.quickChip}
               disabled={enviando}
-              onClick={() => handleEnviarMensaje('Soy de San Bernardo, prefiero retiro en bodega')}
+              onClick={() => handleEnviarMensaje('Soy de La Florida, prefiero retiro en Enrique Olivares 224')}
             >
-              📍 Soy de San Bernardo (Retiro)
+              📍 Retiro en Enrique Olivares 224, La Florida
             </button>
             <button
               type="button"
               className={styles.quickChip}
               disabled={enviando}
-              onClick={() => handleEnviarMensaje('Soy de Concepción, necesito despacho por Starken')}
+              onClick={() => handleEnviarMensaje('Soy de Concepción, necesito despacho a domicilio')}
             >
-              🚚 Soy de Concepción (Despacho)
+              🚚 Despacho en Santiago y Todo Chile
             </button>
             <button
               type="button"
@@ -607,7 +607,7 @@ export default function ChatClienteWeb() {
                       }`}
                       onClick={() => setModalidadSeleccionada('retiro_bodega')}
                     >
-                      📍 Retiro en Bodega ($0)
+                      📍 Retiro Enrique Olivares 224 ($0)
                     </button>
                     <button
                       type="button"
@@ -616,15 +616,20 @@ export default function ChatClienteWeb() {
                       }`}
                       onClick={() => setModalidadSeleccionada('despacho_domicilio')}
                     >
-                      🚚 Despacho a Domicilio
+                      🚚 Despacho Santiago y Todo Chile
                     </button>
+                  </div>
+                  <div style={{ fontSize: '0.73rem', color: '#0f766e', fontWeight: 600 }}>
+                    {modalidadSeleccionada === 'retiro_bodega'
+                      ? '📍 Retiro exclusivo en Tienda FácilRepuestos: Enrique Olivares 224, La Florida, Santiago de Chile'
+                      : '🚚 Despachamos directamente en todo Santiago (RM) y a todo Chile'}
                   </div>
                   <input
                     type="text"
                     className={styles.comunaInput}
                     value={comunaInput}
                     onChange={(e) => setComunaInput(e.target.value)}
-                    placeholder="Comuna o Ciudad (ej. San Bernardo, Concepción...)"
+                    placeholder="Comuna o Ciudad (ej. La Florida, Santiago, Concepción...)"
                   />
                 </div>
 

@@ -35,6 +35,8 @@ import { requireAuth } from '../middleware/auth.js';
 import {
   generarTerminosClave,
   despacharEscalamientoANodoAiloo,
+  sanitizarTextoParaProveedor,
+  sanitizarMensajeHaciaClienteFinal,
 } from '../services/ailooBridge.js';
 import { sincronizarTodosLosNodosAiloo } from '../services/ailooCatalogSync.js';
 
@@ -790,7 +792,7 @@ function detectarComunaOModalidadEntrega(texto = '') {
   }
 
   const upper = limpio.toUpperCase();
-  const pideRetiro = /\b(RETIRO|RETIRAR|MOSTRADOR|BODEGA|VOY\s+A\s+BUSCAR|PRESENCIAL|GRAN\s+AVENIDA)\b/.test(upper);
+  const pideRetiro = /\b(RETIRO|RETIRAR|MOSTRADOR|BODEGA|TIENDA|SUCURSAL|VOY\s+A\s+BUSCAR|PRESENCIAL|ENRIQUE\s+OLIVARES|OLIVARES\s*224)\b/.test(upper);
   const pideDespacho = /\b(DESPACHO|ENV[IÍ]O|ENVIAR|DOMICILIO|STARKEN|CHILEXPRESS|BLUE\s*EXPRESS|POR\s+PAGAR)\b/.test(upper);
 
   // Es un mensaje enfocado en entrega/comuna si menciona una comuna o modalidad y tiene pocas palabras técnicas nuevas
@@ -854,10 +856,10 @@ async function verificarRespuestasEnVivoDeProveedores(sesion) {
           actualizaciones.push({
             tipo: 'escalamiento_respondido',
             referencia: data.ticketRef || escInfo.ticketRef,
-            proveedorNombre: data.proveedorNombre || escInfo.destino,
+            proveedorNombre: 'Mesa Técnica FácilRepuestos',
             repuesto: data.candidatoNombre || 'Repuesto validado por especialista',
             skuPublicoFrp: data.skuPublicoFrp || escInfo.candidatoSku || `FRP-EXP-${data.ticketRef}`,
-            explicacion: data.respuestaExperto,
+            explicacion: sanitizarMensajeHaciaClienteFinal(data.respuestaExperto || data.respuestaMostrador || ''),
             precioVentaNeto: precioNeto,
             precioVentaConIva: precioConIva,
           });
@@ -899,10 +901,10 @@ async function verificarRespuestasEnVivoDeProveedores(sesion) {
             actualizaciones.push({
               tipo: 'mesa_wsp_respondida',
               referencia: data.codigoSolicitud,
-              proveedorNombre: mejorOferta.proveedorNombre,
+              proveedorNombre: 'Logística Directa FácilRepuestos',
               repuesto: data.repuestoBuscado,
               skuPublicoFrp: sku,
-              explicacion: `${mejorOferta.condicion || 'Nuevo'} · Marca ${mejorOferta.marcaRepuesto || 'OEM'} · Disponibilidad confirmada en mesón (${mejorOferta.disponibilidad || 'Inmediata'})`,
+              explicacion: `${mejorOferta.condicion || 'Nuevo'} · Marca ${mejorOferta.marcaRepuesto || 'OEM'} · Disponibilidad confirmada por FácilRepuestos para despacho o retiro en Enrique Olivares 224, La Florida`,
               precioVentaNeto: precioNeto,
               precioVentaConIva: precioConIva,
             });
@@ -935,7 +937,7 @@ async function verificarRespuestasEnVivoDeProveedores(sesion) {
 async function crearPedidoSimuladoAgente({
   sesion,
   modalidadEntrega = 'retiro_bodega',
-  comunaEntrega = 'Gran Avenida / San Bernardo (RM)',
+  comunaEntrega = 'La Florida, Santiago (RM)',
   metodoPagoSimulado = 'sandbox_webpay_sin_tarjeta',
   itemsForzados = null,
 }) {
@@ -967,7 +969,7 @@ async function crearPedidoSimuladoAgente({
       nombre: it.nombre,
       fabricante: it.fabricante || 'OEM',
       origen: it.origen || 'soluparts_ailoo',
-      proveedorNombre: it.proveedorNombre || 'Soluparts (Ailoo Enterprise)',
+      proveedorNombre: 'FácilRepuestos SpA',
       cantidad: Number(it.cantidad || 1),
       precioVentaNeto: Number(it.precioVentaNeto || 0),
       precioVentaConIva: Number(it.precioVentaConIva || 0),
@@ -976,8 +978,8 @@ async function crearPedidoSimuladoAgente({
     comunaEntrega,
     sucursalRetiro:
       modalidadEntrega === 'retiro_bodega'
-        ? 'Mostrador Central FácilRepuestos / Bodega Soluparts Gran Avenida (Parad. 29)'
-        : 'Despacho por Pagar vía Starken / Chilexpress / Blue Express',
+        ? 'Sucursal FácilRepuestos: Enrique Olivares 224, La Florida, Santiago de Chile'
+        : 'Despacho a Domicilio FácilRepuestos (Santiago y todo Chile)',
     metodoPagoSimulado,
     estadoPago: 'pendiente_simulacion',
     estadoLogistico: 'reservado_en_bodega',
@@ -994,7 +996,7 @@ async function crearPedidoSimuladoAgente({
 
 /**
  * Asegura que el catálogo unificado tenga los SKUs de Soluparts y Global cargados (incluyendo
- * los repuestos de marcas chinas de Luna) y que existan sesiones demo iniciales.
+ * los repuestos de marcas chinas de Luna) y que existan sesiones demo iniciales con el blindaje comercial activo.
  */
 async function asegurarDatosInicialesAgente() {
   const invSnap = await db.collection(COLECCION_INVENTARIO).get();
@@ -1007,8 +1009,17 @@ async function asegurarDatosInicialesAgente() {
     }
   }
 
-  const sesSnap = await db.collection(COLECCION_SESIONES_AGENTE).limit(1).get();
-  if (!sesSnap.empty) return;
+  const demoDoc = await db.collection(COLECCION_SESIONES_AGENTE).doc('ses-omni-demo-porter').get();
+  if (demoDoc.exists) {
+    const demoData = demoDoc.data();
+    const tieneDireccionAntigua = (demoData.mensajes || []).some((m) =>
+      /Gran Avenida|San Bernardo|Soluparts/i.test(String(m.texto || ''))
+    );
+    if (!tieneDireccionAntigua) return;
+  } else {
+    const sesSnap = await db.collection(COLECCION_SESIONES_AGENTE).limit(1).get();
+    if (!sesSnap.empty) return;
+  }
 
   const now = new Date().toISOString();
   const sesionDemo = {
@@ -1033,14 +1044,14 @@ async function asegurarDatosInicialesAgente() {
         nombre: 'PASTILLAS DE FRENO DELANTERAS CERÁMICAS CHANGAN CS15 / ALSVIN 1.4 - 1.5',
         fabricante: 'NETO / OEM',
         origen: 'soluparts_ailoo',
-        proveedorNombre: 'Soluparts (Ailoo Enterprise)',
+        proveedorNombre: 'FácilRepuestos SpA',
         stock: 12,
         cantidad: 1,
         precioVentaNeto: 24960,
         precioVentaConIva: 29702,
       },
     ],
-    comunaCliente: 'La Cisterna (RM)',
+    comunaCliente: 'La Florida, Santiago (RM)',
     modalidadEntrega: 'retiro_bodega',
     escalamientosAbiertos: [],
     solicitudesWspAbiertas: [],
@@ -1058,7 +1069,7 @@ async function asegurarDatosInicialesAgente() {
         id: 'msg-demo-2',
         autor: 'agente_ia',
         texto:
-          '¡Hola! 🚗 Identifiqué tu **CHANGAN CS15 (2020) · Motor 1.5 BLUECORE JL473QF [Patente PDSS87]**.\n\nTenemos disponibilidad inmediata en nuestro catálogo conectado:\n• **PASTILLAS DE FRENO DELANTERAS CERÁMICAS CHANGAN CS15 / ALSVIN 1.4 - 1.5** (`FRP-SOL-SOL-29900`) — Marca **NETO / OEM** · Stock: **12 un.** · **$24.960 neto** (**$29.702 IVA inc.**)\n\n📍 ¿De qué **comuna** nos escribes? Puedes elegir **Retiro en Bodega (Gran Avenida / San Bernardo)** o **Despacho a domicilio**, o escribir **COMPRAR** para confirmar tu pedido en el acto.',
+          '¡Hola! 🚗 Identifiqué tu **CHANGAN CS15 (2020) · Motor 1.5 BLUECORE JL473QF [Patente PDSS87]**.\n\nTenemos disponibilidad inmediata confirmada en FácilRepuestos:\n• **PASTILLAS DE FRENO DELANTERAS CERÁMICAS CHANGAN CS15 / ALSVIN 1.4 - 1.5** (`FRP-SOL-SOL-29900`) — Marca **NETO / OEM** · Stock: **12 un.** · **$24.960 neto** (**$29.702 IVA inc.**)\n\n📍 ¿Prefieres **Despacho a domicilio en Santiago y todo Chile** o **Retiro en nuestra tienda en Enrique Olivares 224, La Florida, Santiago de Chile**? Indícame tu comuna o escribe **COMPRAR** para confirmar tu pedido en el acto.',
         creadoEn: now,
         trazaCascada: {
           accionTomada: 'cotizacion_directa',
@@ -1136,7 +1147,7 @@ async function ejecutarCascadaAgenteOmnicanal({
     const modalidad =
       infoEntrega.modalidadPreferida || sesion.modalidadEntrega || 'retiro_bodega';
     const comuna =
-      infoEntrega.comunaDetectada?.nombre || sesion.comunaCliente || 'Gran Avenida / La Cisterna (RM)';
+      infoEntrega.comunaDetectada?.nombre || sesion.comunaCliente || 'La Florida, Santiago (RM)';
 
     const pedidoCreado = await crearPedidoSimuladoAgente({
       sesion: { ...sesion, carritoCotizado: carritoActual },
@@ -1155,8 +1166,8 @@ async function ejecutarCascadaAgenteOmnicanal({
       `📋 **Resumen de tu compra:**\n${resumenLineas.join('\n')}\n` +
       `• **Modalidad:** ${
         modalidad === 'retiro_bodega'
-          ? '📍 Retiro en Bodega / Mostrador Central (Sin costo de envío)'
-          : `🚚 Despacho a ${comuna} (Starken / Chilexpress por pagar)`
+          ? '📍 Retiro en Tienda FácilRepuestos: Enrique Olivares 224, La Florida, Santiago de Chile (Sin costo de envío)'
+          : `🚚 Despacho a domicilio en ${comuna} (Despachamos en Santiago y todo Chile)`
       }\n` +
       `• **Total a pagar:** **$${Number(pedidoCreado.totalConIva).toLocaleString('es-CL')} IVA inc.** ($${Number(
         pedidoCreado.subtotalNeto
@@ -1193,7 +1204,7 @@ async function ejecutarCascadaAgenteOmnicanal({
     if (respuestasVivas.length > 0) {
       const detalleRespuestas = respuestasVivas.map(
         (r) =>
-          `✅ **Respuesta confirmada (${r.referencia} — ${r.proveedorNombre}):**\n• **${r.repuesto}** (\`${r.skuPublicoFrp}\`) — **$${r.precioVentaNeto.toLocaleString(
+          `✅ **Respuesta confirmada (${r.referencia} — Mesa Técnica FácilRepuestos):**\n• **${r.repuesto}** (\`${r.skuPublicoFrp}\`) — **$${r.precioVentaNeto.toLocaleString(
             'es-CL'
           )} neto** (**$${r.precioVentaConIva.toLocaleString('es-CL')} IVA inc.**)\n  _${r.explicacion}_`
       );
@@ -1206,9 +1217,9 @@ async function ejecutarCascadaAgenteOmnicanal({
         escalamientosAbiertos: [],
         solicitudesWspAbiertas: [],
         respuestaTexto:
-          `¡Buenas noticias! 🎉 Nuestro especialista acaba de confirmar tu repuesto en línea:\n\n` +
+          `¡Buenas noticias! 🎉 Nuestra mesa técnica acaba de confirmar tu repuesto en línea:\n\n` +
           `${detalleRespuestas.join('\n\n')}\n\n` +
-          `📍 ¿De qué **comuna** nos escribes para coordinar **Retiro en Bodega** o **Despacho**, o prefieres escribir **COMPRAR** de inmediato?`,
+          `📍 ¿Prefieres **Despacho a domicilio (Santiago y todo Chile)** o **Retiro en nuestra sucursal en Enrique Olivares 224, La Florida, Santiago de Chile**? Escribe tu comuna o escribe **COMPRAR** de inmediato.`,
         trazaCascada: {
           accionTomada: 'respuesta_proveedor_en_vivo',
           vehiculoDetectado: sesion.vehiculoContexto || null,
@@ -1223,7 +1234,7 @@ async function ejecutarCascadaAgenteOmnicanal({
     if (tienePendientes) {
       const refs = [
         ...(sesion.escalamientosAbiertos || []).map((e) => `Ticket Experto \`${e.ticketRef}\``),
-        ...(sesion.solicitudesWspAbiertas || []).map((w) => `Mesa WhatsApp \`#${w.codigoSolicitud}\``),
+        ...(sesion.solicitudesWspAbiertas || []).map((w) => `Gestión Stock \`#${w.codigoSolicitud}\``),
       ].join(' y ');
 
       return {
@@ -1235,8 +1246,8 @@ async function ejecutarCascadaAgenteOmnicanal({
         escalamientosAbiertos: sesion.escalamientosAbiertos || [],
         solicitudesWspAbiertas: sesion.solicitudesWspAbiertas || [],
         respuestaTexto:
-          `⏳ ¡Gracias por tu paciencia! Tu consulta sigue activa bajo seguimiento prioritario (${refs}).\n\n` +
-          `🛡️ **Anti-Duplicación Activo:** No generamos un ticket repetido para no saturar el mesón técnico. Apenas el especialista confirme calce o precio, te aparecerá aquí mismo (puedes simular su respuesta con 1 clic en el panel lateral o en **/mesa-wsp**).`,
+          `⏳ ¡Gracias por tu paciencia! Tu consulta sigue activa bajo seguimiento prioritario en FácilRepuestos (${refs}).\n\n` +
+          `🛡️ **Anti-Duplicación Activo:** No generamos un ticket repetido para mantener tu prioridad. Apenas nuestro equipo confirme calce y disponibilidad para despacho o retiro en **Enrique Olivares 224, La Florida**, te aparecerá aquí mismo.`,
         trazaCascada: {
           accionTomada: 'seguimiento_sin_duplicar',
           vehiculoDetectado: sesion.vehiculoContexto || null,
@@ -1314,10 +1325,10 @@ async function ejecutarCascadaAgenteOmnicanal({
     );
 
     const textoLogistica = esRM
-      ? `📍 Para **${nombreComuna}** tienes dos opciones inmediatas:\n` +
-        `1️⃣ **Retiro Gratis en Bodega Central** (Gran Avenida / San Bernardo — listo en 30 min tras confirmar).\n` +
-        `2️⃣ **Despacho Express RM** o vía Starken/Chilexpress por pagar.`
-      : `🚚 Para **${nombreComuna}** despachamos en el día vía **Starken, Chilexpress o Blue Express por pagar** (envío se paga al recibir).`;
+      ? `📍 Para **${nombreComuna}** gestionamos directamente tu entrega con dos opciones:\n` +
+        `1️⃣ **Retiro Gratis en Tienda FácilRepuestos:** **Enrique Olivares 224, La Florida, Santiago de Chile**.\n` +
+        `2️⃣ **Despacho a domicilio en todo Santiago (RM) y todo Chile.**`
+      : `🚚 Para **${nombreComuna}** despachamos directamente desde FácilRepuestos a todo Chile vía **Starken, Chilexpress o Blue Express** (o puedes retirar en nuestra sucursal en **Enrique Olivares 224, La Florida, Santiago de Chile**).`;
 
     const respuestaTexto =
       `¡Excelente! ${textoLogistica}\n\n` +
@@ -1595,30 +1606,33 @@ async function ejecutarCascadaAgenteOmnicanal({
 
     const notaAprendida =
       reglasAplicadasGlobal.length > 0
-        ? `\n\n🧠 **Nota Técnica Verificada en FácilRepuestos:** ${reglasAplicadasGlobal[0].explicacionExperta}`
+        ? `\n\n🧠 **Nota Técnica Verificada en FácilRepuestos:** ${sanitizarMensajeHaciaClienteFinal(reglasAplicadasGlobal[0].explicacionExperta)}`
         : '';
 
     if (lineasOpciones.length > 0) {
       respuestaTexto =
-        `${notaRespuestasPrevias}¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** tenemos disponibilidad inmediata en nuestro catálogo unificado:\n\n` +
+        `${notaRespuestasPrevias}¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** tenemos disponibilidad confirmada en FácilRepuestos:\n\n` +
         `${lineasOpciones.join('\n')}${notaAprendida}\n\n` +
-        `📍 ¿De qué **comuna** nos escribes para coordinar **Retiro en Bodega** o **Despacho**, o prefieres escribir **COMPRAR** para confirmar tu pedido ahora mismo?`;
+        `📍 Despachamos a domicilio en **Santiago y todo Chile**, o puedes retirar directamente en nuestra sucursal en **Enrique Olivares 224, La Florida, Santiago de Chile**. ¿De qué comuna nos escribes o prefieres escribir **COMPRAR** para confirmar tu pedido ahora mismo?`;
     } else if (reglasAplicadasGlobal.length > 0) {
       const r = reglasAplicadasGlobal[0];
       const conIva = Math.round((r.precioVentaFrp || 0) * 1.19);
       respuestaTexto =
-        `${notaRespuestasPrevias}¡Hola! 🚗 Según nuestra base técnica verificada para **${etiquetaVehiculo}**:\n\n` +
+        `${notaRespuestasPrevias}¡Hola! 🚗 Según nuestra base técnica verificada en FácilRepuestos para **${etiquetaVehiculo}**:\n\n` +
         `• **${r.nombreRepuesto}** (\`${r.skuPublicoFrp}\`)${
           r.precioVentaFrp > 0
             ? ` — Valor FácilRepuestos: **$${r.precioVentaFrp.toLocaleString('es-CL')} neto** (**$${conIva.toLocaleString(
                 'es-CL'
               )} IVA inc.**)`
             : ''
-        }.\n🧠 **Detalle técnico:** ${r.explicacionExperta}`;
+        }.\n🧠 **Detalle técnico:** ${sanitizarMensajeHaciaClienteFinal(r.explicacionExperta)}\n\n` +
+        `📍 Disponible con **Despacho a domicilio en Santiago y todo Chile** o **Retiro en Enrique Olivares 224, La Florida, Santiago de Chile**.`;
     }
   }
 
   // ─── RAMA B: ESCALAMIENTO EXPERTO AUTOMÁTICO CON DEDUPLICACIÓN (ETAPA 1) ──
+  // REGLA ANTI-BYPASS: Hacia el proveedor nunca se envía nombre ni teléfono del cliente (solo FácilRepuestos SpA),
+  // y hacia el cliente jamás se menciona el nombre o dirección del proveedor (Soluparts, Global, etc.).
   if (accionTomada === 'escalamiento_experto') {
     const mejorCandidato = candidatosEncontradosGlobal[0] || null;
     const nodoAilooId =
@@ -1637,15 +1651,22 @@ async function ejecutarCascadaAgenteOmnicanal({
     if (existente) {
       escalamientoCreado = existente;
       respuestaTexto =
-        `⏳ Ya tenemos tu validación técnica en curso bajo el **Ticket \`${existente.ticketRef}\`** hacia \`${existente.destino}\` para tu **${etiquetaVehiculo}**.\n\n` +
-        `🛡️ No duplicamos el ticket para mantener prioridad alta en el mesón. En cuanto el especialista confirme la medida/calce exacto te avisamos por aquí.`;
+        `⏳ Ya tenemos tu validación técnica en curso en nuestra **Mesa Técnica FácilRepuestos (Ticket \`${existente.ticketRef}\`)** para tu **${etiquetaVehiculo}**.\n\n` +
+        `🛡️ No duplicamos el ticket para mantener prioridad alta. En cuanto confirmemos la medida/calce exacto te avisamos por aquí para coordinar despacho en Santiago y todo Chile o retiro en **Enrique Olivares 224, La Florida**.`;
     } else {
       const esNodoAiloo = Boolean(mejorCandidato ? mejorCandidato.nodoAilooId : true);
       const ticketRef = `ESC-${Math.floor(100000 + Math.random() * 900000)}`;
+      const mensajeSanitizado = sanitizarTextoParaProveedor(textoCliente || transcripcionAudio);
+      const audioSanitizado = sanitizarTextoParaProveedor(transcripcionAudio || '');
+      const motivoSanitizado = sanitizarTextoParaProveedor(
+        dudaTecnica.motivo ||
+          `Confirmar compatibilidad técnica exacta de ${resumenRepuesto} para ${etiquetaVehiculo}`
+      );
 
       const nuevoEsc = {
         ticketRef,
         sesionAgenteId: sesion.id,
+        solicitante: 'FácilRepuestos SpA (Mesa Técnica)',
         canalOrigen: sesion.canal === 'web_cliente' ? 'web' : 'whatsapp',
         estado: 'pendiente',
         prioridad: 'alta',
@@ -1664,12 +1685,10 @@ async function ejecutarCascadaAgenteOmnicanal({
         modeloVehiculo: vehiculo?.modelo || '',
         anioVehiculo: vehiculo?.anio ? String(vehiculo.anio) : '',
         motorVehiculo: vehiculo?.motor || '',
-        mensajeCliente: textoCliente || transcripcionAudio,
-        transcripcionAudio: transcripcionAudio || '',
+        mensajeCliente: mensajeSanitizado,
+        transcripcionAudio: audioSanitizado,
         fotoMuestraUrl: fotoUrl || '',
-        motivoEscalamiento:
-          dudaTecnica.motivo ||
-          `Confirmar compatibilidad técnica exacta de ${resumenRepuesto} para ${etiquetaVehiculo}`,
+        motivoEscalamiento: motivoSanitizado,
         candidatoCodigo: mejorCandidato?.codigoInterno || '',
         candidatoNombre: mejorCandidato?.nombre || resumenRepuesto,
         creadoEn: now,
@@ -1702,11 +1721,13 @@ async function ejecutarCascadaAgenteOmnicanal({
               )} IVA inc.**)`
             : ''
         }.\n\n` +
-        `🔍 Para asegurarte el calce 100% exacto antes de que pagues, acabo de derivar tu consulta técnica a nuestro especialista de mostrador (**Ticket \`${ticketRef}\`** → \`${escalamientoCreado.destino}\`). Te confirmamos en breves minutos por esta misma ventana.`;
+        `🔍 Para asegurarte el calce 100% exacto antes de que pagues, acabo de derivar tu consulta a nuestra **Mesa Técnica Especialista FácilRepuestos (Ticket \`${ticketRef}\`)**. Nosotros verificamos y gestionamos la compra directamente para entregarte con **Despacho en Santiago y todo Chile** o **Retiro en nuestra sucursal en Enrique Olivares 224, La Florida, Santiago de Chile**.`;
     }
   }
 
   // ─── RAMA C Y D: MESA WHATSAPP VIVA (TOTAL O PARCIAL EN PEDIDOS MÚLTIPLES) ─
+  // REGLA ANTI-BYPASS: No revelamos al cliente qué proveedor tiene la pieza ni su dirección;
+  // FácilRepuestos consulta, compra y despacha o entrega en Enrique Olivares 224, La Florida.
   if (accionTomada === 'mesa_whatsapp_viva' || accionTomada === 'cotizacion_parcial_con_mesa_wsp') {
     const faltantes =
       accionTomada === 'cotizacion_parcial_con_mesa_wsp' && subConsultasSinStock.length > 0
@@ -1770,9 +1791,9 @@ async function ejecutarCascadaAgenteOmnicanal({
         estadoContacto: 'enviado',
         modoEnvio: 'simulacion_meta_local',
         metaMessageId: `wamid.AUTO.${Date.now()}`,
-        mensajeEnviado: `Hola ${p.contacto || p.nombre} 👋 Cotización urgente FácilRepuestos (#${codigoSolicitud}): ${repuestoTexto}${
+        mensajeEnviado: `Hola ${p.contacto || p.nombre} 👋 Compra B2B urgente FácilRepuestos SpA (#${codigoSolicitud}): ${repuestoTexto}${
           vehiculo?.patente ? ` · Patente ${vehiculo.patente}` : ''
-        }${vehiculo?.vin ? ` · VIN ${vehiculo.vin}` : ''}. ¿Disponibilidad y precio neto mesón?`,
+        }${vehiculo?.vin ? ` · VIN ${vehiculo.vin}` : ''}. ¿Disponibilidad y precio costo neto para retiro por nuestro móvil?`,
         enviadoEn: now,
         respondidoEn: null,
       }));
@@ -1780,10 +1801,11 @@ async function ejecutarCascadaAgenteOmnicanal({
       const nuevaSolWsp = {
         codigoSolicitud,
         sesionAgenteId: sesion.id,
+        solicitante: 'FácilRepuestos SpA (Adquisiciones B2B)',
         estado: 'esperando_respuestas',
         canalCliente: sesion.canal === 'web_cliente' ? 'web' : 'whatsapp',
-        clienteNombre: sesion.clienteNombre || 'Cliente Omnicanal',
-        clienteTelefono: sesion.clienteTelefono || '',
+        clienteNombre: 'FácilRepuestos SpA (Identidad de Cliente Protegida)',
+        clienteTelefono: 'CONFIDENCIAL-FRP',
         patente: vehiculo?.patente || '',
         vin: vehiculo?.vin || '',
         marcaVehiculo: vehiculo?.marca || 'POR CONFIRMAR',
@@ -1793,7 +1815,7 @@ async function ejecutarCascadaAgenteOmnicanal({
         categoriaRepuesto: categoria,
         repuestoBuscado: repuestoTexto,
         codigoReferencia: '',
-        notasAdicionales: `Generado automáticamente por Agente Omnicanal desde consulta: "${textoCombinado.slice(
+        notasAdicionales: `Solicitud B2B FácilRepuestos: "${sanitizarTextoParaProveedor(textoCombinado).slice(
           0,
           140
         )}"`,
@@ -1829,18 +1851,14 @@ async function ejecutarCascadaAgenteOmnicanal({
           )} neto** (**$${c.precioVentaConIva.toLocaleString('es-CL')} IVA inc.**)`
       );
       respuestaTexto =
-        `¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** revisé los ${subConsultas.length} repuestos de tu lista:\n\n` +
+        `¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** revisé los ${subConsultas.length} repuestos de tu lista en FácilRepuestos:\n\n` +
         `📦 **Disponibles para entrega inmediata:**\n${lineasDisponibles.join('\n')}\n\n` +
-        `📲 **En cotización urgente (${resumenFaltantes}):** Como no figura con stock en bodega central, ya activé nuestra **Mesa de Cotización WhatsApp (\`#${solicitudWspCreada.codigoSolicitud}\`)** con **${solicitudWspCreada.proveedoresContactados.join(
-          ', '
-        )}**.\n\n` +
-        `💡 Puedes **comprar ahora mismo los repuestos en stock** (indícame tu comuna o escribe **COMPRAR**) o esperar unos minutos a que llegue la oferta del ítem faltante.`;
+        `📲 **En gestión directa de abastecimiento (${resumenFaltantes}):** Ya activé nuestra **Mesa de Abastecimiento FácilRepuestos (\`#${solicitudWspCreada.codigoSolicitud}\`)** con nuestras bodegas asociadas para confirmarte precio en minutos.\n\n` +
+        `💡 Nosotros gestionamos y compramos todo directamente para entregarte con **Despacho en Santiago y todo Chile** o **Retiro en nuestra tienda en Enrique Olivares 224, La Florida, Santiago de Chile**. Puedes escribir **COMPRAR** para asegurar los ítems en stock o esperar la confirmación del faltante.`;
     } else {
       respuestaTexto =
-        `🚗 Identifiqué tu **${etiquetaVehiculo}**. Revisé nuestro stock conectado (Soluparts, Global y Bodega Local) para **${resumenFaltantes}** y no figura con unidades inmediatas en bodega central.\n\n` +
-        `📲 **¡Sin callejones sin salida! Ya activé nuestra Mesa de Cotización en Vivo (\`#${solicitudWspCreada.codigoSolicitud}\`)** y envié la consulta por WhatsApp a **${solicitudWspCreada.proveedoresContactados.length} importadora(s) especialista(s)** (${solicitudWspCreada.proveedoresContactados.join(
-          ', '
-        )}) para cotizarte stock físico en mesón al instante.`;
+        `🚗 Identifiqué tu **${etiquetaVehiculo}**. Estamos verificando disponibilidad inmediata para **${resumenFaltantes}** en nuestra red de bodegas asociadas.\n\n` +
+        `📲 **¡Sin callejones sin salida! Ya activé nuestra Mesa de Abastecimiento en Vivo (\`#${solicitudWspCreada.codigoSolicitud}\`)** (${solicitudWspCreada.proveedoresContactados.length} bodega(s) especialista(s) consultada(s) en línea por FácilRepuestos) para cotizarte en minutos con **Despacho en Santiago y todo Chile** o **Retiro en nuestra sucursal en Enrique Olivares 224, La Florida, Santiago de Chile**.`;
     }
   }
 
@@ -2056,7 +2074,7 @@ router.post('/sesiones/:id/checkout-simulado', requireAuth, async (req, res, nex
     const {
       accion = 'crear_y_aprobar', // 'crear' | 'aprobar_pago' | 'crear_y_aprobar'
       modalidadEntrega = 'retiro_bodega',
-      comunaEntrega = 'Gran Avenida / La Cisterna (RM)',
+      comunaEntrega = 'La Florida, Santiago (RM)',
       metodoPagoSimulado = 'sandbox_webpay_sin_tarjeta',
     } = req.body;
 
@@ -2073,7 +2091,7 @@ router.post('/sesiones/:id/checkout-simulado', requireAuth, async (req, res, nex
       pedido = await crearPedidoSimuladoAgente({
         sesion,
         modalidadEntrega: modalidadEntrega || sesion.modalidadEntrega || 'retiro_bodega',
-        comunaEntrega: comunaEntrega || sesion.comunaCliente || 'Gran Avenida / La Cisterna (RM)',
+        comunaEntrega: comunaEntrega || sesion.comunaCliente || 'La Florida, Santiago (RM)',
         metodoPagoSimulado,
       });
       if (!pedido) {
@@ -2251,18 +2269,18 @@ router.post('/sesiones/:id/simular-respuesta-proveedor', requireAuth, async (req
               (r) =>
                 `• **${r.repuesto}** (\`${r.skuPublicoFrp}\`) — **$${r.precioVentaNeto.toLocaleString(
                   'es-CL'
-                )} neto** (**$${r.precioVentaConIva.toLocaleString('es-CL')} IVA inc.**)\n  _${r.explicacion} (Vía ${r.proveedorNombre})_`
+                )} neto** (**$${r.precioVentaConIva.toLocaleString('es-CL')} IVA inc.**)\n  _${r.explicacion}_`
             )
             .join('\n\n')
-        : '• Repuesto confirmado en mostrador técnico y agregado a tu cotización.';
+        : '• Repuesto confirmado por nuestra Mesa Técnica FácilRepuestos y agregado a tu cotización.';
 
     const msgAgente = {
       id: `msg-ia-live-${Date.now()}`,
       autor: 'agente_ia',
       texto:
-        `🔔 **¡Acaba de responder nuestro proveedor especialista en vivo!**\n\n` +
+        `🔔 **¡Acabamos de confirmar disponibilidad en vivo en FácilRepuestos!**\n\n` +
         `${textoDetalle}\n\n` +
-        `🛒 Ya lo agregué a tu carrito activo. ¿De qué **comuna** nos escribes o prefieres escribir **COMPRAR** para confirmar el pedido completo?`,
+        `🛒 Ya lo agregué a tu carrito activo con **Despacho a domicilio en Santiago y todo Chile** o **Retiro en nuestra sucursal en Enrique Olivares 224, La Florida, Santiago de Chile**. ¿De qué **comuna** nos escribes o prefieres escribir **COMPRAR** para confirmar el pedido completo?`,
       creadoEn: now,
       trazaCascada: {
         accionTomada: 'respuesta_proveedor_en_vivo',

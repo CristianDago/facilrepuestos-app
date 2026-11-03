@@ -27,7 +27,47 @@ export function generarSkuPublicoFrp(prefijo = 'FRP-LOC', codigoOriginal = '') {
 }
 
 /**
+ * Sanitiza cualquier texto de consulta antes de enviarlo a un proveedor externo (Soluparts, Global o Local)
+ * para garantizar que NUNCA viaje el teléfono, correo o nombre personal del cliente final.
+ * Ante el proveedor, quien consulta es siempre y únicamente FácilRepuestos.
+ */
+export function sanitizarTextoParaProveedor(texto = '') {
+  if (!texto) return '';
+  let limpio = String(texto);
+  // Eliminar teléfonos chilenos (+569..., 569..., 9 xxxx xxxx) o secuencias de 8-11 dígitos
+  limpio = limpio.replace(/(?:\+?56\s*)?9\s*\d{4}[\s.-]*\d{4}\b/g, '[RESERVADO FÁCILREPUESTOS]');
+  limpio = limpio.replace(/\b\d{8,11}\b/g, '[RESERVADO FÁCILREPUESTOS]');
+  // Eliminar correos electrónicos
+  limpio = limpio.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[RESERVADO FÁCILREPUESTOS]');
+  // Eliminar presentaciones con nombre propio ("mi nombre es Juan Pérez", "me llamo...", "soy Juan Pérez")
+  limpio = limpio.replace(
+    /\b(?:mi\s+nombre\s+es|me\s+llamo|habla\s+con|soy\s+don|atenci[oó]n\s+a)\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑa-záéíóúñ]+)?/gi,
+    'Consulta Mesa Técnica FácilRepuestos'
+  );
+  limpio = limpio.replace(
+    /\b(?:hola\s+)?soy\s+(?!de\b|del\b|un\b|una\b|cliente\b|taller\b|mecanico\b|mec[aá]nico\b)[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)?/g,
+    'Consulta Mesa Técnica FácilRepuestos'
+  );
+  return limpio.trim();
+}
+
+/**
+ * Sanitiza cualquier texto técnico proveniente de un proveedor antes de mostrarlo al cliente final,
+ * ocultando nombres de proveedores (Soluparts, Global, Importadoras) y sus ubicaciones físicas
+ * para evitar bypass comercial.
+ */
+export function sanitizarMensajeHaciaClienteFinal(texto = '') {
+  if (!texto) return '';
+  return String(texto)
+    .replace(/\b(soluparts_ailoo|global_ailoo|soluparts|solupart|global\s+repuestos)\b/gi, 'FácilRepuestos')
+    .replace(/\b(gran\s+avenida(?:\s+parad\.?\s*\d+)?|san\s+bernardo|10\s+de\s+julio|diez\s+de\s+julio|lira\s+\d+)\b/gi, 'Enrique Olivares 224, La Florida, Santiago')
+    .trim();
+}
+
+/**
  * Construye el mensaje comercial listo para enviar al cliente final bajo la marca FácilRepuestos.
+ * Nunca revela qué proveedor tiene el repuesto ni direcciones de terceros; ofrece exclusivamente
+ * Despacho a todo Santiago y Chile o Retiro en Enrique Olivares 224, La Florida, Santiago de Chile.
  */
 export function construirMensajeFinalCliente({
   respuestaTecnica,
@@ -43,7 +83,7 @@ export function construirMensajeFinalCliente({
     `¡Confirmado por nuestro equipo técnico de FácilRepuestos${vehiculoStr ? ` para tu ${vehiculoStr}` : ''}!`,
   ];
   if (respuestaTecnica) {
-    partes.push(respuestaTecnica.trim());
+    partes.push(sanitizarMensajeHaciaClienteFinal(respuestaTecnica));
   }
   if (nombreRepuesto || skuPublicoFrp) {
     partes.push(
@@ -57,6 +97,9 @@ export function construirMensajeFinalCliente({
       `Valor FácilRepuestos: $${neto.toLocaleString('es-CL')} neto ($${conIva.toLocaleString('es-CL')} IVA incluido).`
     );
   }
+  partes.push(
+    'Disponible con despacho a domicilio en Santiago y todo Chile, o retiro en nuestra tienda en Enrique Olivares 224, La Florida, Santiago de Chile.'
+  );
   return partes.join(' ');
 }
 
@@ -109,14 +152,19 @@ export function generarTerminosClave({
  */
 export async function despacharEscalamientoANodoAiloo(nodo, escalamiento) {
   const targetTable = `${nodo.projectId}.${nodo.datasetId}.${nodo.tablaEscalamientos || 'escalamientos'}`;
+  const audioLimpio = sanitizarTextoParaProveedor(escalamiento.transcripcionAudio || '');
+  const mensajeLimpio = sanitizarTextoParaProveedor(escalamiento.mensajeCliente || '');
+  const motivoLimpio = sanitizarTextoParaProveedor(escalamiento.motivoEscalamiento || '');
+
   const contextoVehiculo = [
+    'Solicitante: FácilRepuestos SpA (Mesa Técnica)',
     escalamiento.patente ? `Patente: ${escalamiento.patente}` : null,
     escalamiento.marcaVehiculo ? `Marca: ${escalamiento.marcaVehiculo}` : null,
     escalamiento.modeloVehiculo ? `Modelo: ${escalamiento.modeloVehiculo}` : null,
     escalamiento.anioVehiculo ? `Año: ${escalamiento.anioVehiculo}` : null,
     escalamiento.motorVehiculo ? `Motor: ${escalamiento.motorVehiculo}` : null,
     escalamiento.vinVehiculo ? `VIN: ${escalamiento.vinVehiculo}` : null,
-    escalamiento.transcripcionAudio ? `Audio transcrito: "${escalamiento.transcripcionAudio}"` : null,
+    audioLimpio ? `Audio transcrito (sanitizado): "${audioLimpio}"` : null,
     escalamiento.candidatoCodigo ? `SKU candidato: ${escalamiento.candidatoCodigo} (${escalamiento.candidatoNombre || ''})` : null,
   ]
     .filter(Boolean)
@@ -124,11 +172,12 @@ export async function despacharEscalamientoANodoAiloo(nodo, escalamiento) {
 
   const bqRow = {
     id: escalamiento.id || escalamiento.ticketRef,
-    session_id: escalamiento.sessionId || `frp-${escalamiento.ticketRef}`,
-    canal: 'facilrepuestos',
-    telefono: escalamiento.ticketRef, // Anonimizado para proteger al cliente final de FácilRepuestos
-    mensaje_cliente: escalamiento.mensajeCliente,
-    motivo: escalamiento.motivoEscalamiento,
+    session_id: `frp-${escalamiento.ticketRef}`,
+    canal: 'facilrepuestos_b2b',
+    // NUNCA viaja teléfono ni nombre del cliente final hacia Soluparts/Global; el solicitante es FácilRepuestos
+    telefono: `FÁCILREPUESTOS (${escalamiento.ticketRef})`,
+    mensaje_cliente: mensajeLimpio,
+    motivo: motivoLimpio,
     respuesta_agente: escalamiento.respuestaAgentePreliminar || '',
     contexto: contextoVehiculo,
     estado: 'pendiente',

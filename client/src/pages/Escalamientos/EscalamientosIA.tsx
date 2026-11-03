@@ -786,7 +786,9 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
 
           <div className={styles.formGrid}>
             <div className={styles.fieldGroup}>
-              <label className={styles.fieldLabel}>Pregunta del Cliente Final</label>
+              <label className={styles.fieldLabel}>
+                Consulta Técnica a Escalar (🛡️ Sin Nombre ni Teléfono del Cliente — Solicitante: FácilRepuestos)
+              </label>
               <textarea
                 className={styles.textarea}
                 value={nuevoEsc.mensajeCliente}
@@ -983,6 +985,19 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
                       <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
                         Canal: {esc.canalOrigen.toUpperCase()}
                       </span>
+                      <span
+                        style={{
+                          fontSize: '0.74rem',
+                          fontWeight: 700,
+                          color: '#0f766e',
+                          background: '#f0fdfa',
+                          border: '1px solid #99f6e4',
+                          padding: '2px 8px',
+                          borderRadius: 999,
+                        }}
+                      >
+                        🛡️ Solicitante: FácilRepuestos SpA (Datos de Cliente Ocultos)
+                      </span>
                     </div>
 
                     <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
@@ -1009,9 +1024,11 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
                     )}
                   </div>
 
-                  {/* Consulta del Cliente y Audio Transcrito */}
+                  {/* Consulta Técnica Sanitizada (Sin Nombre ni Teléfono del Cliente) */}
                   <div className={styles.mensajeBox}>
-                    <div className={styles.mensajeLabel}>Consulta del Cliente Final</div>
+                    <div className={styles.mensajeLabel}>
+                      Consulta Técnica Derivada por FácilRepuestos (Sin Nombre ni Teléfono del Cliente Final)
+                    </div>
                     <p className={styles.mensajeText}>"{esc.mensajeCliente}"</p>
                     {esc.transcripcionAudio && (
                       <div

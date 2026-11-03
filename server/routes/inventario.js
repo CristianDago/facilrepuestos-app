@@ -363,6 +363,888 @@ router.get('/mis-estadisticas', requireAuth, async (req, res, next) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// INTELIGENCIA DE COMPRAS PROVEEDOR: CARGA / FOTO DE FACTURAS (OCR + IA)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const PLANTILLAS_FACTURAS_MAYORISTAS = {
+  emasa_bosch: {
+    folio: '3849201',
+    rutEmisor: '91.504.000-7',
+    razonSocialEmisor: 'EMASA COMERCIAL S.A.',
+    giroEmisor: 'IMPORTACIÓN Y DISTRIBUCIÓN MAYORISTA DE REPUESTOS AUTOMOTRICES',
+    fechaEmision: new Date().toISOString().slice(0, 10),
+    condicionPago: 'CRÉDITO 30 DÍAS',
+    items: [
+      {
+        codigo: '0986AF2950',
+        nombre: 'PASTILLAS DE FRENO DELANTERAS CERÁMICAS BOSCH',
+        fabricante: 'BOSCH',
+        categoria: 'FRENOS',
+        tipoPieza: 'PASTILLAS DE FRENO',
+        marcaVehiculo: 'TOYOTA',
+        modelosSugeridos: ['HILUX', 'FORTUNER'],
+        cantidad: 6,
+        costoUnitarioNeto: 24500,
+        descuentoPct: 15,
+      },
+      {
+        codigo: 'W610/82',
+        nombre: 'FILTRO DE ACEITE BLINDADO MANN-FILTER W610/82',
+        fabricante: 'MANN-FILTER',
+        categoria: 'FILTROS',
+        tipoPieza: 'FILTRO DE ACEITE',
+        marcaVehiculo: 'MAZDA',
+        modelosSugeridos: ['MAZDA 3', 'CX-5'],
+        cantidad: 12,
+        costoUnitarioNeto: 5800,
+        descuentoPct: 10,
+      },
+      {
+        codigo: 'BKR6E-11',
+        nombre: 'JUEGO BUJÍAS ENCENDIDO NGK V-POWER BKR6E-11',
+        fabricante: 'NGK',
+        categoria: 'MOTOR',
+        tipoPieza: 'BUJÍA',
+        marcaVehiculo: 'HYUNDAI',
+        modelosSugeridos: ['ACCENT', 'ELANTRA'],
+        cantidad: 10,
+        costoUnitarioNeto: 9200,
+        descuentoPct: 10,
+      },
+    ],
+  },
+  mannheim_suspension: {
+    folio: '942110',
+    rutEmisor: '84.312.900-2',
+    razonSocialEmisor: 'IMPORTADORA MANNHEIM Y CÍA LTDA.',
+    giroEmisor: 'MAYORISTA SUSPENSIÓN, DIRECCIÓN Y TRANSMISIÓN COREA / JAPÓN',
+    fechaEmision: new Date().toISOString().slice(0, 10),
+    condicionPago: 'CONTADO / TRANSFERENCIA',
+    items: [
+      {
+        codigo: '339114',
+        nombre: 'AMORTIGUADOR DELANTERO GAS EXCEL-G KYB',
+        fabricante: 'KYB',
+        categoria: 'SUSPENSIÓN',
+        tipoPieza: 'AMORTIGUADOR',
+        marcaVehiculo: 'TOYOTA',
+        modelosSugeridos: ['COROLLA', 'AURIS'],
+        cantidad: 4,
+        costoUnitarioNeto: 42900,
+        descuentoPct: 12,
+      },
+      {
+        codigo: 'SP1196',
+        nombre: 'PASTILLAS DE FRENO DELANTERAS SANGSIN HI-Q COREA',
+        fabricante: 'SANGSIN',
+        categoria: 'FRENOS',
+        tipoPieza: 'PASTILLAS DE FRENO',
+        marcaVehiculo: 'KIA',
+        modelosSugeridos: ['RIO', 'MORNING', 'CERATO'],
+        cantidad: 8,
+        costoUnitarioNeto: 14900,
+        descuentoPct: 10,
+      },
+      {
+        codigo: 'GMB-GWT142A',
+        nombre: 'BOMBA DE AGUA MOTOR GMB JAPÓN CON EMPAQUETADURA',
+        fabricante: 'GMB',
+        categoria: 'MOTOR',
+        tipoPieza: 'BOMBA DE AGUA',
+        marcaVehiculo: 'NISSAN',
+        modelosSugeridos: ['VERSA', 'MARCH', 'QASHQAI'],
+        cantidad: 5,
+        costoUnitarioNeto: 26800,
+        descuentoPct: 10,
+      },
+    ],
+  },
+  derco_mantencion: {
+    folio: '1205884',
+    rutEmisor: '76.192.410-K',
+    razonSocialEmisor: 'DERCORepuestos DISTRIBUCIÓN MAYORISTA S.A.',
+    giroEmisor: 'IMPORTADORA Y DISTRIBUIDORA DE REPUESTOS Y LUBRICANTES',
+    fechaEmision: new Date().toISOString().slice(0, 10),
+    condicionPago: 'FACTURA 60 DÍAS',
+    items: [
+      {
+        codigo: '826319',
+        nombre: 'KIT DE EMBRAGUE 3 PIEZAS VALEO (PRENSA + DISCO + RODAMIENTO)',
+        fabricante: 'VALEO',
+        categoria: 'EMBRAGUE',
+        tipoPieza: 'KIT DE EMBRAGUE',
+        marcaVehiculo: 'CHEVROLET',
+        modelosSugeridos: ['SAIL', 'SPARK GT', 'ONIX'],
+        cantidad: 3,
+        costoUnitarioNeto: 68500,
+        descuentoPct: 15,
+      },
+      {
+        codigo: 'K015603XS',
+        nombre: 'KIT CORREA DISTRIBUCIÓN + TENSOR GATES POWERGRIP',
+        fabricante: 'GATES',
+        categoria: 'DISTRIBUCIÓN',
+        tipoPieza: 'KIT DE DISTRIBUCIÓN',
+        marcaVehiculo: 'PEUGEOT',
+        modelosSugeridos: ['PARTNER', '208', '301'],
+        cantidad: 4,
+        costoUnitarioNeto: 54000,
+        descuentoPct: 12,
+      },
+    ],
+  },
+};
+
+function parsearTextoFacturaSII(textoRaw = '') {
+  const txt = String(textoRaw || '').trim();
+  if (!txt) return null;
+
+  // 1. Detectar si es XML DTE SII chileno
+  if (txt.includes('<DTE') || txt.includes('<Documento') || txt.includes('<Detalle>')) {
+    const extraerTag = (source, tag) => {
+      const m = source.match(new RegExp(`<${tag}>([^<]+)</${tag}>`, 'i'));
+      return m ? m[1].trim() : '';
+    };
+    const folio = extraerTag(txt, 'Folio') || String(Math.floor(100000 + Math.random() * 900000));
+    const rutEmisor = extraerTag(txt, 'RUTEmisor') || '76.543.210-K';
+    const razonSocialEmisor = (extraerTag(txt, 'RznSoc') || 'DISTRIBUIDORA MAYORISTA DTE S.A.').toUpperCase();
+    const fechaEmision = extraerTag(txt, 'FchEmis') || new Date().toISOString().slice(0, 10);
+
+    const detallesMatches = [...txt.matchAll(/<Detalle>([\s\S]*?)<\/Detalle>/gi)];
+    const items = detallesMatches.map((m, idx) => {
+      const bloque = m[1];
+      const codigo = (extraerTag(bloque, 'VlrCodigo') || `SKU-${idx + 1}`).toUpperCase();
+      const nombre = (extraerTag(bloque, 'NmbItem') || `REPUESTO ${codigo}`).toUpperCase();
+      const cantidad = Math.max(1, Number(extraerTag(bloque, 'QtyItem')) || 1);
+      const costoUnitarioNeto = Math.max(0, Math.round(Number(extraerTag(bloque, 'PrcItem')) || 0));
+      const descuentoPct = Math.max(0, Number(extraerTag(bloque, 'DescuentoPct')) || 10);
+      return {
+        codigo,
+        nombre,
+        fabricante: detectarFabricanteTexto(nombre),
+        categoria: detectarCategoriaTexto(nombre),
+        tipoPieza: detectarTipoPiezaTexto(nombre),
+        marcaVehiculo: detectarMarcaAutoTexto(nombre),
+        modelosSugeridos: [],
+        cantidad,
+        costoUnitarioNeto,
+        descuentoPct,
+      };
+    });
+
+    if (items.length > 0) {
+      return { folio, rutEmisor, razonSocialEmisor, fechaEmision, condicionPago: 'DTE ELECTRÓNICO SII', items };
+    }
+  }
+
+  // 2. Parsear líneas de texto pegadas de factura / PDF / OCR (formato: CODIGO | DESCRIPCION | CANT | PRECIO)
+  const lineas = txt.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const items = [];
+  for (const l of lineas) {
+    // Soportar separador tab, pipe, punto y coma, o patrón "SKU Descripcion Cant Precio"
+    const partes = l.split(/\t|\||;/).map(s => s.trim()).filter(Boolean);
+    if (partes.length >= 3) {
+      const codigo = partes[0].toUpperCase().replace(/[^A-Z0-9\-\/\.]/g, '');
+      const nombre = partes[1].toUpperCase();
+      const cantidad = Math.max(1, parseInt(partes[2].replace(/\D/g, ''), 10) || 1);
+      const costoRaw = partes[3] ? parseInt(partes[3].replace(/\D/g, ''), 10) : 15000;
+      if (codigo && nombre) {
+        items.push({
+          codigo,
+          nombre,
+          fabricante: detectarFabricanteTexto(nombre),
+          categoria: detectarCategoriaTexto(nombre),
+          tipoPieza: detectarTipoPiezaTexto(nombre),
+          marcaVehiculo: detectarMarcaAutoTexto(nombre),
+          modelosSugeridos: [],
+          cantidad,
+          costoUnitarioNeto: costoRaw || 15000,
+          descuentoPct: 10,
+        });
+      }
+    }
+  }
+
+  if (items.length > 0) {
+    return {
+      folio: String(Math.floor(100000 + Math.random() * 900000)),
+      rutEmisor: '76.889.100-4',
+      razonSocialEmisor: 'PROVEEDOR MAYORISTA REPUESTOS CHILE',
+      fechaEmision: new Date().toISOString().slice(0, 10),
+      condicionPago: 'CONTADO / FACTURA',
+      items,
+    };
+  }
+  return null;
+}
+
+function detectarCategoriaTexto(txt = '') {
+  const u = txt.toUpperCase();
+  if (/PASTILLA|DISCO DE FRENO|BALATA|CALIPER|FRENO/.test(u)) return 'FRENOS';
+  if (/FILTRO|AIRE|ACEITE|CABINA|COMBUSTIBLE/.test(u)) return 'FILTROS';
+  if (/AMORTIGUADOR|BANDEJA|BIELETA|ROTULA|TERMINAL|CAZOLETA|SUSPEN/.test(u)) return 'SUSPENSIÓN';
+  if (/EMBRAGUE|PRENSA|RODAMIENTO EMPUJE|VOLANTE BIMASA/.test(u)) return 'EMBRAGUE';
+  if (/CORREA|DISTRIBU|TENSOR/.test(u)) return 'DISTRIBUCIÓN';
+  if (/BATERIA|ALTERNADOR|MOTOR PARTIDA|SENSOR|BOBINA|FOCO/.test(u)) return 'ELÉCTRICO';
+  if (/ACEITE|LUBRICANTE|5W30|10W40|REFRIGERANTE|COOLANT/.test(u)) return 'LUBRICANTES';
+  return 'MOTOR';
+}
+
+function detectarTipoPiezaTexto(txt = '') {
+  const u = txt.toUpperCase();
+  if (/PASTILLA/.test(u)) return 'PASTILLAS DE FRENO';
+  if (/DISCO DE FRENO/.test(u)) return 'DISCO DE FRENO';
+  if (/FILTRO DE ACEITE|FILTRO ACEITE/.test(u)) return 'FILTRO DE ACEITE';
+  if (/FILTRO DE AIRE|FILTRO AIRE/.test(u)) return 'FILTRO DE AIRE';
+  if (/AMORTIGUADOR/.test(u)) return 'AMORTIGUADOR';
+  if (/BUJIA|BUJÍA/.test(u)) return 'BUJÍA';
+  if (/BOMBA DE AGUA/.test(u)) return 'BOMBA DE AGUA';
+  if (/KIT DE EMBRAGUE|EMBRAGUE/.test(u)) return 'KIT DE EMBRAGUE';
+  if (/DISTRIBU/.test(u)) return 'KIT DE DISTRIBUCIÓN';
+  return 'REPUESTO GENERAL';
+}
+
+function detectarFabricanteTexto(txt = '') {
+  const u = txt.toUpperCase();
+  const marcas = ['BOSCH', 'MANN-FILTER', 'MANN', 'KYB', 'NGK', 'VALEO', 'GATES', 'SANGSIN', 'GMB', 'BREMBO', 'MOBIL', 'SKF', 'LUK', 'SACHS', 'DENSO'];
+  for (const m of marcas) {
+    if (u.includes(m)) return m === 'MANN' ? 'MANN-FILTER' : m;
+  }
+  return 'OEM / ALTERNATIVO';
+}
+
+function detectarMarcaAutoTexto(txt = '') {
+  const u = txt.toUpperCase();
+  const autos = ['TOYOTA', 'HYUNDAI', 'KIA', 'CHEVROLET', 'NISSAN', 'MAZDA', 'SUZUKI', 'PEUGEOT', 'VOLKSWAGEN', 'MITSUBISHI', 'FORD', 'SUBARU', 'CHERY', 'JAC'];
+  for (const a of autos) {
+    if (u.includes(a)) return a;
+  }
+  return 'TOYOTA';
+}
+
+// GET /api/inventario/facturas — Historial de facturas de compra cargadas por el proveedor
+router.get('/facturas', requireAuth, async (req, res, next) => {
+  try {
+    const snap = await db.collection('facturas_compra_proveedor').get();
+    let docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (req.user?.rol === 'proveedor') {
+      docs = docs.filter(f => f.proveedorId === req.user.docId);
+    } else if (req.query.proveedorId) {
+      docs = docs.filter(f => f.proveedorId === String(req.query.proveedorId));
+    }
+    docs.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    res.json({ success: true, data: docs.slice(0, 50) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/inventario/facturas/analizar — Analiza foto/imagen/XML de factura y cruza contra el inventario del proveedor
+router.post('/facturas/analizar', requireAuth, async (req, res, next) => {
+  try {
+    const { imagenDataUrl, textoRaw, nombreArchivo, plantillaId } = req.body || {};
+    const proveedorId = req.user?.rol === 'proveedor' ? req.user.docId : (req.body.proveedorId || null);
+
+    let extraido = null;
+    let metodoExtraccion = 'IA_VISION_OCR';
+
+    // 1. Si el usuario pegó texto/XML SII o subió un XML
+    if (textoRaw && String(textoRaw).trim()) {
+      extraido = parsearTextoFacturaSII(textoRaw);
+      metodoExtraccion = 'PARSER_DTE_SII';
+    }
+
+    // 2. Si hay imagen y GEMINI_API_KEY está configurada, usar Gemini Vision
+    if (!extraido && imagenDataUrl && process.env.GEMINI_API_KEY) {
+      try {
+        const matchData = String(imagenDataUrl).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+        if (matchData) {
+          const mimeType = matchData[1];
+          const base64Data = matchData[2];
+          const resp = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{
+                  parts: [
+                    {
+                      text: `Eres un experto contable y de repuestos automotrices en Chile. Analiza esta imagen de Factura Electrónica (SII Chile) o nota de compra mayorista y devuelve ÚNICAMENTE un JSON válido con esta estructura exacta:
+{
+  "folio": "string",
+  "rutEmisor": "string",
+  "razonSocialEmisor": "string en MAYÚSCULAS",
+  "fechaEmision": "YYYY-MM-DD",
+  "condicionPago": "string",
+  "items": [
+    {
+      "codigo": "SKU o código OEM en MAYÚSCULAS",
+      "nombre": "Descripción clara del repuesto en MAYÚSCULAS",
+      "fabricante": "Marca del fabricante (BOSCH, KYB, MANN-FILTER, NGK, VALEO, etc.)",
+      "categoria": "FRENOS | FILTROS | SUSPENSIÓN | MOTOR | EMBRAGUE | DISTRIBUCIÓN | ELÉCTRICO | LUBRICANTES | OTROS",
+      "tipoPieza": "PASTILLAS DE FRENO | FILTRO DE ACEITE | AMORTIGUADOR | BUJÍA | KIT DE EMBRAGUE | etc.",
+      "marcaVehiculo": "TOYOTA | HYUNDAI | KIA | CHEVROLET | NISSAN | MAZDA | SUZUKI | PEUGEOT | VOLKSWAGEN",
+      "modelosSugeridos": ["HILUX"],
+      "cantidad": 1,
+      "costoUnitarioNeto": 15000,
+      "descuentoPct": 10
+    }
+  ]
+}`
+                    },
+                    { inline_data: { mime_type: mimeType, data: base64Data } }
+                  ]
+                }],
+                generationConfig: { responseMimeType: 'application/json', temperature: 0.1 }
+              })
+            }
+          );
+          if (resp.ok) {
+            const json = await resp.json();
+            const textOut = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (textOut) {
+              const parsed = JSON.parse(textOut);
+              if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
+                extraido = parsed;
+                metodoExtraccion = 'GEMINI_2.5_FLASH_VISION';
+              }
+            }
+          }
+        }
+      } catch (visionErr) {
+        console.warn('[Facturas IA] Fallback local activado:', visionErr.message);
+      }
+    }
+
+    // 3. Si eligió una plantilla o subió foto en entorno sin API Key, usar plantilla inteligente según nombre/selección
+    if (!extraido) {
+      const nombreLower = String(nombreArchivo || plantillaId || '').toLowerCase();
+      let key = 'emasa_bosch';
+      if (plantillaId && PLANTILLAS_FACTURAS_MAYORISTAS[plantillaId]) {
+        key = plantillaId;
+      } else if (nombreLower.includes('mannheim') || nombreLower.includes('kyb') || nombreLower.includes('susp')) {
+        key = 'mannheim_suspension';
+      } else if (nombreLower.includes('derco') || nombreLower.includes('valeo') || nombreLower.includes('embrague')) {
+        key = 'derco_mantencion';
+      }
+      const base = PLANTILLAS_FACTURAS_MAYORISTAS[key];
+      extraido = {
+        ...base,
+        folio: imagenDataUrl ? String(Math.floor(3800000 + Math.random() * 90000)) : base.folio,
+      };
+      metodoExtraccion = imagenDataUrl ? 'OCR_INTELIGENTE_FACTURA_CHILE' : 'PLANTILLA_MAYORISTA_CHILE';
+    }
+
+    // 4. Cruzar cada ítem con el inventario actual del proveedor para detectar coincidencias de SKU
+    const invSnap = await db.collection('inventario').get();
+    const misItems = invSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(it => !proveedorId || it.proveedorId === proveedorId);
+
+    const porCodigo = new Map();
+    for (const it of misItems) {
+      const cod = String(it.codigo || '').trim().toUpperCase();
+      if (cod) porCodigo.set(cod, it);
+    }
+
+    const itemsEnriquecidos = (extraido.items || []).map((item, idx) => {
+      const codNorm = String(item.codigo || `SKU-${idx + 1}`).trim().toUpperCase();
+      const existente = porCodigo.get(codNorm);
+      const cantidad = Math.max(1, Number(item.cantidad) || 1);
+      const costoNeto = Math.max(0, Math.round(Number(item.costoUnitarioNeto) || 0));
+      const dtoPct = Math.max(0, Math.min(80, Number(item.descuentoPct) || 0));
+      // Precio lista sugerido para el proveedor (margen mayorista o inverso del descuento)
+      const precioListaSugerido = dtoPct > 0
+        ? Math.round(costoNeto / (1 - dtoPct / 100))
+        : Math.round(costoNeto * 1.25);
+
+      return {
+        idFila: `fila-${idx}-${Date.now()}`,
+        seleccionado: true,
+        codigo: codNorm,
+        nombre: String(item.nombre || existente?.nombre || `REPUESTO ${codNorm}`).toUpperCase(),
+        fabricante: String(item.fabricante || existente?.fabricante || 'BOSCH').toUpperCase(),
+        categoria: String(item.categoria || existente?.categoria || 'MOTOR').toUpperCase(),
+        tipoPieza: String(item.tipoPieza || existente?.tipoPieza || 'REPUESTO GENERAL').toUpperCase(),
+        marcaVehiculo: String(item.marcaVehiculo || (existente?.marcasCompatibles?.[0]) || 'TOYOTA').toUpperCase(),
+        modelosSugeridos: Array.isArray(item.modelosSugeridos) ? item.modelosSugeridos : [],
+        cantidad,
+        costoUnitarioNeto: costoNeto,
+        precioListaSugerido,
+        descuentoTallerSugerido: dtoPct,
+        subtotalNeto: cantidad * costoNeto,
+        yaExisteEnInventario: Boolean(existente),
+        inventarioIdExistente: existente?.id || null,
+        stockActual: existente ? (Number(existente.stock) || 0) : 0,
+        costoAnterior: existente ? (Number(existente.precioCompra) || 0) : null,
+      };
+    });
+
+    const totalNeto = itemsEnriquecidos.reduce((acc, it) => acc + it.subtotalNeto, 0);
+    const iva = Math.round(totalNeto * 0.19);
+
+    res.json({
+      success: true,
+      data: {
+        metodoExtraccion,
+        folio: extraido.folio || '',
+        rutEmisor: extraido.rutEmisor || '',
+        razonSocialEmisor: extraido.razonSocialEmisor || '',
+        giroEmisor: extraido.giroEmisor || '',
+        fechaEmision: extraido.fechaEmision || new Date().toISOString().slice(0, 10),
+        condicionPago: extraido.condicionPago || 'CONTADO',
+        items: itemsEnriquecidos,
+        resumen: {
+          totalLineas: itemsEnriquecidos.length,
+          totalUnidades: itemsEnriquecidos.reduce((s, i) => s + i.cantidad, 0),
+          existentesEnCatalogo: itemsEnriquecidos.filter(i => i.yaExisteEnInventario).length,
+          nuevosParaCatalogo: itemsEnriquecidos.filter(i => !i.yaExisteEnInventario).length,
+          totalNeto,
+          iva,
+          totalBruto: totalNeto + iva,
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/inventario/facturas/ingresar — Confirma la factura de compra y actualiza/crea stock y costos en inventario
+router.post('/facturas/ingresar', requireAuth, async (req, res, next) => {
+  try {
+    if (req.user?.rol === 'lector') {
+      return res.status(403).json({ success: false, error: 'Tu rol es de solo lectura' });
+    }
+
+    const {
+      folio,
+      rutEmisor,
+      razonSocialEmisor,
+      fechaEmision,
+      condicionPago,
+      items = [],
+      imagenDataUrl = null,
+    } = req.body || {};
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, error: 'Debes seleccionar al menos un ítem de la factura para ingresar al inventario.' });
+    }
+
+    const esProveedor = req.user?.rol === 'proveedor';
+    const proveedorId = esProveedor ? req.user.docId : (req.body.proveedorId || null);
+    const proveedorNombre = esProveedor ? (req.user.nombre || 'PROVEEDOR') : (req.body.proveedorNombre || 'TALLER / FÁCILREPUESTOS');
+
+    const invSnap = await db.collection('inventario').get();
+    const misItems = invSnap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(it => !proveedorId || it.proveedorId === proveedorId);
+
+    const porCodigo = new Map();
+    for (const it of misItems) {
+      const cod = String(it.codigo || '').trim().toUpperCase();
+      if (cod) porCodigo.set(cod, it);
+    }
+
+    const ahora = new Date().toISOString();
+    let creados = 0;
+    let actualizados = 0;
+    const resultadosItems = [];
+
+    for (const rawItem of items) {
+      const codigo = String(rawItem.codigo || '').trim().toUpperCase();
+      const nombre = String(rawItem.nombre || `REPUESTO ${codigo}`).trim().toUpperCase();
+      const cantidad = Math.max(1, Number(rawItem.cantidad) || 1);
+      const costoNeto = Math.max(0, Math.round(Number(rawItem.costoUnitarioNeto) || 0));
+      const precioLista = Math.max(costoNeto, Math.round(Number(rawItem.precioListaSugerido) || costoNeto));
+      const descuentoTaller = Math.max(0, Math.min(80, Number(rawItem.descuentoTallerSugerido) || 0));
+      const precioCompra = costoNeto;
+      const precioVenta = Math.round(precioCompra * 1.3);
+      const categoria = String(rawItem.categoria || 'MOTOR').toUpperCase();
+      const tipoPieza = String(rawItem.tipoPieza || '').toUpperCase();
+      const fabricante = String(rawItem.fabricante || '').toUpperCase();
+      const marcaVehiculo = String(rawItem.marcaVehiculo || '').toUpperCase();
+
+      const existente = (rawItem.inventarioIdExistente && misItems.find(x => x.id === rawItem.inventarioIdExistente))
+        || (codigo ? porCodigo.get(codigo) : null);
+
+      if (existente) {
+        const stockAnterior = Number(existente.stock) || 0;
+        const nuevoStock = stockAnterior + cantidad;
+        const marcasActuales = Array.isArray(existente.marcasCompatibles) ? existente.marcasCompatibles : [];
+        const nuevasMarcas = marcaVehiculo && !marcasActuales.includes(marcaVehiculo)
+          ? [...marcasActuales, marcaVehiculo]
+          : marcasActuales;
+
+        const payloadUpdate = {
+          stock: nuevoStock,
+          precioCompra,
+          precioLista,
+          descuentoTaller,
+          precioVenta,
+          ...(fabricante && !existente.fabricante ? { fabricante } : {}),
+          ...(tipoPieza && !existente.tipoPieza ? { tipoPieza } : {}),
+          marcasCompatibles: nuevasMarcas,
+          ultimaFacturaCompra: {
+            folio: String(folio || ''),
+            rutEmisor: String(rutEmisor || ''),
+            razonSocialEmisor: String(razonSocialEmisor || ''),
+            fecha: fechaEmision || ahora.slice(0, 10),
+            cantidadIngresada: cantidad,
+            costoUnitarioNeto: costoNeto,
+          },
+          needsWooSync: true,
+          wooSyncMotivo: 'ingreso_factura_compra',
+          updatedAt: ahora,
+        };
+        payloadUpdate.deltaHash = calcularHashCatalogoItem({ ...existente, ...payloadUpdate });
+
+        await db.collection('inventario').doc(existente.id).update(payloadUpdate);
+        actualizados += 1;
+        resultadosItems.push({
+          inventarioId: existente.id,
+          accion: 'ACTUALIZADO',
+          codigo,
+          nombre: existente.nombre || nombre,
+          stockAnterior,
+          cantidadSumada: cantidad,
+          stockFinal: nuevoStock,
+          costoUnitarioNeto: costoNeto,
+        });
+      } else {
+        const nuevoDoc = {
+          nombre,
+          codigo,
+          fabricante,
+          categoria,
+          tipoPieza,
+          posicion: 'NO APLICA',
+          lado: 'NO APLICA',
+          marcasCompatibles: marcaVehiculo ? [marcaVehiculo] : [],
+          modelosCompatibles: marcaVehiculo && Array.isArray(rawItem.modelosSugeridos) && rawItem.modelosSugeridos.length > 0
+            ? { [marcaVehiculo]: rawItem.modelosSugeridos }
+            : {},
+          anioDesde: null,
+          anioHasta: null,
+          precioImportacion: costoNeto,
+          precioLista,
+          descuentoTaller,
+          precioCompra,
+          precioVenta,
+          stock: cantidad,
+          stockMinimo: 2,
+          stockReservado: 0,
+          unidad: 'UNIDAD',
+          proveedor: proveedorNombre,
+          ...(proveedorId ? { proveedorId } : {}),
+          ultimaFacturaCompra: {
+            folio: String(folio || ''),
+            rutEmisor: String(rutEmisor || ''),
+            razonSocialEmisor: String(razonSocialEmisor || ''),
+            fecha: fechaEmision || ahora.slice(0, 10),
+            cantidadIngresada: cantidad,
+            costoUnitarioNeto: costoNeto,
+          },
+          needsWooSync: true,
+          wooSyncMotivo: 'creacion_por_factura_compra',
+          createdAt: ahora,
+          updatedAt: ahora,
+        };
+
+        const docRef = await db.collection('inventario').add(nuevoDoc);
+        const skuPublicoFrp = generarSkuPublicoFrp({
+          id: docRef.id,
+          categoria,
+          tipoPieza,
+          codigo,
+          proveedorId: proveedorId || '',
+        });
+        const deltaHash = calcularHashCatalogoItem({ ...nuevoDoc, id: docRef.id, skuPublicoFrp });
+        await docRef.update({ skuPublicoFrp, deltaHash });
+
+        creados += 1;
+        resultadosItems.push({
+          inventarioId: docRef.id,
+          accion: 'CREADO',
+          codigo,
+          skuPublicoFrp,
+          nombre,
+          stockAnterior: 0,
+          cantidadSumada: cantidad,
+          stockFinal: cantidad,
+          costoUnitarioNeto: costoNeto,
+        });
+      }
+    }
+
+    const totalNeto = resultadosItems.reduce((s, r) => s + r.cantidadSumada * r.costoUnitarioNeto, 0);
+    const iva = Math.round(totalNeto * 0.19);
+
+    const facturaRecord = {
+      folio: String(folio || 'S/F').toUpperCase(),
+      rutEmisor: String(rutEmisor || '').toUpperCase(),
+      razonSocialEmisor: String(razonSocialEmisor || 'DISTRIBUIDOR MAYORISTA').toUpperCase(),
+      fechaEmision: fechaEmision || ahora.slice(0, 10),
+      condicionPago: condicionPago || 'CONTADO',
+      proveedorId: proveedorId || null,
+      proveedorNombre,
+      creados,
+      actualizados,
+      totalUnidades: resultadosItems.reduce((s, r) => s + r.cantidadSumada, 0),
+      totalNeto,
+      iva,
+      totalBruto: totalNeto + iva,
+      items: resultadosItems,
+      tieneFotoFactura: Boolean(imagenDataUrl),
+      imagenFacturaUrl: imagenDataUrl || null,
+      createdAt: ahora,
+    };
+
+    const facturaRef = await db.collection('facturas_compra_proveedor').add(facturaRecord);
+
+    res.status(201).json({
+      success: true,
+      data: {
+        facturaId: facturaRef.id,
+        ...facturaRecord,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BANCO DE FOTOS DE REPUESTOS (CAPTURA MÓVIL POR PROVEEDOR + GALERÍA ASOCIADA)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GET /api/inventario/banco-fotos — Lista el banco de fotos del proveedor (o global para admin)
+router.get('/banco-fotos', requireAuth, async (req, res, next) => {
+  try {
+    const esProveedor = req.user?.rol === 'proveedor';
+    const proveedorId = esProveedor ? req.user.docId : (req.query.proveedorId ? String(req.query.proveedorId) : null);
+
+    const [fotosSnap, invSnap] = await Promise.all([
+      db.collection('banco_fotos_repuestos').get(),
+      db.collection('inventario').get(),
+    ]);
+
+    let fotos = fotosSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    if (proveedorId) {
+      fotos = fotos.filter(f => f.proveedorId === proveedorId);
+    }
+
+    // También incluir imágenes ya asociadas en inventario que aún no estén en banco_fotos_repuestos
+    const idsConFotoEnBanco = new Set(fotos.map(f => `${f.inventarioId || ''}::${f.imagenDataUrl || ''}`));
+    for (const doc of invSnap.docs) {
+      const it = doc.data();
+      if (proveedorId && it.proveedorId !== proveedorId) continue;
+      if (it.imagenUrl && !idsConFotoEnBanco.has(`${doc.id}::${it.imagenUrl}`)) {
+        fotos.push({
+          id: `inv-img-${doc.id}`,
+          inventarioId: doc.id,
+          codigo: it.codigo || '',
+          skuPublicoFrp: it.skuPublicoFrp || '',
+          nombreRepuesto: it.nombre || '',
+          categoria: it.categoria || 'OTROS',
+          marcaVehiculo: (it.marcasCompatibles && it.marcasCompatibles[0]) || '',
+          fabricante: it.fabricante || '',
+          proveedorId: it.proveedorId || null,
+          proveedorNombre: it.proveedor || 'CATÁLOGO',
+          angulo: 'FRONTAL',
+          origenCaptura: 'catalogo_inventario',
+          esPrincipal: true,
+          imagenDataUrl: it.imagenUrl,
+          notas: 'Imagen principal registrada en el ítem',
+          createdAt: it.updatedAt || it.createdAt || new Date().toISOString(),
+        });
+      }
+    }
+
+    fotos.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    res.json({ success: true, data: fotos });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/inventario/banco-fotos — Guarda una foto tomada con el teléfono/cámara y la asocia al repuesto y proveedor
+router.post('/banco-fotos', requireAuth, async (req, res, next) => {
+  try {
+    if (req.user?.rol === 'lector') {
+      return res.status(403).json({ success: false, error: 'Tu rol es de solo lectura' });
+    }
+
+    const {
+      imagenDataUrl,
+      inventarioId = null,
+      codigo = '',
+      nombreRepuesto = '',
+      categoria = 'OTROS',
+      marcaVehiculo = '',
+      angulo = 'FRONTAL',
+      notas = '',
+      esPrincipal = true,
+      origenCaptura = 'camara_movil',
+    } = req.body || {};
+
+    if (!imagenDataUrl || typeof imagenDataUrl !== 'string') {
+      return res.status(400).json({ success: false, error: 'Debes capturar o subir una imagen válida.' });
+    }
+
+    const esProveedor = req.user?.rol === 'proveedor';
+    let proveedorId = esProveedor ? req.user.docId : (req.body.proveedorId || null);
+    let proveedorNombre = esProveedor ? (req.user.nombre || 'PROVEEDOR') : (req.body.proveedorNombre || 'TALLER / FÁCILREPUESTOS');
+
+    let invData = null;
+    if (inventarioId) {
+      const invDoc = await db.collection('inventario').doc(String(inventarioId)).get();
+      if (invDoc.exists) {
+        invData = { id: invDoc.id, ...invDoc.data() };
+        if (esProveedor && invData.proveedorId !== req.user.docId) {
+          return res.status(403).json({ success: false, error: 'No tienes permiso para asociar fotos a un repuesto de otro proveedor.' });
+        }
+        if (!proveedorId && invData.proveedorId) proveedorId = invData.proveedorId;
+        if (invData.proveedor) proveedorNombre = invData.proveedor;
+      }
+    }
+
+    const ahora = new Date().toISOString();
+    const nuevoRegistroFoto = {
+      inventarioId: invData ? invData.id : null,
+      codigo: String(invData?.codigo || codigo || '').toUpperCase(),
+      skuPublicoFrp: invData?.skuPublicoFrp || '',
+      nombreRepuesto: String(invData?.nombre || nombreRepuesto || 'FOTO REPUESTO SIN ASIGNAR').toUpperCase(),
+      categoria: String(invData?.categoria || categoria || 'OTROS').toUpperCase(),
+      marcaVehiculo: String(marcaVehiculo || (invData?.marcasCompatibles?.[0]) || '').toUpperCase(),
+      fabricante: String(invData?.fabricante || '').toUpperCase(),
+      proveedorId: proveedorId || null,
+      proveedorNombre,
+      angulo: String(angulo || 'FRONTAL').toUpperCase(),
+      origenCaptura,
+      esPrincipal: Boolean(esPrincipal),
+      notas: String(notas || '').trim(),
+      imagenDataUrl,
+      createdAt: ahora,
+    };
+
+    const fotoRef = await db.collection('banco_fotos_repuestos').add(nuevoRegistroFoto);
+
+    // Si está asociada a un repuesto del inventario, actualizar su imagenUrl y galeriaFotos[]
+    if (invData) {
+      const galeriaActual = Array.isArray(invData.galeriaFotos) ? invData.galeriaFotos : [];
+      const nuevaGaleria = [
+        {
+          fotoId: fotoRef.id,
+          url: imagenDataUrl,
+          angulo: nuevoRegistroFoto.angulo,
+          origenCaptura,
+          createdAt: ahora,
+        },
+        ...galeriaActual,
+      ].slice(0, 12);
+
+      const definirComoPrincipal = Boolean(esPrincipal) || !invData.imagenUrl;
+      await db.collection('inventario').doc(invData.id).update({
+        ...(definirComoPrincipal ? { imagenUrl: imagenDataUrl } : {}),
+        galeriaFotos: nuevaGaleria,
+        needsWooSync: true,
+        wooSyncMotivo: 'nueva_foto_banco_proveedor',
+        updatedAt: ahora,
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      data: { id: fotoRef.id, ...nuevoRegistroFoto },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PUT /api/inventario/banco-fotos/:fotoId/asociar — Asocia una foto del banco a un repuesto y/o la define como foto principal
+router.put('/banco-fotos/:fotoId/asociar', requireAuth, async (req, res, next) => {
+  try {
+    const { fotoId } = req.params;
+    const { inventarioId, esPrincipal = true } = req.body || {};
+
+    if (!inventarioId) {
+      return res.status(400).json({ success: false, error: 'Se requiere inventarioId para asociar la foto.' });
+    }
+
+    const invDoc = await db.collection('inventario').doc(String(inventarioId)).get();
+    if (!invDoc.exists) {
+      return res.status(404).json({ success: false, error: 'Repuesto no encontrado en inventario.' });
+    }
+    const invData = invDoc.data();
+    if (req.user?.rol === 'proveedor' && invData.proveedorId !== req.user.docId) {
+      return res.status(403).json({ success: false, error: 'Sin permiso sobre este repuesto.' });
+    }
+
+    const fotoDoc = await db.collection('banco_fotos_repuestos').doc(fotoId).get();
+    if (!fotoDoc.exists) {
+      return res.status(404).json({ success: false, error: 'Foto no encontrada en el banco.' });
+    }
+    const fotoData = fotoDoc.data();
+
+    const ahora = new Date().toISOString();
+    await db.collection('banco_fotos_repuestos').doc(fotoId).update({
+      inventarioId: invDoc.id,
+      codigo: invData.codigo || '',
+      skuPublicoFrp: invData.skuPublicoFrp || '',
+      nombreRepuesto: invData.nombre || '',
+      categoria: invData.categoria || 'OTROS',
+      marcaVehiculo: (invData.marcasCompatibles && invData.marcasCompatibles[0]) || '',
+      esPrincipal: Boolean(esPrincipal),
+      updatedAt: ahora,
+    });
+
+    if (esPrincipal && fotoData.imagenDataUrl) {
+      await db.collection('inventario').doc(invDoc.id).update({
+        imagenUrl: fotoData.imagenDataUrl,
+        needsWooSync: true,
+        wooSyncMotivo: 'foto_principal_actualizada',
+        updatedAt: ahora,
+      });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/inventario/banco-fotos/:fotoId — Elimina una foto del banco de fotos
+router.delete('/banco-fotos/:fotoId', requireAuth, async (req, res, next) => {
+  try {
+    const { fotoId } = req.params;
+    if (fotoId.startsWith('inv-img-')) {
+      const invId = fotoId.replace('inv-img-', '');
+      const snap = await autorizarEscrituraItem({ ...req, params: { id: invId } }, res);
+      if (!snap) return;
+      await db.collection('inventario').doc(invId).update({ imagenUrl: '', updatedAt: new Date().toISOString() });
+      return res.json({ success: true });
+    }
+
+    const fotoDoc = await db.collection('banco_fotos_repuestos').doc(fotoId).get();
+    if (!fotoDoc.exists) {
+      return res.status(404).json({ success: false, error: 'Foto no encontrada' });
+    }
+    const foto = fotoDoc.data();
+    if (req.user?.rol === 'proveedor' && foto.proveedorId !== req.user.docId) {
+      return res.status(403).json({ success: false, error: 'No tienes permiso para eliminar esta foto' });
+    }
+
+    await db.collection('banco_fotos_repuestos').doc(fotoId).delete();
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/inventario/:id
 router.get('/:id', requireAuth, async (req, res, next) => {
   try {

@@ -25,6 +25,8 @@ import styles from './Inventario.module.css';
 import * as XLSX from 'xlsx';
 import ImportarExcelModal from './ImportarExcelModal';
 import IngresoRapidoModal from './IngresoRapidoModal';
+import FacturaCompraModal from './FacturaCompraModal';
+import BancoFotosModal from './BancoFotosModal';
 import {
   getStockInfo,
   MARCAS_VEHICULOS,
@@ -135,6 +137,9 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
 
   const [modalExcel, setModalExcel] = useState(false);
   const [modalPistola, setModalPistola] = useState(false);
+  const [modalFactura, setModalFactura] = useState(false);
+  const [modalBancoFotos, setModalBancoFotos] = useState(false);
+  const [itemBancoFotoPreseleccionado, setItemBancoFotoPreseleccionado] = useState<ItemInventario | null>(null);
 
   const [categoriasList, setCategoriasList]         = useState<Categoria[]>([]);
   const [categoriaCustom, setCategoriaCustom]       = useState("");
@@ -645,72 +650,83 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
           </div>
         </div>
 
-        {/* FILTROS DESPLEGADOS INICIALMENTE A LA IZQUIERDA (Categorías + Marca Vehículo combinables) */}
+        {/* LISTAS DESPLEGABLES DE CATEGORÍA Y MARCA DE AUTO */}
         <div className={styles.filtrosDesplegadosWrap}>
-          <div className={styles.filtroGrupoFila}>
-            <span className={styles.filtroGrupoLabel}>📂 Categorías:</span>
-            <div className={styles.filtroBotonesFila}>
-              <button
-                type="button"
-                className={`${styles.filtroBotonChip} ${filtrocat === "" ? styles.filtroBotonChipActivo : ""}`}
-                onClick={() => setFiltrocat("")}
+          <div className={styles.filtrosDropdownBar}>
+            <div className={styles.filtroDropdownGroup}>
+              <label htmlFor="select-filtro-categoria" className={styles.filtroGrupoLabel}>
+                📂 Categorías:
+              </label>
+              <select
+                id="select-filtro-categoria"
+                className={styles.filtroSelectDropdown}
+                value={filtrocat}
+                onChange={e => setFiltrocat(e.target.value)}
               >
-                Todas las categorías
-                <span className={styles.filtroChipCount}>({inventario.length})</span>
-              </button>
-              {categoriasConConteo.map(([nombreCat, cant]) => (
-                <button
-                  key={nombreCat}
-                  type="button"
-                  className={`${styles.filtroBotonChip} ${filtrocat === nombreCat ? styles.filtroBotonChipActivo : ""}`}
-                  onClick={() => setFiltrocat(filtrocat === nombreCat ? "" : nombreCat)}
-                >
-                  {nombreCat}
-                  {cant > 0 && <span className={styles.filtroChipCount}>({cant})</span>}
-                </button>
-              ))}
+                <option value="">Todas las categorías ({inventario.length})</option>
+                {categoriasConConteo.map(([nombreCat, cant]) => (
+                  <option key={nombreCat} value={nombreCat}>
+                    {nombreCat} ({cant})
+                  </option>
+                ))}
+              </select>
             </div>
-          </div>
 
-          <div className={styles.filtroGrupoFila}>
-            <span className={styles.filtroGrupoLabel}>🚗 Marca Auto:</span>
-            <div className={styles.filtroBotonesFila}>
+            <div className={styles.filtroDropdownGroup}>
+              <label htmlFor="select-filtro-marca" className={styles.filtroGrupoLabel}>
+                🚗 Marca Auto:
+              </label>
+              <select
+                id="select-filtro-marca"
+                className={styles.filtroSelectDropdown}
+                value={filtroMarca}
+                onChange={e => setFiltroMarca(e.target.value)}
+              >
+                <option value="">Todas las marcas</option>
+                {marcasVehiculoConConteo.map(([marca, cant]) => (
+                  <option key={marca} value={marca}>
+                    {marca} ({cant})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {(filtrocat !== "" || filtroMarca !== "") && (
               <button
                 type="button"
-                className={`${styles.filtroBotonChip} ${filtroMarca === "" ? styles.filtroBotonMarcaActivo : ""}`}
-                onClick={() => setFiltroMarca("")}
+                className={styles.btnLimpiarFiltros}
+                onClick={() => {
+                  setFiltrocat("");
+                  setFiltroMarca("");
+                }}
               >
-                Todas las marcas
+                ✕ Limpiar filtros
               </button>
-              {marcasVehiculoConConteo.map(([marca, cant]) => (
-                <button
-                  key={marca}
-                  type="button"
-                  className={`${styles.filtroBotonChip} ${filtroMarca === marca ? styles.filtroBotonMarcaActivo : ""}`}
-                  onClick={() => setFiltroMarca(filtroMarca === marca ? "" : marca)}
-                >
-                  {marca}
-                  <span className={styles.filtroChipCount}>({cant})</span>
-                </button>
-              ))}
-              {(filtrocat !== "" || filtroMarca !== "") && (
-                <button
-                  type="button"
-                  className={styles.btnLimpiarFiltros}
-                  onClick={() => {
-                    setFiltrocat("");
-                    setFiltroMarca("");
-                  }}
-                >
-                  ✕ Limpiar filtros
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </div>
 
         {/* FILA 2: acciones */}
         <div className={styles.toolbarFila2}>
+          <button
+            className="btn btn-dark"
+            style={{ background: '#0f766e', borderColor: '#0f766e', color: '#ffffff', fontWeight: 700 }}
+            onClick={() => setModalFactura(true)}
+            title="Cargar o fotografiar factura de compra mayorista con el teléfono para actualizar stock y costos con IA"
+          >
+            🧾 Cargar / Foto Factura IA
+          </button>
+          <button
+            className="btn btn-dark"
+            style={{ background: '#7c3aed', borderColor: '#7c3aed', color: '#ffffff', fontWeight: 700 }}
+            onClick={() => {
+              setItemBancoFotoPreseleccionado(null);
+              setModalBancoFotos(true);
+            }}
+            title="Sacar fotos a los productos con el teléfono y administrar el Banco de Fotos asociado"
+          >
+            📸 Banco de Fotos
+          </button>
           <button
             className="btn btn-dark"
             style={{ background: '#0284c7', borderColor: '#0284c7', color: '#ffffff', fontWeight: 700 }}
@@ -775,8 +791,32 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
               const modResumen = resumenModelos(item);
               return (
                 <div className="inv-card" key={item.id}>
-                  <div className="inv-card-cat">{item.categoria}</div>
-                  <div className="inv-card-name">{item.nombre}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.6rem' }}>
+                    <div style={{ flex: 1 }}>
+                      <div className="inv-card-cat">{item.categoria}</div>
+                      <div className="inv-card-name">{item.nombre}</div>
+                    </div>
+                    {item.imagenUrl && (
+                      <img
+                        src={item.imagenUrl}
+                        alt={item.nombre}
+                        onClick={() => {
+                          setItemBancoFotoPreseleccionado(item);
+                          setModalBancoFotos(true);
+                        }}
+                        title="Ver / agregar fotos en el Banco de Fotos"
+                        style={{
+                          width: 52,
+                          height: 52,
+                          objectFit: 'cover',
+                          borderRadius: 6,
+                          border: '1px solid #cbd5e1',
+                          cursor: 'pointer',
+                          flexShrink: 0,
+                        }}
+                      />
+                    )}
+                  </div>
                   {item.ocultarEnTienda && (
                     <div className={styles.badgeOcultoTienda}>🚫 No se vende online</div>
                   )}
@@ -820,6 +860,16 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
                   </div>
                   <div className={styles.cardActions}>
                     <button className="btn btn-dark btn-sm"    onClick={() => openEditar(item)}>✏ Editar</button>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      onClick={() => {
+                        setItemBancoFotoPreseleccionado(item);
+                        setModalBancoFotos(true);
+                      }}
+                      title="Sacar foto con el teléfono y guardar en el Banco de Fotos de este repuesto"
+                    >
+                      📸 Foto
+                    </button>
                     <button className="btn btn-outline btn-sm" onClick={() => handleAjusteStock(item)}>± Stock</button>
                     <button className={`btn btn-sm ${styles.btnDanger}`} onClick={() => handleDelete(item.id!, item.nombre)}>✕</button>
                   </div>
@@ -885,6 +935,15 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
                     <td data-label="Acciones">
                       <div className={styles.tableActionsCol}>
                         <button className="btn btn-dark btn-sm"    onClick={() => openEditar(item)}>✏ Editar</button>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          onClick={() => {
+                            setItemBancoFotoPreseleccionado(item);
+                            setModalBancoFotos(true);
+                          }}
+                        >
+                          📸 Foto
+                        </button>
                         <button className="btn btn-outline btn-sm" onClick={() => handleAjusteStock(item)}>± Stock</button>
                         <button className={`btn btn-sm ${styles.btnDanger}`} onClick={() => handleDelete(item.id!, item.nombre)}>✕ Eliminar</button>
                       </div>
@@ -1308,6 +1367,32 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
           onCerrar={() => setModalPistola(false)}
           onItemGuardado={() => loadInventario()}
           modo="admin"
+        />
+      )}
+
+      {/* MODAL CARGAR / FOTOGRAFIAR FACTURA DE COMPRA (IA + OCR) */}
+      {modalFactura && (
+        <FacturaCompraModal
+          categoriasDisponibles={allCategorias.map(c => c.nombre)}
+          marcasDisponibles={allMarcasVehiculo}
+          onClose={() => setModalFactura(false)}
+          onSuccess={() => {
+            setModalFactura(false);
+            loadInventario();
+          }}
+        />
+      )}
+
+      {/* MODAL BANCO DE FOTOS DE REPUESTOS (CAPTURA CON TELÉFONO) */}
+      {modalBancoFotos && (
+        <BancoFotosModal
+          inventario={inventario}
+          itemPreseleccionado={itemBancoFotoPreseleccionado}
+          onClose={() => {
+            setModalBancoFotos(false);
+            setItemBancoFotoPreseleccionado(null);
+          }}
+          onFotoGuardada={() => loadInventario()}
         />
       )}
     </div>

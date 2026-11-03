@@ -46,6 +46,7 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json({
+  limit: '15mb',
   verify: (req, res, buf) => { req.rawBody = buf; },
 }));
 

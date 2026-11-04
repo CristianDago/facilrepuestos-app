@@ -68,8 +68,8 @@ export default function ClientePortal() {
       {/* ── HEADER ────────────────────────────────────────── */}
       <div className="cliente-header">
         <img
-          src="https://storage.googleapis.com/media-drmotors-cl/img/949fd1e0-logo_dr_motors.webp"
-          alt="Dr. Motors"
+          src="/logo-facil-repuestos.webp"
+          alt="Fácil Repuestos"
           className="cliente-logo"
           onError={e => (e.currentTarget.style.display = 'none')}
         />

@@ -16,9 +16,9 @@
   gap: 1rem;
   padding: 1rem 1.35rem;
   border-radius: 16px;
-  background: linear-gradient(135deg, #0f172a 0%, #1e293b 60%, #0f766e 100%);
+  background: linear-gradient(135deg, #0E2744 0%, #13345B 65%, #E94216 100%);
   color: #ffffff;
-  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.14);
+  box-shadow: 0 10px 25px rgba(19, 52, 91, 0.2);
 }
 
 .brandHeader {

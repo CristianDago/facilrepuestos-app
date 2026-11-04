@@ -53,7 +53,7 @@
     letter-spacing: 0.05em;
     text-transform: uppercase;
     background: transparent;
-    color: #888;
+    color: #B4CBE8;
   }
 
   /* ── GLOBO DE NOTIFICACIÓN (citas nuevas) ────────────────── */
@@ -86,7 +86,7 @@
   
   .userName {
     font-size: .82rem;
-    color: #999;
+    color: #B4CBE8;
   }
 
   /* ── BOTÓN HAMBURGUESA — solo mobile ─────────────────────── */

@@ -2,12 +2,12 @@
   height: 100vh;
   overflow-x: hidden;
   overflow-y: auto;   /* html/body tienen overflow:hidden: el scroll vive aquí */
-  background: #ECECEC;
+  background: #F4F6F9;
 }
 
 .header {
-  background: var(--black, #0D0D0D);
-  border-bottom: 2px solid var(--red, #B8172D);
+  background: var(--black, #13345B);
+  border-bottom: 2px solid var(--red, #E94216);
   padding: 0.8rem 1.5rem;
   display: flex;
   align-items: center;
@@ -36,12 +36,12 @@
 
 .headerSub {
   font-size: 0.78rem;
-  color: #999;
+  color: #B4CBE8;
 }
 
 /* ── Menú ─────────────────────────────────────────────── */
 .nav {
-  background: #1A1A1A;
+  background: #0E2744;
   display: flex;
   gap: 0.25rem;
   padding: 0 1.5rem;
@@ -56,7 +56,7 @@
   letter-spacing: 1px;
   text-transform: uppercase;
   text-decoration: none;
-  color: #BBB;
+  color: #B4CBE8;
   border-bottom: 3px solid transparent;
   white-space: nowrap;
   transition: color 0.15s, border-color 0.15s;
@@ -68,7 +68,7 @@
 
 .navLinkActive {
   color: #fff;
-  border-bottom-color: var(--red, #B8172D);
+  border-bottom-color: var(--red, #E94216);
 }
 
 .content {

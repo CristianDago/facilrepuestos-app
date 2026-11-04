@@ -174,9 +174,16 @@ export default function AgenteOmnicanal() {
       {/* ENCABEZADO */}
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>
-            🤖 Cerebro Orquestador — Agente Vendedor Omnicanal (Etapa 4)
-          </h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 8 }}>
+            <img
+              src="/logo-facil-repuestos.webp"
+              alt="Fácil Repuestos"
+              style={{ height: 34, width: 'auto', objectFit: 'contain' }}
+            />
+            <h1 className={styles.title} style={{ margin: 0 }}>
+              🤖 Cerebro Orquestador — Agente Vendedor Omnicanal (Etapa 4)
+            </h1>
+          </div>
           <p className={styles.subtitle}>
             Atiende clientes finales por <strong>WhatsApp Meta</strong> y <strong>Web FácilRepuestos.cl</strong>.
             Resuelve la <strong>Patente</strong> automáticamente, busca en <strong>Conocimiento Aprendido IA</strong> y en el{' '}

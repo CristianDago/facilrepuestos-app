@@ -168,14 +168,14 @@
 }
 
 .filterChipActive {
-  background: #0f172a;
-  border-color: #0f172a;
+  background: #13345B;
+  border-color: #13345B;
   color: #ffffff !important;
 }
 
 .filterChipMarcaActive {
-  background: #15803d;
-  border-color: #15803d;
+  background: #E94216;
+  border-color: #E94216;
   color: #ffffff !important;
 }
 
@@ -244,7 +244,7 @@
 }
 
 .discountModeBtnActive {
-  background: #0f172a;
+  background: #13345B;
   color: #ffffff;
 }
 
@@ -418,7 +418,8 @@
 
 .cartHeader {
   padding: 1rem 1.25rem;
-  background: #0f172a;
+  background: #13345B;
+  border-bottom: 3px solid #E94216;
   color: #ffffff;
   display: flex;
   align-items: center;
@@ -434,7 +435,7 @@
 }
 
 .cartCountBadge {
-  background: #0284c7;
+  background: #E94216;
   color: #ffffff;
   font-size: 0.75rem;
   font-weight: 800;

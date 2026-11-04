@@ -52,8 +52,8 @@
 .statsStrip {
   display: flex;
   gap: 1px;
-  background: #222;
-  border: 1px solid #222;
+  background: #1A4373;
+  border: 1px solid #1A4373;
   overflow: hidden;
 }
 
@@ -62,7 +62,7 @@
   flex-direction: column;
   align-items: center;
   padding: .7rem 1.4rem;
-  background: #111;
+  background: #0E2744;
   min-width: 80px;
 }
 
@@ -299,7 +299,7 @@
 }
 
 .tareaItemMia {
-  background: rgba(184,23,45,.05);
+  background: rgba(233,66,22,.06);
   border-left-color: var(--red);
 }
 

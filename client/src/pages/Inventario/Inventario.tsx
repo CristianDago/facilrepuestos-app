@@ -113,7 +113,7 @@ const emptyItem = (): Omit<ItemInventario, "id"> => ({
 
 // Correo/medio de contacto que se muestra a los proveedores cuando necesitan que el taller
 // agregue una categoría, tipo de pieza o marca de vehículo que no existe en las listas.
-const CONTACTO_TALLER = "taller@drmotors.cl";
+const CONTACTO_TALLER = "contacto@facilrepuestos.cl";
 
 // Nombre automático del repuesto: tipo de pieza + código (como se hacía hasta ahora)
 const autoNombre = (tipo?: string, codigo?: string) =>
@@ -618,7 +618,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
     ws["!cols"] = Object.keys(filasExport[0] || {}).map(k => ({ wch: ANCHOS[k] ?? 14 }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Inventario");
-    XLSX.writeFile(wb, `${esProveedor ? "mis_repuestos" : "inventario_drmotors"}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, `${esProveedor ? "mis_repuestos" : "inventario_facilrepuestos"}_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
   const todasMarcasSeleccionadas = [...(form.marcasCompatibles || []), ...marcasExtra];

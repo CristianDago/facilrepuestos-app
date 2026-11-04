@@ -270,7 +270,11 @@ export default function ChatClienteWeb() {
       {/* Banner Superior */}
       <header className={styles.topBanner}>
         <div className={styles.brandHeader}>
-          <div className={styles.brandAvatar}>🛍️</div>
+          <img
+            src="/logo-facil-repuestos.webp"
+            alt="Fácil Repuestos"
+            style={{ height: 42, width: 'auto', objectFit: 'contain' }}
+          />
           <div>
             <h1 className={styles.brandTitle}>
               Asistente Conversacional FácilRepuestos.cl — Vista Cliente

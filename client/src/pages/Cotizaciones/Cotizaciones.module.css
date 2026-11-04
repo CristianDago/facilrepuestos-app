@@ -67,7 +67,7 @@
 /* ── STAT DESTACADA (Gasto Operacional Total) ───────────── */
 .statCardDestacada {
   border-top-color: var(--dark) !important;
-  background: #1A1A1A;
+  background: #13345B;
 }
 
 .statCardDestacada :global(.stat-value) {

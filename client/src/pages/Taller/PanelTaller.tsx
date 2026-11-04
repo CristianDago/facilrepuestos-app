@@ -26,7 +26,7 @@ interface OrdenPanel {
 interface MecanicoPanel { nombre: string; }
 
 const PUESTO_COLOR: Record<string, string> = {
-  'Elevador 1': '#B8172D',
+  'Elevador 1': '#E94216',
   'Elevador 2': '#D97706',
   'Elevador 3': '#2563EB',
   'Elevador 4': '#15803D',
@@ -112,8 +112,8 @@ export default function PanelTaller() {
       <header className={styles.header}>
         <img
           className={styles.logo}
-          src="https://storage.googleapis.com/media-drmotors-cl/img/949fd1e0-logo_dr_motors.webp"
-          alt="Dr. Motors"
+          src="/logo-facil-repuestos.webp"
+          alt="Fácil Repuestos"
           onError={e => (e.currentTarget.style.display = 'none')}
         />
         <div className={styles.clockBlock}>
@@ -221,7 +221,7 @@ export default function PanelTaller() {
 
       {/* ── EQUIPO ─────────────────────────────────────────── */}
       <div className={styles.equipoCard}>
-        <div className={styles.equipoHeader}>Equipo Dr. Motors</div>
+        <div className={styles.equipoHeader}>Equipo Fácil Repuestos</div>
         <div className={styles.equipoList}>
           {mecanicos.length === 0 && (
             <div className={styles.emptyState}>{loading ? 'Cargando…' : 'Sin mecánicos activos registrados'}</div>

@@ -263,8 +263,8 @@
 
 /* ── DATOS DE LA EMPRESA ─────────────────────────────────── */
 .empresaValor          { font-weight: 500; }
-.empresaValorNombre    { font-weight: 700; color: #8C0E1F; }
-.empresaValorWeb       { font-weight: 500; color: #8C0E1F; }
+.empresaValorNombre    { font-weight: 700; color: #E94216; }
+.empresaValorWeb       { font-weight: 500; color: #E94216; }
 
 /* ── BARRA DE MÉTODO DE PAGO ─────────────────────────────── */
 .pagoBar {

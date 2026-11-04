@@ -42,6 +42,11 @@ export default function TicketTermicoModal({
           {/* El contenedor que captura la impresora térmica */}
           <div className={`${styles.ticketContainer} ${styles.printOnlyArea}`}>
             <div className={styles.ticketHeader}>
+              <img
+                src="/ico-facil-repuestos.webp"
+                alt="Fácil Repuestos"
+                style={{ height: '38px', objectFit: 'contain', margin: '0 auto 4px', display: 'block' }}
+              />
               <div className={styles.localNombre}>{nombreLocal}</div>
               <div className={styles.localSub}>{direccionLocal}</div>
               <div className={styles.dividerDouble} />

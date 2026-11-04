@@ -81,8 +81,8 @@ export default function MainLayout() {
       <aside className={`sidebar ${sidebarOpen ? 'sidebar-open' : ''}`}>
         <div className="sidebar-logo">
           <img
-            src="https://storage.googleapis.com/media-drmotors-cl/img/949fd1e0-logo_dr_motors.webp"
-            alt="Dr.Motors"
+            src="/logo-facil-repuestos.webp"
+            alt="Fácil Repuestos"
             onError={(e) => (e.currentTarget.style.display = "none")}
           />
           <button
@@ -258,7 +258,7 @@ export default function MainLayout() {
         </nav>
 
         <div className="sidebar-bottom">
-          <div className="sidebar-version">Dr. Motors v3.0 · React</div>
+          <div className="sidebar-version">Fácil Repuestos v3.0 · React</div>
         </div>
       </aside>
 
@@ -278,6 +278,12 @@ export default function MainLayout() {
           >
             ☰
           </button>
+          <img
+            src="/logo-facil-repuestos.webp"
+            alt="Fácil Repuestos"
+            className={styles.mobileHeaderLogo}
+            onClick={() => navigate("/")}
+          />
 
           <div className="header-search">
             <div className="search-wrap">

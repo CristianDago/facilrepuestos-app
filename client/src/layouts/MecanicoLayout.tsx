@@ -25,8 +25,8 @@ export default function MecanicoLayout() {
       <header className={styles.header}>
         <div className={styles.headerLeft}>
           <img
-            src="https://storage.googleapis.com/media-drmotors-cl/img/949fd1e0-logo_dr_motors.webp"
-            alt="Dr. Motors" className={styles.logo}
+            src="/logo-facil-repuestos.webp"
+            alt="Fácil Repuestos" className={styles.logo}
             onError={e => (e.currentTarget.style.display = 'none')}
           />
           {/* Nav tabs — escritorio */}

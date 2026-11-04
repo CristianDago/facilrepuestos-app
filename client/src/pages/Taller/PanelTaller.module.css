@@ -2,7 +2,7 @@
   min-height: 100vh;
   height: 100vh;
   overflow-y: auto;
-  background: #0A0A0A;
+  background: #0A1C33;
   color: #EDEDED;
   font-family: 'Barlow', sans-serif;
   padding: 1.4rem 1.8rem 2.5rem;
@@ -13,7 +13,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: linear-gradient(135deg, #1A0508 0%, #0A0A0A 70%);
+  background: linear-gradient(135deg, #13345B 0%, #0A1C33 70%);
   border-bottom: 3px solid var(--red);
   padding: 1rem 1.6rem;
   margin: -1.4rem -1.8rem 1.4rem;
@@ -41,13 +41,13 @@
 
 .date {
   font-size: .85rem;
-  color: #888;
+  color: #93B4DB;
   text-transform: capitalize;
   margin-top: 2px;
 }
 
 .loadingTag {
-  color: #555;
+  color: #7296C0;
 }
 
 /* ── STATS ────────────────────────────────────────────────── */
@@ -59,9 +59,9 @@
 }
 
 .statCard {
-  background: #141414;
-  border: 1px solid #262626;
-  border-top: 3px solid #4B5563;
+  background: #0E2744;
+  border: 1px solid #1A4373;
+  border-top: 3px solid #E94216;
   padding: 1rem 1.2rem;
 }
 
@@ -82,7 +82,7 @@
   font-weight: 700;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: #888;
+  color: #93B4DB;
   margin-top: 4px;
 }
 
@@ -108,8 +108,8 @@
 }
 
 .puestoCard {
-  background: #141414;
-  border: 1px solid #262626;
+  background: #0E2744;
+  border: 1px solid #1A4373;
   min-height: 190px;
   display: flex;
   flex-direction: column;
@@ -142,7 +142,7 @@
 
 .puestoAuto {
   font-size: .78rem;
-  color: #999;
+  color: #B4CBE8;
   margin-top: 1px;
 }
 
@@ -155,7 +155,7 @@
 
 .puestoTareaItem {
   padding-bottom: .5rem;
-  border-bottom: 1px solid #222;
+  border-bottom: 1px solid #1A4373;
 }
 
 .puestoTareaItem:last-child {
@@ -165,7 +165,7 @@
 
 .puestoTarea {
   font-size: .78rem;
-  color: #ccc;
+  color: #E2E8F0;
   line-height: 1.35;
 }
 
@@ -178,7 +178,7 @@
 
 .puestoSinTarea {
   font-size: .74rem;
-  color: #666;
+  color: #7296C0;
   margin-top: .6rem;
   font-style: italic;
 }
@@ -186,14 +186,14 @@
 .puestoLibre {
   font-size: .95rem;
   font-style: italic;
-  color: #444;
+  color: #7296C0;
   text-align: center;
 }
 
 /* ── VEHÍCULOS EN TALLER ──────────────────────────────────── */
 .vehiculosCard {
-  background: #141414;
-  border: 1px solid #262626;
+  background: #0E2744;
+  border: 1px solid #1A4373;
   border-top: 3px solid var(--red);
 }
 
@@ -218,7 +218,7 @@
   align-items: center;
   gap: .7rem;
   padding: .65rem 1rem;
-  border-bottom: 1px solid #1F1F1F;
+  border-bottom: 1px solid #1A4373;
 }
 
 .vehiculoBar {
@@ -245,7 +245,7 @@
 
 .vehiculoMarca {
   font-size: .7rem;
-  color: #888;
+  color: #93B4DB;
 }
 
 .vehiculoBadge {
@@ -257,13 +257,13 @@
   flex-shrink: 0;
 }
 
-.badgeTrabajo    { background: rgba(184,23,45,.18); color: #F87171; }
+.badgeTrabajo    { background: rgba(233,66,22,.2); color: #FF8A65; }
 .badgeIngresado  { background: rgba(217,119,6,.18); color: #FBBF24; }
 .badgeListo      { background: rgba(16,185,129,.18); color: #34D399; }
 
 .vehiculoTiempo {
   font-size: .68rem;
-  color: #666;
+  color: #93B4DB;
   flex-shrink: 0;
   min-width: 60px;
   text-align: right;
@@ -271,8 +271,8 @@
 
 /* ── EQUIPO ───────────────────────────────────────────────── */
 .equipoCard {
-  background: #141414;
-  border: 1px solid #262626;
+  background: #0E2744;
+  border: 1px solid #1A4373;
 }
 
 .equipoHeader {
@@ -283,7 +283,7 @@
   text-transform: uppercase;
   color: #fff;
   padding: .7rem 1rem;
-  border-bottom: 1px solid #262626;
+  border-bottom: 1px solid #1A4373;
 }
 
 .equipoList {
@@ -296,7 +296,7 @@
   align-items: flex-start;
   gap: .8rem;
   padding: .65rem 1.2rem;
-  border-bottom: 1px solid #1F1F1F;
+  border-bottom: 1px solid #1A4373;
   flex-wrap: wrap;
 }
 
@@ -325,7 +325,7 @@
 
 .equipoTarea {
   font-size: .82rem;
-  color: #ccc;
+  color: #E2E8F0;
 }
 
 .equipoBadgeActivo {
@@ -340,13 +340,13 @@
 
 .equipoDisponible {
   font-size: .82rem;
-  color: #555;
+  color: #7296C0;
   font-style: italic;
 }
 
 .equipoTiempo {
   font-size: .72rem;
-  color: #666;
+  color: #93B4DB;
   min-width: 70px;
   text-align: right;
 }
@@ -355,7 +355,7 @@
 .emptyState {
   padding: 2rem 1rem;
   text-align: center;
-  color: #555;
+  color: #7296C0;
   font-size: .85rem;
 }
 
@@ -364,11 +364,11 @@
   display: inline-block;
   margin-top: 1.4rem;
   font-size: .78rem;
-  color: #555;
+  color: #93B4DB;
 }
 
 .volverLink:hover {
-  color: #888;
+  color: #fff;
 }
 
 /* ── RESPONSIVE ───────────────────────────────────────────── */

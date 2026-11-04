@@ -33,8 +33,8 @@ export default function PanelProveedor() {
         <div className={styles.headerLeft}>
           <img
             className={styles.logo}
-            src="https://storage.googleapis.com/media-drmotors-cl/img/949fd1e0-logo_dr_motors.webp"
-            alt="Dr. Motors"
+            src="/logo-facil-repuestos.webp"
+            alt="Fácil Repuestos"
             onError={e => (e.currentTarget.style.display = "none")}
           />
           <div>

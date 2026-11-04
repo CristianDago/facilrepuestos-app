@@ -80,10 +80,10 @@
 
 .filtroSelectDropdown:hover,
 .filtroSelectDropdown:focus {
-  border-color: var(--red, #B8172D);
+  border-color: var(--red, #E94216);
   background-color: #ffffff;
   outline: none;
-  box-shadow: 0 0 0 3px rgba(184, 23, 45, 0.1);
+  box-shadow: 0 0 0 3px rgba(233, 66, 22, 0.12);
 }
 
 .btnLimpiarFiltros {
@@ -332,7 +332,7 @@
 .btnDanger:hover { background: #FECACA; }
 
 /* ── TABLA ──────────────────────────────────────────────── */
-.thReservado { background: #1A1A1A; }
+.thReservado { background: #13345B; }
 
 .emptyTableRow {
   text-align: center;

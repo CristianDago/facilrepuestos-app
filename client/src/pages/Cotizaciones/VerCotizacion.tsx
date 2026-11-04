@@ -64,18 +64,18 @@ export default function VerCotizacion() {
       const texto = encodeURIComponent(
         `Estimado/a ${cot.nombre},\n\n` +
         `Adjuntamos la cotización *${cot.numero}* por un total de *${fmtCLP((cot as any).totalConIva || Math.round(cot.total * 1.19))}* (IVA incluido).\n\n` +
-        `Quedamos atentos a su respuesta.\n\nDr. Motors · +56 9 2740 1059`
+        `Quedamos atentos a su respuesta.\n\nFácil Repuestos · +56 9 2740 1059`
       );
       const tel     = (cot.telefono || '').replace(/[^\d]/g, '');
       const telFull = tel.startsWith('56') ? tel : tel.startsWith('9') ? `56${tel}` : tel;
       window.open(`https://wa.me/${telFull}?text=${texto}`, '_blank');
     } else {
       const to      = encodeURIComponent(cot.email || '');
-      const subject = encodeURIComponent(`Cotización ${cot.numero} - Dr. Motors`);
+      const subject = encodeURIComponent(`Cotización ${cot.numero} - Fácil Repuestos`);
       const body    = encodeURIComponent(
         `Estimado/a ${cot.nombre},\n\n` +
         `Adjuntamos la cotización ${cot.numero} por un total de ${fmtCLP((cot as any).totalConIva || Math.round(cot.total * 1.19))} (IVA incluido).\n\n` +
-        `Quedamos atentos a su respuesta.\n\nDr. Motors\nTeléfono: +56 9 2740 1059\nWeb: www.drmotors.cl`
+        `Quedamos atentos a su respuesta.\n\nFácil Repuestos\nTeléfono: +56 9 2740 1059\nWeb: www.facilrepuestos.cl`
       );
       window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${to}&su=${subject}&body=${body}`, '_blank');
     }
@@ -181,14 +181,14 @@ export default function VerCotizacion() {
       {/* ── DOCUMENTO ──────────────────────────────────────── */}
       <div id="cot-print-area" className={shared.docWrap}>
 
-        {/* Header rojo */}
+        {/* Header corporativo */}
         <div className={shared.docTopbar}>
           <div className={shared.docTitulo}>
             COTIZACIÓN &nbsp;<strong>{cot.numero}</strong>
           </div>
           <img
-            src="https://storage.googleapis.com/media-drmotors-cl/img/949fd1e0-logo_dr_motors.webp"
-            alt="Dr.Motors"
+            src="/logo-facil-repuestos.webp"
+            alt="Fácil Repuestos"
             className={shared.docLogo}
           />
         </div>
@@ -215,12 +215,12 @@ export default function VerCotizacion() {
           <div className={shared.docInfoColRight}>
             <div className={shared.docInfoTitle}>Datos de la Empresa</div>
             {([
-              ['Nombre:',    'Dr Motors'],
+              ['Nombre:',    'Fácil Repuestos'],
               ['Rut:',       '78295655-8'],
               ['Dirección:', 'Enrique Olivares #224'],
               ['Comuna:',    'La Florida'],
               ['Teléfono:',  '+56 9 2740 1059'],
-              ['Web:',       'www.drmotors.cl'],
+              ['Web:',       'www.facilrepuestos.cl'],
             ] as [string, string][]).map(([k, v]) => (
               <div key={k} className={shared.docInfoRow}>
                 <span className={shared.docInfoLabel}>{k}</span>
@@ -360,7 +360,7 @@ export default function VerCotizacion() {
 
         {/* Footer */}
         <div className={shared.docFooter}>
-          www.drmotors.cl &nbsp;·&nbsp; +56 9 2740 1059 &nbsp;·&nbsp; Enrique Olivares #224, La Florida
+          www.facilrepuestos.cl &nbsp;·&nbsp; +56 9 2740 1059 &nbsp;·&nbsp; Enrique Olivares #224, La Florida
         </div>
       </div>
     </div>

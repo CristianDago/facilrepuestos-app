@@ -266,7 +266,7 @@ export default function VerOrden() {
         `Estimado/a ${orden.nombre},\n\n` +
         `Su vehículo *${orden.patente}* está listo. ` +
         `La orden de trabajo *${orden.numero}* tiene un total de *${fmtCLP((orden as any).totalConIva || Math.round(orden.total * 1.19))}* (IVA incluido).\n\n` +
-        `Dr. Motors · +56 9 2740 1059`
+        `Fácil Repuestos · +56 9 2740 1059`
       );
       const tel     = (orden.telefono || '').replace(/[^\d]/g, '');
       const telFull = tel.startsWith('56') ? tel : tel.startsWith('9') ? `56${tel}` : tel;
@@ -274,12 +274,12 @@ export default function VerOrden() {
     } else if (canal === 'Email') {
       const emailCliente = (orden as any).email || '';
       const to      = encodeURIComponent(emailCliente);
-      const subject = encodeURIComponent(`Orden de Trabajo ${orden.numero} - Dr. Motors`);
+      const subject = encodeURIComponent(`Orden de Trabajo ${orden.numero} - Fácil Repuestos`);
       const body    = encodeURIComponent(
         `Estimado/a ${orden.nombre},\n\n` +
         `Le informamos que su vehículo ${orden.patente} está listo.\n` +
         `Orden de trabajo ${orden.numero} · Total: ${fmtCLP((orden as any).totalConIva || Math.round(orden.total * 1.19))} (IVA incluido).\n\n` +
-        `Dr. Motors\nTeléfono: +56 9 2740 1059\nWeb: www.drmotors.cl`
+        `Fácil Repuestos\nTeléfono: +56 9 2740 1059\nWeb: www.facilrepuestos.cl`
       );
       window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${to}&su=${subject}&body=${body}`, '_blank');
     }
@@ -392,8 +392,8 @@ export default function VerOrden() {
             ORDEN DE TRABAJO &nbsp;<strong>{orden.numero}</strong>
           </div>
           <img
-            src="https://storage.googleapis.com/media-drmotors-cl/img/949fd1e0-logo_dr_motors.webp"
-            alt="Dr.Motors"
+            src="/logo-facil-repuestos.webp"
+            alt="Fácil Repuestos"
             className={shared.docLogo}
           />
         </div>
@@ -420,12 +420,12 @@ export default function VerOrden() {
           <div className={shared.docInfoColRight}>
             <div className={shared.docInfoTitle}>Datos de la Empresa</div>
             {([
-              ['Nombre:',    'Dr Motors'],
+              ['Nombre:',    'Fácil Repuestos'],
               ['Rut:',       '78295655-8'],
               ['Dirección:', 'Enrique Olivares #224'],
               ['Comuna:',    'La Florida'],
               ['Teléfono:',  '+56 9 2740 1059'],
-              ['Web:',       'www.drmotors.cl'],
+              ['Web:',       'www.facilrepuestos.cl'],
             ] as [string, string][]).map(([k, v]) => (
               <div key={k} className={shared.docInfoRow}>
                 <span className={shared.docInfoLabel}>{k}</span>
@@ -609,7 +609,7 @@ export default function VerOrden() {
 
         {/* Footer */}
         <div className={shared.docFooter}>
-          www.drmotors.cl &nbsp;·&nbsp; +56 9 2740 1059 &nbsp;·&nbsp; Enrique Olivares #224, La Florida
+          www.facilrepuestos.cl &nbsp;·&nbsp; +56 9 2740 1059 &nbsp;·&nbsp; Enrique Olivares #224, La Florida
         </div>
       </div>
     </div>

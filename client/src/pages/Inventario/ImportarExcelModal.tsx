@@ -232,7 +232,7 @@ export default function ImportarExcelModal({ inventarioActual, onClose, onSucces
     wsInstr["!cols"] = [{ wch: 16 }, { wch: 70 }, { wch: 35 }];
     XLSX.utils.book_append_sheet(wb, wsInstr, "Instrucciones");
 
-    XLSX.writeFile(wb, "plantilla_inventario_drmotors.xlsx");
+    XLSX.writeFile(wb, "plantilla_inventario_facilrepuestos.xlsx");
   };
 
   // ─── PARSEAR ARCHIVO ─────────────────────────────────────

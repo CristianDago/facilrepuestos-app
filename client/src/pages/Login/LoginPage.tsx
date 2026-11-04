@@ -223,8 +223,8 @@ export default function LoginPage() {
         <div className={styles.logoWrap}>
           <img
             className={styles.logo}
-            src="https://storage.googleapis.com/media-drmotors-cl/img/949fd1e0-logo_dr_motors.webp"
-            alt="Dr. Motors"
+            src="/logo-facil-repuestos.webp"
+            alt="Fácil Repuestos"
             onError={e => (e.currentTarget.style.display = 'none')}
           />
         </div>
@@ -291,7 +291,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 className="btn btn-sm btn-dark"
-                onClick={() => loginDev('admin', 'Taller Dr. Motors')}
+                onClick={() => loginDev('admin', 'Fácil Repuestos')}
               >
                 🛠 Entrar como Admin
               </button>
@@ -307,7 +307,7 @@ export default function LoginPage() {
         )}
 
         <div className={styles.cardFooter}>
-          <span className={styles.version}>Dr. Motors © 2025</span>
+          <span className={styles.version}>Fácil Repuestos © 2026</span>
         </div>
 
       </div>

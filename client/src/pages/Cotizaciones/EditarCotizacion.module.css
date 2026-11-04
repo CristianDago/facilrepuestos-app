@@ -79,7 +79,7 @@
 .invItemCard {
   padding: 10px 14px;
   cursor: pointer;
-  border-bottom: 1px solid #1A1A1A;
+  border-bottom: 1px solid #1A4373;
   border-left: 3px solid transparent;
   background: transparent;
   display: flex;
@@ -87,4 +87,4 @@
   align-items: center;
 }
 .invItemCard.atiende       { border-left-color: var(--success); background: #0D1A0F; }
-.invItemCard.seleccionado  { background: #2A1A1C; }
+.invItemCard.seleccionado  { background: rgba(233, 66, 22, 0.2); }

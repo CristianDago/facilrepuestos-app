@@ -68,11 +68,6 @@ export default function App() {
           {/* Laboratorio completo con traza y escenarios de prueba */}
           <Route path="/chat-cliente" element={<ChatClienteWeb />} />
 
-          {/* Si se abre desde la URL pública de Cloud Run / enlace externo, la raíz "/" abre directo a Repuestín limpio */}
-          {esDominioAgenteCloudRun && (
-            <Route path="/" element={<ChatbotWidgetFlotante modoPaginaLimpia={true} />} />
-          )}
-
           {/* Mecánico (y Administrativo, misma interfaz) */}
           <Route path="/mecanico" element={
             <ProtectedRoute roles={['mecanico', 'admin', 'administrativo']}>
@@ -96,39 +91,43 @@ export default function App() {
             <Route path="estadisticas"  element={<EstadisticasProveedor />} />
           </Route>
 
-          {/* Admin */}
-          <Route path="/" element={
-            <ProtectedRoute roles={['admin']}>
-              <MainLayout />
-            </ProtectedRoute>
-          }>
-            <Route index                           element={<Dashboard />} />
-            <Route path="cotizaciones"             element={<Cotizaciones />} />
-            <Route path="cotizaciones/nueva"       element={<NuevaCotizacion />} />
-            <Route path="cotizaciones/:id/editar"  element={<EditarCotizacion />} />
-            <Route path="cotizaciones/:id/ver"     element={<VerCotizacion />} />
-            <Route path="ordenes"                  element={<OrdenesTrabajo />} />
-            <Route path="ordenes/nueva"            element={<NuevaOrden />} />
-            <Route path="ordenes/:id/editar"       element={<EditarOrden />} />
-            <Route path="ordenes/:id/ver"          element={<VerOrden />} />
-            <Route path="vehiculos"                element={<Vehiculos />} />
-            <Route path="vehiculos/:patente"       element={<PerfilVehiculo />} />
-            <Route path="inventario"               element={<Inventario />} />
-            <Route path="proveedores"              element={<Proveedores />} />
-            <Route path="agente-omnicanal"         element={<AgenteOmnicanal />} />
-            <Route path="chat-cliente"             element={<ChatClienteWeb />} />
-            <Route path="escalamientos-ia"         element={<EscalamientosIA modo="admin" />} />
-            <Route path="mesa-wsp"                 element={<MesaCotizacionWsp />} />
-            <Route path="costos-fijos"             element={<CostosFijos />} />
-            <Route path="mantenimiento"            element={<Mantenimiento />} />
-            <Route path="trabajadores"             element={<Trabajadores />} />
-            <Route path="estadisticas"             element={<Estadisticas />} />
-            <Route path="configuracion"            element={<Configuracion />} />
-            <Route path="calendario"               element={<Calendario />} />
-            <Route path="pos"                      element={<ProveedorPOS />} />
-          </Route>
+          {/* En el dominio público de Cloud Run, la raíz "/" abre directo a Repuestín sin pasar por ProtectedRoute */}
+          {esDominioAgenteCloudRun ? (
+            <Route path="/" element={<ChatbotWidgetFlotante modoPaginaLimpia={true} />} />
+          ) : (
+            <Route path="/" element={
+              <ProtectedRoute roles={['admin']}>
+                <MainLayout />
+              </ProtectedRoute>
+            }>
+              <Route index                           element={<Dashboard />} />
+              <Route path="cotizaciones"             element={<Cotizaciones />} />
+              <Route path="cotizaciones/nueva"       element={<NuevaCotizacion />} />
+              <Route path="cotizaciones/:id/editar"  element={<EditarCotizacion />} />
+              <Route path="cotizaciones/:id/ver"     element={<VerCotizacion />} />
+              <Route path="ordenes"                  element={<OrdenesTrabajo />} />
+              <Route path="ordenes/nueva"            element={<NuevaOrden />} />
+              <Route path="ordenes/:id/editar"       element={<EditarOrden />} />
+              <Route path="ordenes/:id/ver"          element={<VerOrden />} />
+              <Route path="vehiculos"                element={<Vehiculos />} />
+              <Route path="vehiculos/:patente"       element={<PerfilVehiculo />} />
+              <Route path="inventario"               element={<Inventario />} />
+              <Route path="proveedores"              element={<Proveedores />} />
+              <Route path="agente-omnicanal"         element={<AgenteOmnicanal />} />
+              <Route path="chat-cliente"             element={<ChatClienteWeb />} />
+              <Route path="escalamientos-ia"         element={<EscalamientosIA modo="admin" />} />
+              <Route path="mesa-wsp"                 element={<MesaCotizacionWsp />} />
+              <Route path="costos-fijos"             element={<CostosFijos />} />
+              <Route path="mantenimiento"            element={<Mantenimiento />} />
+              <Route path="trabajadores"             element={<Trabajadores />} />
+              <Route path="estadisticas"             element={<Estadisticas />} />
+              <Route path="configuracion"            element={<Configuracion />} />
+              <Route path="calendario"               element={<Calendario />} />
+              <Route path="pos"                      element={<ProveedorPOS />} />
+            </Route>
+          )}
 
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          <Route path="*" element={<Navigate to={esDominioAgenteCloudRun ? '/repuestin' : '/login'} replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

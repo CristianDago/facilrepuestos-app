@@ -39,6 +39,7 @@ import EscalamientosIA      from './pages/Escalamientos/EscalamientosIA';
 import MesaCotizacionWsp    from './pages/MesaWsp/MesaCotizacionWsp';
 import AgenteOmnicanal      from './pages/AgenteOmnicanal/AgenteOmnicanal';
 import ChatClienteWeb       from './pages/ChatClienteWeb/ChatClienteWeb';
+import ChatbotWidgetFlotante from './components/ChatbotWidget/ChatbotWidgetFlotante';
 import Mantenimiento     from './pages/Mantenimiento/Mantenimiento';
 
 export default function App() {
@@ -60,6 +61,7 @@ export default function App() {
           <Route path="/asistente"    element={<ChatClienteWeb />} />
           <Route path="/agente"       element={<ChatClienteWeb />} />
           <Route path="/chat-cliente" element={<ChatClienteWeb />} />
+          <Route path="/widget-chat"  element={<ChatbotWidgetFlotante modoIframeEmbebido={true} />} />
 
           {/* Si se abre desde la URL pública de Cloud Run Web, la raíz "/" abre directo el Agente para Clientes */}
           {esDominioAgenteCloudRun && (

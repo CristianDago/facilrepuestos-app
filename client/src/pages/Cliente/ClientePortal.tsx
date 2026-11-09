@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import ChatbotWidgetFlotante from '../../components/ChatbotWidget/ChatbotWidgetFlotante';
 import styles from './ClientePortal.module.css';
 
 interface OTPublica {
@@ -186,6 +187,9 @@ export default function ClientePortal() {
       <div className="cliente-page-footer">
         <a href="/login" className="cliente-login-link">Acceso para personal →</a>
       </div>
+
+      {/* ── BOTÓN Y CHATBOT FLOTANTE DE REPUESTOS IA ──────── */}
+      <ChatbotWidgetFlotante patenteInicial={buscado || patente} />
     </div>
   );
 }

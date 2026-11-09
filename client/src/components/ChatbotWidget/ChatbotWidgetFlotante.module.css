@@ -1,0 +1,496 @@
+.floatingRoot {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 9999;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.launcherBtn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #1b4f8c 0%, #0f2d52 60%, #e85d04 140%);
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  padding: 13px 20px;
+  font-size: 0.94rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 12px 28px rgba(15, 45, 82, 0.35), 0 4px 10px rgba(232, 93, 4, 0.25);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.launcherBtn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 32px rgba(15, 45, 82, 0.45);
+}
+
+.launcherIcon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.launcherText {
+  white-space: nowrap;
+}
+
+.unreadBadge {
+  background: #e85d04;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+}
+
+.chatWindow {
+  position: fixed;
+  right: 22px;
+  bottom: 84px;
+  width: 390px;
+  max-width: calc(100vw - 28px);
+  height: 590px;
+  max-height: calc(100vh - 115px);
+  background: #ffffff;
+  border-radius: 18px;
+  box-shadow: 0 22px 48px rgba(15, 23, 42, 0.28);
+  border: 1px solid #cbd5e1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: popIn 0.18s ease-out;
+}
+
+.chatWindowIframe {
+  width: 100%;
+  height: 100vh;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.header {
+  background: linear-gradient(135deg, #0f2d52 0%, #1b4f8c 100%);
+  color: #ffffff;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 3px solid #e85d04;
+}
+
+.headerBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatarWrap {
+  position: relative;
+  width: 38px;
+  height: 38px;
+  background: #ffffff;
+  border-radius: 50%;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatarImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.onlineBadge {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 10px;
+  height: 10px;
+  background: #22c55e;
+  border: 2px solid #0f2d52;
+  border-radius: 50%;
+}
+
+.headerTitle {
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.headerSubtitle {
+  font-size: 0.72rem;
+  color: #cbd5e1;
+  margin-top: 2px;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cartHeaderBtn {
+  background: #e85d04;
+  color: #ffffff;
+  border: none;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.iconBtn {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.iconBtn:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.vehicleStrip {
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 7px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.patenteInputBox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.patenteLabel {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #334155;
+}
+
+.patenteInput {
+  width: 82px;
+  padding: 3px 7px;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  border: 1.5px solid #94a3b8;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #0f172a;
+  letter-spacing: 0.05em;
+}
+
+.vehicleDetectedPill {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #047857;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.vehicleHint {
+  font-size: 0.68rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.cartDrawer {
+  background: #f0fdf4;
+  border-bottom: 2px solid #16a34a;
+  padding: 10px 12px;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.cartDrawerHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+  color: #065f46;
+  margin-bottom: 8px;
+}
+
+.closeCartBtn {
+  background: transparent;
+  border: 1px solid #059669;
+  color: #065f46;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.cartItemsList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.cartItemCard {
+  background: #ffffff;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.cartItemTop {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #0f172a;
+  gap: 8px;
+}
+
+.cartItemSub {
+  font-size: 0.68rem;
+  color: #475569;
+  margin-top: 2px;
+}
+
+.cartDeliveryBox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.deliveryToggleRow {
+  display: flex;
+  gap: 6px;
+}
+
+.deliveryBtn,
+.deliveryBtnActive {
+  flex: 1;
+  padding: 5px 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+}
+
+.deliveryBtnActive {
+  background: #0f2d52;
+  color: #ffffff;
+  border-color: #0f2d52;
+}
+
+.comunaField {
+  padding: 5px 8px;
+  font-size: 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.cartTotalRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.84rem;
+  color: #065f46;
+  padding-top: 2px;
+}
+
+.confirmOrderBtn {
+  background: #16a34a;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.messagesBody {
+  flex: 1;
+  padding: 12px;
+  overflow-y: auto;
+  background: #f1f5f9;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.loadingState {
+  text-align: center;
+  font-size: 0.82rem;
+  color: #64748b;
+  padding: 24px 12px;
+}
+
+.rowCliente {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rowAgente {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.bubbleCliente {
+  max-width: 84%;
+  background: #1b4f8c;
+  color: #ffffff;
+  padding: 9px 12px;
+  border-radius: 14px 14px 3px 14px;
+  font-size: 0.83rem;
+  line-height: 1.4;
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.08);
+}
+
+.bubbleAgente {
+  max-width: 88%;
+  background: #ffffff;
+  color: #0f172a;
+  padding: 10px 12px;
+  border-radius: 14px 14px 14px 3px;
+  border: 1px solid #e2e8f0;
+  font-size: 0.82rem;
+  line-height: 1.42;
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.05);
+}
+
+.msgText {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.msgTime {
+  font-size: 0.64rem;
+  opacity: 0.7;
+  text-align: right;
+  margin-top: 4px;
+}
+
+.typingBubble {
+  background: #ffffff;
+  color: #475569;
+  font-size: 0.76rem;
+  font-style: italic;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px dashed #cbd5e1;
+}
+
+.quickChipsRow {
+  display: flex;
+  gap: 6px;
+  padding: 7px 10px;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  overflow-x: auto;
+}
+
+.quickChip {
+  white-space: nowrap;
+  background: #f1f5f9;
+  color: #1e293b;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.quickChip:hover {
+  background: #e2e8f0;
+}
+
+.quickChipBuy {
+  white-space: nowrap;
+  background: #dcfce7;
+  color: #065f46;
+  border: 1px solid #86efac;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.inputBar {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+}
+
+.textInput {
+  flex: 1;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 9px 14px;
+  font-size: 0.84rem;
+  outline: none;
+}
+
+.textInput:focus {
+  border-color: #1b4f8c;
+}
+
+.sendButton {
+  background: #e85d04;
+  color: #ffffff;
+  border: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sendButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

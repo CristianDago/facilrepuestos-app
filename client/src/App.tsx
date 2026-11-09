@@ -47,6 +47,8 @@ export default function App() {
     import.meta.env.VITE_PUBLIC_AGENT_ONLY === 'true' ||
     (typeof window !== 'undefined' &&
       (window.location.hostname.endsWith('.run.app') ||
+        window.location.hostname.endsWith('.trycloudflare.com') ||
+        window.location.hostname.endsWith('.lhr.life') ||
         window.location.hostname.startsWith('asistente.') ||
         window.location.hostname.startsWith('agente.')));
 
@@ -58,14 +60,17 @@ export default function App() {
           <Route path="/login"        element={<LoginPage />} />
           <Route path="/cliente"      element={<ClientePortal />} />
           <Route path="/taller"       element={<PanelTaller />} />
-          <Route path="/asistente"    element={<ChatClienteWeb />} />
-          <Route path="/agente"       element={<ChatClienteWeb />} />
-          <Route path="/chat-cliente" element={<ChatClienteWeb />} />
+          {/* Chatbot limpio de Repuestín para compartir con clientes */}
+          <Route path="/repuestin"    element={<ChatbotWidgetFlotante modoPaginaLimpia={true} />} />
+          <Route path="/asistente"    element={<ChatbotWidgetFlotante modoPaginaLimpia={true} />} />
+          <Route path="/agente"       element={<ChatbotWidgetFlotante modoPaginaLimpia={true} />} />
           <Route path="/widget-chat"  element={<ChatbotWidgetFlotante modoIframeEmbebido={true} />} />
+          {/* Laboratorio completo con traza y escenarios de prueba */}
+          <Route path="/chat-cliente" element={<ChatClienteWeb />} />
 
-          {/* Si se abre desde la URL pública de Cloud Run Web, la raíz "/" abre directo el Agente para Clientes */}
+          {/* Si se abre desde la URL pública de Cloud Run / enlace externo, la raíz "/" abre directo a Repuestín limpio */}
           {esDominioAgenteCloudRun && (
-            <Route path="/" element={<ChatClienteWeb />} />
+            <Route path="/" element={<ChatbotWidgetFlotante modoPaginaLimpia={true} />} />
           )}
 
           {/* Mecánico (y Administrativo, misma interfaz) */}

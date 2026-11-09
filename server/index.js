@@ -60,6 +60,9 @@ app.use(cors({
       ALLOWED_ORIGINS.includes(origin) ||
       /\.run\.app$/.test(origin) ||
       /\.web\.app$/.test(origin) ||
+      /\.trycloudflare\.com$/.test(origin) ||
+      /\.lhr\.life$/.test(origin) ||
+      /\.loca\.lt$/.test(origin) ||
       /\.facilrepuestos\.cl$/.test(origin)
     ) {
       return callback(null, true);

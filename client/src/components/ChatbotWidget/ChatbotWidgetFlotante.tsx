@@ -6,6 +6,8 @@ import styles from './ChatbotWidgetFlotante.module.css';
 interface ChatbotWidgetFlotanteProps {
   /** Si es true, se muestra desplegado a pantalla completa dentro de un iframe (/widget-chat) */
   modoIframeEmbebido?: boolean;
+  /** Si es true, se muestra como página limpia centrada para compartir por link directo (/repuestin, /asistente) */
+  modoPaginaLimpia?: boolean;
   /** Si es true, el botón flotante inicia con el chat abierto */
   abiertoPorDefecto?: boolean;
   /** Patente pre-cargada desde el Portal Cliente */
@@ -16,10 +18,11 @@ const STORAGE_KEY_SESION_CLIENTE = 'frp_widget_cliente_sesion_id_v1';
 
 export default function ChatbotWidgetFlotante({
   modoIframeEmbebido = false,
+  modoPaginaLimpia = false,
   abiertoPorDefecto = false,
   patenteInicial = '',
 }: ChatbotWidgetFlotanteProps) {
-  const [abierto, setAbierto] = useState(modoIframeEmbebido || abiertoPorDefecto);
+  const [abierto, setAbierto] = useState(modoIframeEmbebido || modoPaginaLimpia || abiertoPorDefecto);
   const [sesion, setSesion] = useState<SesionAgenteOmnicanal | null>(null);
   const [cargandoSesion, setCargandoSesion] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -176,7 +179,15 @@ export default function ChatbotWidgetFlotante({
   );
 
   const renderVentanaChat = () => (
-    <div className={modoIframeEmbebido ? styles.chatWindowIframe : styles.chatWindow}>
+    <div
+      className={
+        modoPaginaLimpia
+          ? styles.chatWindowCleanPage
+          : modoIframeEmbebido
+          ? styles.chatWindowIframe
+          : styles.chatWindow
+      }
+    >
       {/* Cabecera Corporativa FácilRepuestos */}
       <div className={styles.header}>
         <div className={styles.headerBrand}>
@@ -185,9 +196,9 @@ export default function ChatbotWidgetFlotante({
             <span className={styles.onlineBadge} />
           </div>
           <div>
-            <div className={styles.headerTitle}>Asistente FácilRepuestos.cl</div>
+            <div className={styles.headerTitle}>Repuestín · FácilRepuestos.cl</div>
             <div className={styles.headerSubtitle}>
-              Cotiza por Patente, OEM o Modelo · En línea
+              Especialista en Repuestos · Cotiza por Patente, OEM o Modelo
             </div>
           </div>
         </div>
@@ -207,12 +218,12 @@ export default function ChatbotWidgetFlotante({
             type="button"
             className={styles.iconBtn}
             onClick={reiniciarConversacion}
-            title="Nueva consulta"
+            title="Nueva conversación"
             disabled={enviando}
           >
             ↻
           </button>
-          {!modoIframeEmbebido && (
+          {!modoIframeEmbebido && !modoPaginaLimpia && (
             <button
               type="button"
               className={styles.iconBtn}
@@ -423,6 +434,14 @@ export default function ChatbotWidgetFlotante({
       </form>
     </div>
   );
+
+  if (modoPaginaLimpia) {
+    return (
+      <div className={styles.cleanPageBackdrop}>
+        {renderVentanaChat()}
+      </div>
+    );
+  }
 
   if (modoIframeEmbebido) {
     return renderVentanaChat();

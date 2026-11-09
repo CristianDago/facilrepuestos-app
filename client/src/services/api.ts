@@ -1,6 +1,7 @@
 import { getAuth } from 'firebase/auth';
 
-const BASE_URL = `${import.meta.env.VITE_API_URL}/api`;
+const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
+const BASE_URL = `${API_ORIGIN}/api`;
 
 // Obtiene el token del usuario autenticado (Firebase o sesión local de desarrollo)
 async function getAuthHeaders(): Promise<Record<string, string>> {

@@ -1,6 +1,12 @@
 import express from 'express';
 import cors from 'cors';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import 'dotenv/config';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
 
 import vehiculosRouter            from './routes/vehiculos.js';
 import cotizacionesRouter         from './routes/cotizaciones.js';
@@ -34,14 +40,32 @@ import { requireAuth, requireStaff, requireAdmin, chain } from './middleware/aut
 const app  = express();
 const PORT = process.env.PORT || 3001;
 
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:3001',
+  'http://localhost:8080',
+  'https://facilrepuestos-prod.web.app',
+  'https://facilrepuestos-prod.firebaseapp.com',
+  'https://sistema.facilrepuestos.cl',
+  'https://facilrepuestos.cl',
+  'https://www.facilrepuestos.cl',
+  'https://asistente.facilrepuestos.cl',
+];
+
 app.use(cors({
-  origin: [
-    'http://localhost:5173',
-    'http://localhost:5174',
-    'https://facilrepuestos-prod.web.app',
-    'https://facilrepuestos-prod.firebaseapp.com',
-    'https://sistema.facilrepuestos.cl',
-  ],
+  origin: (origin, callback) => {
+    if (
+      !origin ||
+      ALLOWED_ORIGINS.includes(origin) ||
+      /\.run\.app$/.test(origin) ||
+      /\.web\.app$/.test(origin) ||
+      /\.facilrepuestos\.cl$/.test(origin)
+    ) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
@@ -114,6 +138,21 @@ app.use('/api/mesa-wsp',      mesaWspRouter);
 app.use('/api/agente-omnicanal', agenteOmnicanalRouter);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
+
+// ─── SERVICIO WEB CLOUD RUN (FRONTEND ESTÁTICO EMBEBIDO PARA EL AGENTE CLIENTES) ───
+const publicCandidates = [
+  path.join(__dirname, 'public'),
+  path.join(__dirname, '../client/dist'),
+];
+const staticDir = publicCandidates.find((dir) => fs.existsSync(path.join(dir, 'index.html')));
+
+if (staticDir) {
+  app.use(express.static(staticDir));
+  app.get(/^(?!\/api\/|\/auth\/).*/, (req, res) => {
+    res.sendFile(path.join(staticDir, 'index.html'));
+  });
+}
+
 app.use(errorHandler);
 
 app.listen(PORT, () => console.log(`✓ Servidor corriendo en http://localhost:${PORT}`));

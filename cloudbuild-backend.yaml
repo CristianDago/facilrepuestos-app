@@ -1,6 +1,6 @@
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/facilrepuestos-api', './server']
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/facilrepuestos-api', '.']
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'gcr.io/$PROJECT_ID/facilrepuestos-api']
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -9,6 +9,19 @@ steps:
       - 'run'
       - 'deploy'
       - 'facilrepuestos-api'
+      - '--image=gcr.io/$PROJECT_ID/facilrepuestos-api'
+      - '--region=southamerica-west1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--port=8080'
+      - '--set-secrets=FIREBASE_SERVICE_ACCOUNT=facilrepuestos-firebase-credentials:latest'
+      - '--set-env-vars=FIREBASE_PROJECT_ID=facilrepuestos-prod'
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'facilrepuestos-agente-web'
       - '--image=gcr.io/$PROJECT_ID/facilrepuestos-api'
       - '--region=southamerica-west1'
       - '--platform=managed'

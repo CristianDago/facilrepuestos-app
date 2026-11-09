@@ -1,0 +1,7 @@
+**/node_modules
+**/.git
+**/.DS_Store
+client/dist
+client/.env.local
+server/.env
+server/.local-db.json

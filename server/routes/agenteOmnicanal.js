@@ -1914,8 +1914,9 @@ async function ejecutarCascadaAgenteOmnicanal({
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/agente-omnicanal/sesiones
 // Lista todas las sesiones de conversación del Agente Vendedor Omnicanal
+// Público para permitir el Portal Web de Consultas de Clientes en Cloud Run
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/sesiones', requireAuth, async (req, res, next) => {
+router.get('/sesiones', async (req, res, next) => {
   try {
     await asegurarDatosInicialesAgente();
     const snap = await db.collection(COLECCION_SESIONES_AGENTE).get();
@@ -1939,7 +1940,7 @@ router.get('/sesiones', requireAuth, async (req, res, next) => {
 // POST /api/agente-omnicanal/sesiones
 // Crea una nueva sesión de cliente (Web o WhatsApp)
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/sesiones', requireAuth, async (req, res, next) => {
+router.post('/sesiones', async (req, res, next) => {
   try {
     const {
       canal = 'web_cliente',
@@ -1994,7 +1995,7 @@ router.post('/sesiones', requireAuth, async (req, res, next) => {
 // Envía un mensaje del cliente final (texto, audio, foto o patente) y ejecuta
 // la cascada completa con las mejoras de Luna
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/sesiones/:id/mensaje', requireAuth, async (req, res, next) => {
+router.post('/sesiones/:id/mensaje', async (req, res, next) => {
   try {
     const { id } = req.params;
     const {
@@ -2086,7 +2087,7 @@ router.post('/sesiones/:id/mensaje', requireAuth, async (req, res, next) => {
 // Genera o confirma el pago simulado de un pedido en la Vista Web Cliente
 // (sin necesitar tarjeta de crédito real ni link de pago externo)
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/sesiones/:id/checkout-simulado', requireAuth, async (req, res, next) => {
+router.post('/sesiones/:id/checkout-simulado', async (req, res, next) => {
   try {
     const { id } = req.params;
     const {
@@ -2202,7 +2203,7 @@ router.post('/sesiones/:id/checkout-simulado', requireAuth, async (req, res, nex
 // Mesa WhatsApp (Etapa 3) o el Especialista (Etapa 1) acaba de responder,
 // inyectando la respuesta directamente en el chat del cliente final
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/sesiones/:id/simular-respuesta-proveedor', requireAuth, async (req, res, next) => {
+router.post('/sesiones/:id/simular-respuesta-proveedor', async (req, res, next) => {
   try {
     const { id } = req.params;
     const docRef = db.collection(COLECCION_SESIONES_AGENTE).doc(id);
@@ -2342,7 +2343,7 @@ router.post('/sesiones/:id/simular-respuesta-proveedor', requireAuth, async (req
 // POST /api/agente-omnicanal/patente
 // Resuelve rápidamente una patente chilena para previsualización en la consola
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/patente', requireAuth, async (req, res, next) => {
+router.post('/patente', async (req, res, next) => {
   try {
     const { patente = '' } = req.body;
     const vehiculo = await resolverVehiculoOmnicanal({ patenteInput: patente });

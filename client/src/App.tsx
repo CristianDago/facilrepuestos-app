@@ -42,14 +42,29 @@ import ChatClienteWeb       from './pages/ChatClienteWeb/ChatClienteWeb';
 import Mantenimiento     from './pages/Mantenimiento/Mantenimiento';
 
 export default function App() {
+  const esDominioAgenteCloudRun =
+    import.meta.env.VITE_PUBLIC_AGENT_ONLY === 'true' ||
+    (typeof window !== 'undefined' &&
+      (window.location.hostname.endsWith('.run.app') ||
+        window.location.hostname.startsWith('asistente.') ||
+        window.location.hostname.startsWith('agente.')));
+
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Públicas */}
-          <Route path="/login"   element={<LoginPage />} />
-          <Route path="/cliente" element={<ClientePortal />} />
-          <Route path="/taller"  element={<PanelTaller />} />
+          {/* Públicas (Acceso directo sin login para clientes) */}
+          <Route path="/login"        element={<LoginPage />} />
+          <Route path="/cliente"      element={<ClientePortal />} />
+          <Route path="/taller"       element={<PanelTaller />} />
+          <Route path="/asistente"    element={<ChatClienteWeb />} />
+          <Route path="/agente"       element={<ChatClienteWeb />} />
+          <Route path="/chat-cliente" element={<ChatClienteWeb />} />
+
+          {/* Si se abre desde la URL pública de Cloud Run Web, la raíz "/" abre directo el Agente para Clientes */}
+          {esDominioAgenteCloudRun && (
+            <Route path="/" element={<ChatClienteWeb />} />
+          )}
 
           {/* Mecánico (y Administrativo, misma interfaz) */}
           <Route path="/mecanico" element={

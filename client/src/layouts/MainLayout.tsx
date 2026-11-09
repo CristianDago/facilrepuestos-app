@@ -161,6 +161,15 @@ export default function MainLayout() {
               <span className="nav-icon">🏭</span> Proveedores
             </NavLink>
             <NavLink
+              to="/proveedor"
+              onClick={closeSidebar}
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+            >
+              <span className="nav-icon">🏪</span> Portal Proveedor
+            </NavLink>
+            <NavLink
               to="/agente-omnicanal"
               onClick={closeSidebar}
               className={({ isActive }) =>

@@ -42,7 +42,18 @@ export default function PanelProveedor() {
             <div className={styles.headerSub}>{user?.nombre}</div>
           </div>
         </div>
-        <button className="btn btn-dark btn-sm" onClick={handleLogout}>Salir</button>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          {user?.rol === "admin" && (
+            <button
+              className="btn btn-sm"
+              style={{ background: "#2563eb", color: "#fff", border: "none" }}
+              onClick={() => navigate("/")}
+            >
+              ← Panel Admin
+            </button>
+          )}
+          <button className="btn btn-dark btn-sm" onClick={handleLogout}>Salir</button>
+        </div>
       </div>
 
       <nav className={styles.nav}>

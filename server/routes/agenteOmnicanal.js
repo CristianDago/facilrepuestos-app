@@ -1428,12 +1428,26 @@ async function ejecutarCascadaAgenteOmnicanal({
         let scoreRepuesto = 0;
         let scoreVehiculo = 0;
 
+        const codigosEquivalentesStr = Array.isArray(item.equivalencias)
+          ? item.equivalencias.map((e) => `${e.fabricante || ''} ${e.codigo || ''}`).join(' ')
+          : '';
+        const modelosDictStr =
+          item.modelosCompatibles && typeof item.modelosCompatibles === 'object' && !Array.isArray(item.modelosCompatibles)
+            ? Object.values(item.modelosCompatibles)
+                .flat()
+                .map((m) => String(m))
+                .join(' ')
+            : '';
+
         const textoItem = [
           item.nombre,
           item.descripcion,
           item.categoria,
           item.tipoPieza,
           item.codigo,
+          item.codigoProducto,
+          codigosEquivalentesStr,
+          modelosDictStr,
           item.skuPublicoFrp,
           item.fabricante,
         ]
@@ -1455,11 +1469,15 @@ async function ejecutarCascadaAgenteOmnicanal({
               .filter(Boolean);
         const modelosItem = Array.isArray(item.modelosCompatibles)
           ? item.modelosCompatibles.map((m) => String(m).toUpperCase())
-          : String(item.modelosCompatibles || '')
-              .toUpperCase()
-              .split(/[,;/]+/)
-              .map((s) => s.trim())
-              .filter(Boolean);
+          : item.modelosCompatibles && typeof item.modelosCompatibles === 'object'
+            ? Object.values(item.modelosCompatibles)
+                .flat()
+                .map((m) => String(m).toUpperCase())
+            : String(item.modelosCompatibles || '')
+                .toUpperCase()
+                .split(/[,;/]+/)
+                .map((s) => s.trim())
+                .filter(Boolean);
 
         if (vehiculo?.marca && vehiculo.marca !== 'MULTIMARCA') {
           if (marcasItem.includes(vehiculo.marca) || textoItem.includes(vehiculo.marca)) {

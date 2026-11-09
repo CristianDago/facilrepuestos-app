@@ -12,8 +12,39 @@ export const inventarioService = {
     api.get<ApiResponse<{
       encontrado: boolean;
       origen: 'inventario_existente' | 'nuevo_sugerido';
-      item: Partial<ItemInventario> & { esMio?: boolean; fuenteInfo?: string };
+      item: Partial<ItemInventario> & {
+        esMio?: boolean;
+        fuenteInfo?: string;
+        codigoOemRaiz?: string;
+        esCodigoBarrasNumerico?: boolean;
+        motoresCompatibles?: string[];
+      };
     }>>(`/inventario/lookup/${encodeURIComponent(codigo)}`),
+
+  analizarCodigoProducto: (payload: {
+    codigoProducto?: string;
+    codigoBarras?: string;
+    nombreEtiqueta?: string;
+    imagenDataUrl?: string;
+  }) =>
+    api.post<ApiResponse<{
+      metodoAnalisis: string;
+      codigoBarras: string;
+      codigoProducto: string;
+      codigoOemRaiz: string;
+      nombre: string;
+      fabricante: string;
+      origen: string;
+      categoria: string;
+      tipoPieza: string;
+      marcasCompatibles: string[];
+      modelosCompatibles: { [marca: string]: string[] };
+      anioDesde: number | null;
+      anioHasta: number | null;
+      motoresCompatibles: string[];
+      equivalencias: Array<{ fabricante: string; codigo: string }>;
+      descripcion: string;
+    }>>('/inventario/analizar-codigo-producto', payload),
 
   create: (data: Omit<ItemInventario, 'id'>) =>
     api.post<ApiResponse<{ id: string }>>('/inventario', data),

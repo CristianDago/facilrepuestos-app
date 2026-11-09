@@ -2,9 +2,10 @@ import { Router } from 'express';
 import { db } from '../config/firebase.js';
 import { requireAuth, requireAdmin, requireAuthOrLector, ROL_LECTOR_DRPARTES } from '../middleware/auth.js';
 import { eliminarProductoDeWooCommerce } from '../services/woocommerceSync.js';
-import { buscarRepuestoPorCodigo } from '../services/partLookup.js';
+import { buscarRepuestoPorCodigo, analizarCodigoProductoAutomotriz } from '../services/partLookup.js';
 import { generarSkuPublicoFrp } from '../services/ailooBridge.js';
 import { calcularHashCatalogoItem } from '../services/ailooCatalogSync.js';
+import { limpiarReservasMostradorExpiradas } from './pos.js';
 
 const router = Router();
 
@@ -46,6 +47,7 @@ function itemParaLector(doc, proveedor) {
     proveedorNombre:   proveedor.nombre,
     nombre:            d.nombre,
     codigo:            d.codigo || '',
+    codigoProducto:    d.codigoProducto || '',
     fabricante:        d.fabricante || '',
     equivalencias:     d.equivalencias || [],
     categoria:         d.categoria,
@@ -101,6 +103,7 @@ function vistaParaProveedor(item) {
 // GET /api/inventario
 router.get('/', requireAuthOrLector, async (req, res, next) => {
   try {
+    await limpiarReservasMostradorExpiradas();
     const snap = await db.collection('inventario')
       .orderBy('createdAt', 'desc')
       .get();
@@ -141,6 +144,24 @@ router.get('/lookup/:codigo', requireAuth, async (req, res, next) => {
     const { codigo } = req.params;
     const proveedorId = req.user?.rol === 'proveedor' ? req.user.docId : null;
     const resultado = await buscarRepuestoPorCodigo(codigo, proveedorId);
+    res.json({ success: true, data: resultado });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/inventario/analizar-codigo-producto
+// Decodifica el Código de Producto (OEM / Fabricante, ej: 13420-65D00TW), texto de etiqueta
+// y/o foto de la caja para extraer marcas, múltiples modelos compatibles, origen, categoría y cruces OEM
+router.post('/analizar-codigo-producto', requireAuth, async (req, res, next) => {
+  try {
+    const { codigoProducto, codigoBarras, nombreEtiqueta, imagenDataUrl } = req.body || {};
+    const resultado = await analizarCodigoProductoAutomotriz({
+      codigoProducto,
+      codigoBarras,
+      nombreEtiqueta,
+      imagenDataUrl,
+    });
     res.json({ success: true, data: resultado });
   } catch (error) {
     next(error);

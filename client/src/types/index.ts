@@ -200,7 +200,8 @@ export const ORIGENES_REPUESTO = [
 export interface ItemInventario {
   id?: string;
   nombre: string;
-  codigo: string;
+  codigo: string;               // SKU / Código de barras para pistoleo de existencias (ej: 5812495152509)
+  codigoProducto?: string;      // Código real del producto / Nº de Parte OEM (ej: 13420-65D00TW)
   fabricante: string;           // En pantalla se muestra como "Marca del repuesto"
   origen?: string;              // País de origen del repuesto (ej: JAPÓN, CHINA)
   descripcion?: string;         // Descripción libre del repuesto

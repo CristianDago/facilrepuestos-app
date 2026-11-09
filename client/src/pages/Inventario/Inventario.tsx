@@ -46,7 +46,7 @@ const MODELOS_POR_MARCA: { [marca: string]: string[] } = {
   'VOLKSWAGEN':    ['GOL','POLO','GOLF','PASSAT','TIGUAN','TERAMONT','AMAROK','VIRTUS','T-CROSS','TAOS'],
   'MAZDA':         ['MAZDA2','MAZDA3','MAZDA6','CX-3','CX-5','CX-9','BT-50','CX-30'],
   'HONDA':         ['FIT','CIVIC','ACCORD','CR-V','HR-V','PILOT','WR-V','ZR-V','ODYSSEY'],
-  'SUZUKI':        ['SWIFT','BALENO','VITARA','GRAND VITARA','JIMNY','S-CROSS','ERTIGA'],
+  'SUZUKI':        ['SWIFT','BALENO','VITARA','GRAND VITARA','AERIO','JIMNY','IGNIS','S-CROSS','ERTIGA','CARRY','ALTO','SX4','NOMADE'],
   'MITSUBISHI':    ['LANCER','OUTLANDER','ASX','L200','MONTERO','ECLIPSE CROSS','GALANT'],
   'SUBARU':        ['IMPREZA','LEGACY','FORESTER','OUTBACK','XV','WRX','CROSSTREK'],
   'BMW':           ['SERIE 1','SERIE 3','SERIE 5','SERIE 7','X1','X3','X5','X6','X7','M3','M5'],
@@ -85,6 +85,7 @@ const conIva = (neto: number) => Math.round((neto || 0) * 1.19);
 const emptyItem = (): Omit<ItemInventario, "id"> => ({
   nombre:             "",
   codigo:             "",
+  codigoProducto:     "",
   fabricante:         "",
   origen:             "",
   descripcion:        "",
@@ -301,6 +302,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
     setForm({
       nombre:             item.nombre            || "",
       codigo:             item.codigo            || "",
+      codigoProducto:     item.codigoProducto    || "",
       fabricante:         item.fabricante        || "",
       origen:             item.origen            || "",
       descripcion:        item.descripcion       || "",
@@ -503,13 +505,16 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
 
   const filtered = inventario.filter(i => {
     const q = search.toLowerCase();
+    const modelosFlat = Object.values(i.modelosCompatibles || {}).flat().join(" ").toLowerCase();
     const matchSearch = !q
       || i.nombre.toLowerCase().includes(q)
       || (i.codigo || "").toLowerCase().includes(q)
+      || (i.codigoProducto || "").toLowerCase().includes(q)
       || (i.skuPublicoFrp || "").toLowerCase().includes(q)
       || (i.fabricante || "").toLowerCase().includes(q)
       || (i.origen || "").toLowerCase().includes(q)
       || (i.descripcion || "").toLowerCase().includes(q)
+      || modelosFlat.includes(q)
       || (i.equivalencias || []).some((e: Equivalencia) => (`${e.fabricante} ${e.codigo}`).toLowerCase().includes(q))
       || (i.proveedor || "").toLowerCase().includes(q)
       || (i.tipoPieza || "").toLowerCase().includes(q)
@@ -840,7 +845,13 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
                   )}
                   {modResumen && <div className={styles.cardModelos}>🚗 {modResumen}</div>}
                   {(item.anioDesde || item.anioHasta) && <div className={styles.cardAnios}>Años: {item.anioDesde||"?"} — {item.anioHasta||"actual"}</div>}
-                  {item.codigo    && <div className={styles.cardCodigo}>Código: {item.codigo}</div>}
+                  {item.codigo && <div className={styles.cardCodigo}>🔫 SKU/Barra: {item.codigo}</div>}
+                  {item.codigoProducto && (
+                    <div className={styles.cardCodigo} style={{ color: '#0369a1', fontWeight: 800 }}>
+                      🔩 Cód. Producto (OEM): {item.codigoProducto}
+                      {item.origen ? ` · ${item.origen}` : ''}
+                    </div>
+                  )}
                   {!esProveedor && item.skuPublicoFrp && (
                     <div style={{ fontSize: '0.73rem', fontFamily: 'monospace', color: '#0369a1', fontWeight: 700, marginTop: 2 }}>
                       SKU Público: {item.skuPublicoFrp}{' '}
@@ -902,7 +913,12 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
                   <tr key={item.id}>
                     <td data-label="Nombre">
                       <div className={styles.itemNombre}>{item.nombre}</div>
-                      {item.codigo && <div className={styles.itemCodigo}>{item.codigo}</div>}
+                      {item.codigo && <div className={styles.itemCodigo}>🔫 SKU: {item.codigo}</div>}
+                      {item.codigoProducto && (
+                        <div className={styles.itemCodigo} style={{ color: '#0369a1', fontWeight: 700 }}>
+                          🔩 OEM: {item.codigoProducto}
+                        </div>
+                      )}
                       {isLow && <div className={styles.itemStockBajo}>⚠ Stock bajo</div>}
                       {item.ocultarEnTienda && (
                         <div className={styles.badgeOcultoTienda}>🚫 No se vende online</div>
@@ -974,8 +990,114 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
                 <div className={styles.hintText}>Opcional: si lo dejas vacío se genera con el tipo de pieza y el código.</div>
               </div>
               <div className="field">
-                <label>Código / Referencia</label>
-                <input value={form.codigo} onChange={e => cambiarCodigoOTipo("codigo", e.target.value.toUpperCase())} placeholder="UJ1680" />
+                <label>🔫 SKU / Código de Barras (Control Stock Pistola)</label>
+                <input
+                  value={form.codigo}
+                  onChange={e => cambiarCodigoOTipo("codigo", e.target.value.toUpperCase())}
+                  placeholder="Ej: 5812495152509"
+                />
+                <div className={styles.hintText}>Código para agregar y descontar existencias con lector de barras.</div>
+              </div>
+              <div className="field">
+                <label>🔩 Código de Producto / Nº Parte OEM</label>
+                <div className={styles.addRow} style={{ marginTop: 0 }}>
+                  <input
+                    value={form.codigoProducto || ""}
+                    onChange={e => setField("codigoProducto", e.target.value.toUpperCase())}
+                    onKeyDown={async (e) => {
+                      if (e.key === "Enter" && (form.codigoProducto || "").trim()) {
+                        e.preventDefault();
+                        try {
+                          const r = await inventarioService.analizarCodigoProducto({
+                            codigoProducto: form.codigoProducto,
+                            codigoBarras: form.codigo,
+                            nombreEtiqueta: form.nombre,
+                          });
+                          if (r.success && r.data) {
+                            const d = r.data;
+                            setForm(prev => ({
+                              ...prev,
+                              codigoProducto: d.codigoProducto || prev.codigoProducto,
+                              nombre: d.nombre || prev.nombre,
+                              fabricante: d.fabricante || prev.fabricante,
+                              origen: d.origen || prev.origen,
+                              categoria: d.categoria && d.categoria !== "OTROS" ? d.categoria : prev.categoria,
+                              tipoPieza: d.tipoPieza || prev.tipoPieza,
+                              marcasCompatibles: d.marcasCompatibles?.length ? d.marcasCompatibles : prev.marcasCompatibles,
+                              modelosCompatibles: Object.keys(d.modelosCompatibles || {}).length ? d.modelosCompatibles : prev.modelosCompatibles,
+                              anioDesde: d.anioDesde ?? prev.anioDesde,
+                              anioHasta: d.anioHasta ?? prev.anioHasta,
+                              equivalencias: d.equivalencias?.length ? d.equivalencias : prev.equivalencias,
+                              descripcion: d.descripcion || prev.descripcion,
+                            }));
+                            if (d.equivalencias?.length) {
+                              const fabs = [...new Set(d.equivalencias.map(eq => eq.fabricante))];
+                              setEqPanel(fabs);
+                            }
+                            if (d.marcasCompatibles?.length) {
+                              const exp: { [m: string]: boolean } = {};
+                              d.marcasCompatibles.forEach(m => { exp[m] = true; });
+                              setMarcasExpandidas(exp);
+                            }
+                            notify(`Metadata extraída desde ${d.codigoProducto} ✓`, "success");
+                          }
+                        } catch {
+                          notify("Error al analizar código de producto", "error");
+                        }
+                      }
+                    }}
+                    placeholder="Ej: 13420-65D00TW"
+                    className={styles.addInput}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-dark btn-sm"
+                    title="Extraer marca, múltiples modelos compatibles, origen y categoría desde el Código de Producto OEM"
+                    disabled={!(form.codigoProducto || form.nombre || "").trim()}
+                    onClick={async () => {
+                      try {
+                        const r = await inventarioService.analizarCodigoProducto({
+                          codigoProducto: form.codigoProducto,
+                          codigoBarras: form.codigo,
+                          nombreEtiqueta: form.nombre,
+                        });
+                        if (r.success && r.data) {
+                          const d = r.data;
+                          setForm(prev => ({
+                            ...prev,
+                            codigoProducto: d.codigoProducto || prev.codigoProducto,
+                            nombre: d.nombre || prev.nombre,
+                            fabricante: d.fabricante || prev.fabricante,
+                            origen: d.origen || prev.origen,
+                            categoria: d.categoria && d.categoria !== "OTROS" ? d.categoria : prev.categoria,
+                            tipoPieza: d.tipoPieza || prev.tipoPieza,
+                            marcasCompatibles: d.marcasCompatibles?.length ? d.marcasCompatibles : prev.marcasCompatibles,
+                            modelosCompatibles: Object.keys(d.modelosCompatibles || {}).length ? d.modelosCompatibles : prev.modelosCompatibles,
+                            anioDesde: d.anioDesde ?? prev.anioDesde,
+                            anioHasta: d.anioHasta ?? prev.anioHasta,
+                            equivalencias: d.equivalencias?.length ? d.equivalencias : prev.equivalencias,
+                            descripcion: d.descripcion || prev.descripcion,
+                          }));
+                          if (d.equivalencias?.length) {
+                            const fabs = [...new Set(d.equivalencias.map(eq => eq.fabricante))];
+                            setEqPanel(fabs);
+                          }
+                          if (d.marcasCompatibles?.length) {
+                            const exp: { [m: string]: boolean } = {};
+                            d.marcasCompatibles.forEach(m => { exp[m] = true; });
+                            setMarcasExpandidas(exp);
+                          }
+                          notify(`Metadata OEM extraída: ${d.marcasCompatibles.join(", ")} ✓`, "success");
+                        }
+                      } catch {
+                        notify("Error al analizar código de producto", "error");
+                      }
+                    }}
+                  >
+                    🧠 OEM
+                  </button>
+                </div>
+                <div className={styles.hintText}>Código real de la pieza que define compatibilidad y modelos de autos.</div>
               </div>
               <div className="field">
                 <label>Marca del Repuesto</label>

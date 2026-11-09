@@ -4,6 +4,7 @@ export interface ItemVentaPOS {
   id: string;
   nombre: string;
   codigo?: string;
+  codigoProducto?: string;
   fabricante?: string;
   precioNeto: number;
   precioConIva: number;
@@ -28,6 +29,7 @@ export interface VentaPOSPayload {
     id: string;
     nombre: string;
     codigo?: string;
+    codigoProducto?: string;
     precioNeto: number;
     cantidad: number;
   }>;
@@ -52,6 +54,7 @@ export interface VentaPOSRegistrada {
     id: string;
     nombre: string;
     codigo?: string;
+    codigoProducto?: string;
     precioNeto: number;
     cantidad: number;
   }>;
@@ -69,10 +72,40 @@ export interface VentaPOSRegistrada {
   estado: string;
 }
 
+export interface SesionMostradorPOS {
+  id: string;
+  estado: 'ACTIVA';
+  items: ItemVentaPOS[];
+  cliente?: ClientePOS;
+  metodoPago?: MetodoPagoPOS;
+  descuentoTipo?: 'PORCENTAJE' | 'MONTO';
+  descuentoValor?: number;
+  creadoEn: string;
+  actualizadoEn: string;
+  expiraEn: string;
+  segundosRestantes: number;
+}
+
 export const posService = {
   registrarVenta: (payload: VentaPOSPayload) =>
     api.post<{ success: boolean; data: VentaPOSRegistrada }>('/pos/venta', payload),
 
   obtenerVentas: () =>
     api.get<{ success: boolean; data: VentaPOSRegistrada[] }>('/pos/ventas'),
+
+  obtenerMostrador: () =>
+    api.get<{ success: boolean; data: SesionMostradorPOS | null }>('/pos/mostrador'),
+
+  sincronizarMostrador: (payload: {
+    items: ItemVentaPOS[];
+    cliente?: ClientePOS;
+    metodoPago?: MetodoPagoPOS;
+    descuentoTipo?: 'PORCENTAJE' | 'MONTO';
+    descuentoValor?: number;
+    renovarTiempo?: boolean;
+  }) =>
+    api.post<{ success: boolean; data: SesionMostradorPOS | null }>('/pos/mostrador/sincronizar', payload),
+
+  cancelarMostrador: () =>
+    api.delete<{ success: boolean }>('/pos/mostrador'),
 };

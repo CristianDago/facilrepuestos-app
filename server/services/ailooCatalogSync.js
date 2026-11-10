@@ -669,7 +669,37 @@ export async function sincronizarCatalogoNodoAiloo(nodoId, { forzar = false } = 
  * Ejecuta la ingesta Delta de catálogo para todos los nodos Ailoo activos (`soluparts`, `global`).
  */
 export async function sincronizarTodosLosNodosAiloo({ forzar = false } = {}) {
-  const snap = await db.collection('nodos_ailoo').get();
+  let snap = await db.collection('nodos_ailoo').get();
+  if (snap.empty) {
+    const ahora = new Date().toISOString();
+    await Promise.all([
+      db.collection('nodos_ailoo').doc('soluparts').set({
+        nombre: 'Soluparts',
+        projectId: 'soluparts-mostrador-prod',
+        datasetId: 'soluparts_ailoo',
+        tablaEscalamientos: 'escalamientos',
+        tablaConocimiento: 'conocimiento_aprendido',
+        tablaCatalogo: 'v_agente_catalogo',
+        prefijoSku: 'FRP-SOL',
+        margenPct: 25,
+        activo: true,
+        updatedAt: ahora,
+      }),
+      db.collection('nodos_ailoo').doc('global').set({
+        nombre: 'Global Repuestos',
+        projectId: 'global-mostrador-prod',
+        datasetId: 'global_ailoo',
+        tablaEscalamientos: 'escalamientos',
+        tablaConocimiento: 'conocimiento_aprendido',
+        tablaCatalogo: 'v_agente_catalogo',
+        prefijoSku: 'FRP-GLB',
+        margenPct: 28,
+        activo: true,
+        updatedAt: ahora,
+      }),
+    ]);
+    snap = await db.collection('nodos_ailoo').get();
+  }
   const nodos = snap.docs
     .map(d => ({ id: d.id, ...d.data() }))
     .filter(n => n.activo !== false);

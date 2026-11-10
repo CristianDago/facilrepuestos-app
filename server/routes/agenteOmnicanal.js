@@ -39,6 +39,12 @@ import {
   sanitizarMensajeHaciaClienteFinal,
 } from '../services/ailooBridge.js';
 import { sincronizarTodosLosNodosAiloo } from '../services/ailooCatalogSync.js';
+import {
+  obtenerContextoHoraChile,
+  clasificarIntencionConversacional,
+  conducirFlujoCompraDeterministico,
+  redactarRespuestaConGeminiLuna,
+} from '../services/lunaConversacional.js';
 
 const router = Router();
 
@@ -307,11 +313,82 @@ const MODELOS_A_MARCA = {
   SWIFT: 'SUZUKI',
   BALENO: 'SUZUKI',
   CELERIO: 'SUZUKI',
+  VITARA: 'SUZUKI',
+  AERIO: 'SUZUKI',
+  JIMNY: 'SUZUKI',
+  ALTO: 'SUZUKI',
+  DZIRE: 'SUZUKI',
+  ERTIGA: 'SUZUKI',
+  NOMADE: 'SUZUKI',
+  ESCUDO: 'SUZUKI',
+  SX4: 'SUZUKI',
+  SPARK: 'CHEVROLET',
+  AVEO: 'CHEVROLET',
+  ONIX: 'CHEVROLET',
+  PRISMA: 'CHEVROLET',
+  CRUZE: 'CHEVROLET',
+  CAPTIVA: 'CHEVROLET',
+  TRACKER: 'CHEVROLET',
+  CORSA: 'CHEVROLET',
+  OPTRA: 'CHEVROLET',
+  SENTRA: 'NISSAN',
+  TIIDA: 'NISSAN',
+  MARCH: 'NISSAN',
+  KICKS: 'NISSAN',
+  TERRANO: 'NISSAN',
+  V16: 'NISSAN',
+  OUTLANDER: 'MITSUBISHI',
+  ASX: 'MITSUBISHI',
+  MIRAGE: 'MITSUBISHI',
+  KATANA: 'MITSUBISHI',
   RANGER: 'FORD',
+  FIESTA: 'FORD',
+  FOCUS: 'FORD',
+  ECOSPORT: 'FORD',
+  ESCAPE: 'FORD',
+  TRANSIT: 'FORD',
   AMAROK: 'VOLKSWAGEN',
   GOL: 'VOLKSWAGEN',
+  BORA: 'VOLKSWAGEN',
+  VENTO: 'VOLKSWAGEN',
+  SAVEIRO: 'VOLKSWAGEN',
+  POLO: 'VOLKSWAGEN',
   ACTYON: 'SSANGYONG',
+  MUSSO: 'SSANGYONG',
+  REXTON: 'SSANGYONG',
+  KORANDO: 'SSANGYONG',
+  TIVOLI: 'SSANGYONG',
+  STAVIC: 'SSANGYONG',
+  FORESTER: 'SUBARU',
+  IMPREZA: 'SUBARU',
+  XV: 'SUBARU',
+  OUTBACK: 'SUBARU',
+  LEGACY: 'SUBARU',
+  SOLUTO: 'KIA',
+  CERATO: 'KIA',
+  SORENTO: 'KIA',
+  SELTOS: 'KIA',
+  CARENS: 'KIA',
+  SONET: 'KIA',
+  ELANTRA: 'HYUNDAI',
+  CRETA: 'HYUNDAI',
+  VENUE: 'HYUNDAI',
+  VERNA: 'HYUNDAI',
+  STAREX: 'HYUNDAI',
+  TERRACAN: 'HYUNDAI',
+  GALLOPER: 'HYUNDAI',
+  I10: 'HYUNDAI',
+  RAIZE: 'TOYOTA',
+  RUSH: 'TOYOTA',
+  FORTUNER: 'TOYOTA',
+  MG3: 'MG',
+  MG5: 'MG',
+  ZS: 'MG',
+  ZX: 'MG',
+  RX5: 'MG',
   T60: 'MAXUS',
+  G10: 'MAXUS',
+  V80: 'MAXUS',
   // Modelos marcas chinas (Luna Soluparts)
   A500: 'CHANGAN',
   MD201: 'CHANGAN',
@@ -424,6 +501,40 @@ const STOPWORDS_BUSQUEDA = new Set([
   'SABER',
   'DISPONIBLE',
   'STOCK',
+  'COMO',
+  'ESTAS',
+  'ESTAN',
+  'BUENOS',
+  'BUEN',
+  'DIA',
+  'QUIERO',
+  'QUISIERA',
+  'PREGUNTAR',
+  'VER',
+  'DONDE',
+  'UBICADOS',
+  'UBICACION',
+  'DIRECCION',
+  'HORARIO',
+  'ATIENDEN',
+  'AYUDA',
+  'AYUDAME',
+  'REPUESTIN',
+  'AMIGO',
+  'ESTIMADO',
+  'TENGO',
+  'AUTO',
+  'VEHICULO',
+  'CAMIONETA',
+  'FURGON',
+  'MIO',
+  'PUEDE',
+  'PUEDO',
+  'HAY',
+  'ALGUIEN',
+  'COTIZACION',
+  'PIEZA',
+  'PIEZAS',
 ]);
 
 /**
@@ -938,6 +1049,8 @@ async function crearPedidoSimuladoAgente({
   sesion,
   modalidadEntrega = 'retiro_bodega',
   comunaEntrega = 'La Florida, Santiago (RM)',
+  documentoTributario = 'BOLETA',
+  datosCliente = null,
   metodoPagoSimulado = 'sandbox_webpay_sin_tarjeta',
   itemsForzados = null,
 }) {
@@ -961,8 +1074,11 @@ async function crearPedidoSimuladoAgente({
     codigoPedido,
     sesionId: sesion.id,
     canal: sesion.canal || 'web_cliente',
-    clienteNombre: sesion.clienteNombre || 'Cliente Web FácilRepuestos',
+    clienteNombre: datosCliente?.nombre || sesion.clienteNombre || 'Cliente Web FácilRepuestos',
+    clienteRut: datosCliente?.rut || null,
+    clienteEmail: datosCliente?.email || null,
     clienteTelefono: sesion.clienteTelefono || 'Vista Web Sandbox',
+    documentoTributario: documentoTributario || 'BOLETA',
     vehiculo: sesion.vehiculoContexto || null,
     items: itemsCarrito.map((it) => ({
       skuPublicoFrp: it.skuPublicoFrp,
@@ -1141,58 +1257,62 @@ async function ejecutarCascadaAgenteOmnicanal({
     }
   }
 
-  // ─── PASO 0.B: INTENCIÓN `COMPRAR` (CHECKOUT SANDBOX SIN TARJETA) ──────────
-  if (esIntencionComprar(textoBruto) && carritoActual.length > 0 && modoForzado === 'auto') {
-    const infoEntrega = detectarComunaOModalidadEntrega(textoBruto);
-    const modalidad =
-      infoEntrega.modalidadPreferida || sesion.modalidadEntrega || 'retiro_bodega';
-    const comuna =
-      infoEntrega.comunaDetectada?.nombre || sesion.comunaCliente || 'La Florida, Santiago (RM)';
-
-    const pedidoCreado = await crearPedidoSimuladoAgente({
+  // ─── PASO 0.B: MÁQUINA DE ESTADOS DE COMPRA DETERMINÍSTICA (LUNA FLUJO_COMPRA) ─
+  let compraFuePausada = false;
+  let estadoFlujoCompra = sesion.flujoCompra || null;
+  const pidioComprarAhora = esIntencionComprar(textoBruto);
+  if (
+    modoForzado === 'auto' &&
+    (Boolean(estadoFlujoCompra?.paso) || pidioComprarAhora)
+  ) {
+    const resFlujo = await conducirFlujoCompraDeterministico({
       sesion: { ...sesion, carritoCotizado: carritoActual },
-      modalidadEntrega: modalidad,
-      comunaEntrega: comuna,
-      metodoPagoSimulado: 'sandbox_webpay_sin_tarjeta',
+      textoCliente: textoBruto,
+      carritoActual,
+      esComandoComprar: pidioComprarAhora,
+      crearPedidoRealFn: crearPedidoSimuladoAgente,
     });
 
-    const resumenLineas = carritoActual.map(
-      (it) =>
-        `• 1x **${it.nombre}** (\`${it.skuPublicoFrp}\`) — **$${Number(it.precioVentaConIva).toLocaleString('es-CL')} IVA inc.**`
-    );
-
-    const respuestaTexto =
-      `🎉 **¡Pedido \`${pedidoCreado.codigoPedido}\` generado con éxito!**\n\n` +
-      `📋 **Resumen de tu compra:**\n${resumenLineas.join('\n')}\n` +
-      `• **Modalidad:** ${
-        modalidad === 'retiro_bodega'
-          ? '📍 Retiro en Tienda FácilRepuestos: Enrique Olivares 224, La Florida, Santiago de Chile (Sin costo de envío)'
-          : `🚚 Despacho a domicilio en ${comuna} (Despachamos en Santiago y todo Chile)`
-      }\n` +
-      `• **Total a pagar:** **$${Number(pedidoCreado.totalConIva).toLocaleString('es-CL')} IVA inc.** ($${Number(
-        pedidoCreado.subtotalNeto
-      ).toLocaleString('es-CL')} neto)\n\n` +
-      `💳 **Modo Prueba Web Activo (Sin tarjeta de crédito real):** Puedes simular la aprobación del pago con 1 clic en el botón **"✅ Simular Pago Aprobado"** de tu pantalla para completar la reserva de stock.`;
-
-    return {
-      vehiculoDetectado: sesion.vehiculoContexto || null,
-      carritoCotizado: carritoActual,
-      comunaCliente: comuna,
-      modalidadEntrega: modalidad,
-      pedidoActivo: pedidoCreado,
-      escalamientosAbiertos: sesion.escalamientosAbiertos || [],
-      solicitudesWspAbiertas: sesion.solicitudesWspAbiertas || [],
-      respuestaTexto,
-      trazaCascada: {
-        accionTomada: 'checkout_simulado_creado',
+    if (resFlujo.interceptado) {
+      return {
         vehiculoDetectado: sesion.vehiculoContexto || null,
-        reglasConocimientoAplicadas: [],
-        candidatosInventario: carritoActual,
-        escalamientoCreado: null,
-        solicitudWspCreada: null,
-        pedidoSimulado: pedidoCreado,
-      },
-    };
+        carritoCotizado: carritoActual,
+        comunaCliente:
+          resFlujo.comunaCliente ||
+          resFlujo.flujoCompra?.datosDespacho ||
+          resFlujo.flujoCompra?.comuna ||
+          sesion.comunaCliente ||
+          null,
+        modalidadEntrega:
+          resFlujo.modalidadEntrega ||
+          (resFlujo.flujoCompra?.modalidad === 'DESPACHO'
+            ? 'despacho_domicilio'
+            : resFlujo.flujoCompra?.modalidad === 'RETIRO'
+              ? 'retiro_bodega'
+              : sesion.modalidadEntrega) ||
+          null,
+        pedidoActivo: resFlujo.pedidoCreado || sesion.pedidoActivo || null,
+        flujoCompra: resFlujo.flujoCompra ?? null,
+        repuestoPendienteContexto: null,
+        escalamientosAbiertos: sesion.escalamientosAbiertos || [],
+        solicitudesWspAbiertas: sesion.solicitudesWspAbiertas || [],
+        respuestaTexto: resFlujo.respuestaTexto,
+        trazaCascada: {
+          accionTomada: resFlujo.accionTomada || 'flujo_compra_deterministico',
+          vehiculoDetectado: sesion.vehiculoContexto || null,
+          reglasConocimientoAplicadas: [],
+          candidatosInventario: carritoActual,
+          escalamientoCreado: null,
+          solicitudWspCreada: null,
+          pedidoSimulado: resFlujo.pedidoCreado || null,
+        },
+      };
+    }
+
+    if (resFlujo.compraPausada) {
+      compraFuePausada = true;
+      estadoFlujoCompra = null;
+    }
   }
 
   // ─── PASO 0.C: ANTI-SPAM DE SEGUIMIENTO ("ESPERO", "GRACIAS", "¿AÚN NADA?") ─
@@ -1357,14 +1477,173 @@ async function ejecutarCascadaAgenteOmnicanal({
   }
 
   // ─── PASO 1: IDENTIFICAR VEHÍCULO POR PATENTE, VIN O TEXTO NORMALIZADO ─────
-  const vehiculo = await resolverVehiculoOmnicanal({
+  const vehiculoEnMensajeActual = await resolverVehiculoOmnicanal({
     patenteInput: patenteForzada,
     textoMensaje: textoCombinado,
-    vehiculoActual: sesion.vehiculoContexto || null,
+    vehiculoActual: null,
+  });
+  const vehiculo = vehiculoEnMensajeActual || sesion.vehiculoContexto || null;
+
+  // ─── PASO 1.B: CLASIFICADOR CONVERSACIONAL LUNA (EVITA DISPARAR TICKETS B2B EN SALUDOS O CONSULTAS INCOMPLETAS) ─
+  const infoRepuestoActual = extraerRepuestoYCategoria(textoCombinado, vehiculo);
+  const clasificacion = clasificarIntencionConversacional({
+    textoBruto,
+    vehiculoMensajeActual: vehiculoEnMensajeActual,
+    vehiculoContextoSesion: sesion.vehiculoContexto || null,
+    tokensRepuesto: infoRepuestoActual.tokensRepuesto,
+    resumenRepuesto: infoRepuestoActual.resumenRepuesto,
+    tieneFoto: Boolean(fotoUrl),
+    sesion,
   });
 
+  const sufijoCompraPausada = compraFuePausada
+    ? '\n\n_(Tu compra quedó en pausa — escribe **COMPRAR** cuando quieras retomarla)_'
+    : '';
+
+  if (clasificacion.tipo !== 'BUSQUEDA_CATALOGO' && modoForzado === 'auto') {
+    const ctxHora = obtenerContextoHoraChile();
+    let hechoBase = '';
+    let accionTomadaConv = 'conversacion_luna';
+    let pedidoActualizado = sesion.pedidoActivo || null;
+    let repuestoPendienteNuevo = sesion.repuestoPendienteContexto || null;
+
+    if (clasificacion.tipo === 'CANCELAR_PEDIDO') {
+      accionTomadaConv = 'cancelacion_pedido';
+      if (pedidoActualizado && pedidoActualizado.estadoPago === 'pendiente_simulacion') {
+        pedidoActualizado = {
+          ...pedidoActualizado,
+          estadoPago: 'cancelado',
+          estadoLogistico: 'cancelado_por_cliente',
+          updatedAt: new Date().toISOString(),
+        };
+        if (pedidoActualizado.id) {
+          await db
+            .collection(COLECCION_PEDIDOS_AGENTE)
+            .doc(pedidoActualizado.id)
+            .update({
+              estadoPago: 'cancelado',
+              estadoLogistico: 'cancelado_por_cliente',
+              updatedAt: pedidoActualizado.updatedAt,
+            })
+            .catch(() => null);
+        }
+        hechoBase = `Tu pedido \`${pedidoActualizado.codigoPedido}\` ha sido cancelado sin costo. Si necesitas cotizar otro repuesto, dime qué pieza buscas y para qué vehículo.`;
+      } else {
+        hechoBase =
+          'No tienes ningún pedido pendiente de pago por cancelar en este momento. ¿En qué repuesto te puedo ayudar hoy?';
+      }
+    } else if (clasificacion.tipo === 'ESTADO_PEDIDO') {
+      accionTomadaConv = 'consulta_estado_pedido';
+      if (pedidoActualizado) {
+        hechoBase =
+          `Tu pedido \`${pedidoActualizado.codigoPedido}\` por **$${Number(
+            pedidoActualizado.totalConIva || 0
+          ).toLocaleString('es-CL')} IVA inc.** se encuentra en estado **${
+            pedidoActualizado.estadoPago === 'pagado_sandbox' ? 'Pagado y confirmado' : 'Pendiente de pago'
+          }** (${
+            pedidoActualizado.modalidadEntrega === 'retiro_bodega'
+              ? 'Retiro en tienda Enrique Olivares 224, La Florida'
+              : `Despacho a ${pedidoActualizado.comunaEntrega || 'domicilio'}`
+          }).`;
+      } else if (tienePendientes) {
+        const refs = [
+          ...(sesion.escalamientosAbiertos || []).map((e) => `Ticket Técnico \`${e.ticketRef}\``),
+          ...(sesion.solicitudesWspAbiertas || []).map((w) => `Solicitud de Stock \`#${w.codigoSolicitud}\``),
+        ].join(' y ');
+        hechoBase = `Estamos verificando disponibilidad y calce en nuestra mesa especialista (${refs}). Apenas nos confirmen te avisamos por este mismo chat.`;
+      } else {
+        hechoBase =
+          'Aún no tienes pedidos ni cotizaciones en curso. Cuéntame qué repuesto buscas y la patente (o marca, modelo y año) de tu vehículo para cotizarte al tiro.';
+      }
+    } else if (clasificacion.tipo === 'ATENCION_HUMANA') {
+      accionTomadaConv = 'derivacion_ejecutivo_humano';
+      hechoBase = ctxHora.abiertoAhora
+        ? 'Ya dejé aviso a un vendedor especialista de mostrador de FácilRepuestos para que tome tu conversación. Mientras tanto, si quieres dejarme la patente y el repuesto que buscas, se lo dejo listo en pantalla.'
+        : 'En este momento nuestro mostrador está cerrado (atendemos de Lunes a Jueves de 9:30 a 18:00, Viernes de 9:30 a 17:00 y Sábado de 9:30 a 14:00 en Enrique Olivares 224, La Florida). Déjame anotado qué repuesto necesitas y tu patente para que un vendedor te contacte a primera hora.';
+    } else if (clasificacion.tipo === 'CONSULTA_GARANTIAS') {
+      accionTomadaConv = 'consulta_garantias';
+      hechoBase =
+        'Todos nuestros repuestos nuevos en FácilRepuestos cuentan con **3 meses de garantía legal** por fallas de fabricación presentando tu boleta o factura. Si un repuesto no calza en tu vehículo, puedes cambiarlo sin problema (sin uso y en su caja original) en nuestra tienda en **Enrique Olivares 224, La Florida, Santiago**. ¿Qué repuesto andas buscando hoy?';
+    } else if (clasificacion.tipo === 'CONSULTA_HORARIO') {
+      accionTomadaConv = 'consulta_horario';
+      hechoBase =
+        `Nuestro horario de atención en **Enrique Olivares 224, La Florida, Santiago** es:\n` +
+        `• **Lunes a Jueves:** 9:30 a 18:00 hrs\n` +
+        `• **Viernes:** 9:30 a 17:00 hrs\n` +
+        `• **Sábado:** 9:30 a 14:00 hrs\n` +
+        `¿Qué repuesto necesitas cotizar?`;
+    } else if (clasificacion.tipo === 'CONSULTA_SUCURSAL') {
+      accionTomadaConv = 'consulta_sucursal';
+      hechoBase =
+        'Estamos ubicados en **Enrique Olivares 224, La Florida, Santiago de Chile** (con retiro gratis en mostrador), y también hacemos **despacho a domicilio en todo Santiago y regiones** vía Starken, Chilexpress o Blue Express. ¿Qué repuesto estás buscando y para qué vehículo?';
+    } else if (clasificacion.tipo === 'SOLO_VEHICULO_SIN_REPUESTO') {
+      accionTomadaConv = 'vehiculo_identificado_esperando_repuesto';
+      const v = vehiculo;
+      hechoBase =
+        `¡Perfecto! 🚗 Ya dejé registrado tu **${v.marca} ${v.modelo || ''} ${v.anio ? `(${v.anio})` : ''}${
+          v.motor ? ` · Motor ${v.motor}` : ''
+        }${v.patente ? ` [Patente ${v.patente}]` : ''}**.\n\n` +
+        `¿Qué repuesto necesitas para tu ${v.marca} ${v.modelo || ''}?`;
+    } else if (clasificacion.tipo === 'SOLO_REPUESTO_SIN_VEHICULO') {
+      accionTomadaConv = 'repuesto_identificado_esperando_vehiculo';
+      repuestoPendienteNuevo = clasificacion.repuestoDetectado || {
+        tokensRepuesto: infoRepuestoActual.tokensRepuesto,
+        resumenRepuesto: infoRepuestoActual.resumenRepuesto,
+        textoOriginal: textoBruto,
+      };
+      hechoBase =
+        `¡Claro! Para buscar **${repuestoPendienteNuevo.resumenRepuesto}** exacto y darte precio y stock al tiro, ¿para qué vehículo lo necesitas? Si tienes la **patente** a mano me la das (o dime **marca, modelo, año y cilindrada**).`;
+    } else {
+      accionTomadaConv = 'saludo_conversacional';
+      hechoBase = vehiculo
+        ? `¡Hola! 👋 Tengo en pantalla tu **${vehiculo.marca} ${vehiculo.modelo || ''} ${
+            vehiculo.anio || ''
+          }**. Cuéntame, ¿qué repuesto andas buscando hoy?`
+        : '¡Hola! 👋 Bienvenido a **FácilRepuestos.cl**. Cuéntame, ¿qué repuesto andas buscando y para qué vehículo? Si tienes la **patente** a mano me la das y lo reviso al tiro.';
+    }
+
+    const respuestaNatural = await redactarRespuestaConGeminiLuna({
+      textoCliente: textoBruto,
+      historialMensajes: sesion.mensajes || [],
+      contextoSituacion: `INTENCIÓN DETECTADA: ${clasificacion.tipo}\nRESPUESTA BASE OBLIGATORIA A TRANSMITIR:\n${hechoBase}`,
+      skusPermitidos: carritoActual.map((c) => c.skuPublicoFrp),
+      respuestaFallback: hechoBase,
+    });
+
+    return {
+      vehiculoDetectado: vehiculo,
+      carritoCotizado: carritoActual,
+      comunaCliente: sesion.comunaCliente || null,
+      modalidadEntrega: sesion.modalidadEntrega || null,
+      pedidoActivo: pedidoActualizado,
+      flujoCompra: estadoFlujoCompra,
+      repuestoPendienteContexto: repuestoPendienteNuevo,
+      escalamientosAbiertos: sesion.escalamientosAbiertos || [],
+      solicitudesWspAbiertas: sesion.solicitudesWspAbiertas || [],
+      respuestaTexto: `${respuestaNatural}${sufijoCompraPausada}`,
+      trazaCascada: {
+        accionTomada: accionTomadaConv,
+        intencionConversacional: clasificacion.tipo,
+        vehiculoDetectado: vehiculo,
+        reglasConocimientoAplicadas: [],
+        candidatosInventario: carritoActual,
+        escalamientoCreado: null,
+        solicitudWspCreada: null,
+      },
+    };
+  }
+
+  // Si veníamos de un turno anterior donde el cliente pidió el repuesto y ahora dio el vehículo/patente, combinamos ambos:
+  const textoRepuestoPrevio =
+    clasificacion.repuestoCombinado?.textoOriginal ||
+    clasificacion.repuestoCombinado?.resumenRepuesto ||
+    '';
+  const textoBusquedaEfectivo = textoRepuestoPrevio
+    ? normalizarTextoAutomotriz(`${textoRepuestoPrevio} ${textoCombinado}`)
+    : textoCombinado;
+
   // ─── PASO 2 Y 3: SOPORTE MULTI-ÍTEM (CATÁLOGO UNIFICADO + MEMORIA IA) ──────
-  const subConsultas = extraerMultiplesRepuestos(textoCombinado, vehiculo);
+  const subConsultas = extraerMultiplesRepuestos(textoBusquedaEfectivo, vehiculo);
 
   const [conSnap, invSnap] = await Promise.all([
     db.collection(COLECCION_CONOCIMIENTO).get(),
@@ -1880,6 +2159,23 @@ async function ejecutarCascadaAgenteOmnicanal({
     }
   }
 
+  if (accionTomada === 'cotizacion_directa' && respuestaTexto) {
+    respuestaTexto = await redactarRespuestaConGeminiLuna({
+      textoCliente: textoBusquedaEfectivo,
+      historialMensajes: sesion.mensajes || [],
+      contextoSituacion: `COTIZACIÓN DIRECTA CONFIRMADA EN CATÁLOGO PARA ${etiquetaVehiculo}:\n${respuestaTexto}`,
+      skusPermitidos: [
+        ...candidatosEncontradosGlobal.map((c) => c.skuPublicoFrp),
+        ...reglasAplicadasGlobal.map((r) => r.skuPublicoFrp),
+      ].filter(Boolean),
+      respuestaFallback: respuestaTexto,
+    });
+  }
+
+  if (sufijoCompraPausada) {
+    respuestaTexto = `${respuestaTexto}${sufijoCompraPausada}`;
+  }
+
   const escalamientosAbiertos = [...(sesion.escalamientosAbiertos || [])];
   if (escalamientoCreado && !escalamientosAbiertos.some((e) => e.id === escalamientoCreado.id)) {
     escalamientosAbiertos.push(escalamientoCreado);
@@ -1896,11 +2192,14 @@ async function ejecutarCascadaAgenteOmnicanal({
     comunaCliente: sesion.comunaCliente || null,
     modalidadEntrega: sesion.modalidadEntrega || null,
     pedidoActivo: sesion.pedidoActivo || null,
+    flujoCompra: estadoFlujoCompra,
+    repuestoPendienteContexto: null,
     escalamientosAbiertos,
     solicitudesWspAbiertas,
     respuestaTexto,
     trazaCascada: {
       accionTomada,
+      intencionConversacional: 'BUSQUEDA_CATALOGO',
       vehiculoDetectado: vehiculo,
       subConsultasDetectadas: subConsultas.map((s) => s.resumenRepuesto),
       reglasConocimientoAplicadas: reglasAplicadasGlobal,
@@ -1944,7 +2243,7 @@ router.post('/sesiones', async (req, res, next) => {
   try {
     const {
       canal = 'web_cliente',
-      clienteNombre = 'Cliente Web FácilRepuestos',
+      clienteNombre = 'Cliente FácilRepuestos',
       clienteTelefono = '+56987654321',
       patenteInicial = '',
     } = req.body;
@@ -1956,13 +2255,15 @@ router.post('/sesiones', async (req, res, next) => {
     const now = new Date().toISOString();
     const nuevaSesion = {
       canal,
-      clienteNombre: String(clienteNombre).trim() || 'Cliente Omnicanal',
+      clienteNombre: String(clienteNombre).trim() || 'Cliente FácilRepuestos',
       clienteTelefono: String(clienteTelefono).trim(),
       estado: 'activa',
       vehiculoContexto,
       carritoCotizado: [],
       comunaCliente: null,
       modalidadEntrega: null,
+      flujoCompra: null,
+      repuestoPendienteContexto: null,
       escalamientosAbiertos: [],
       solicitudesWspAbiertas: [],
       pedidoActivo: null,
@@ -1971,8 +2272,8 @@ router.post('/sesiones', async (req, res, next) => {
           id: `msg-${Date.now()}`,
           autor: 'agente_ia',
           texto: vehiculoContexto
-            ? `¡Hola ${clienteNombre}! 👋 Ya identifiqué tu **${vehiculoContexto.marca} ${vehiculoContexto.modelo} ${vehiculoContexto.anio || ''}** (Patente \`${vehiculoContexto.patente}\`). ¿Qué repuesto(s) necesitas cotizar hoy? Puedes pedirme varios repuestos a la vez, enviarme audio o foto de la muestra.`
-            : `¡Hola ${clienteNombre}! 👋 Soy el asistente virtual de **FácilRepuestos.cl**. Indícame la **patente** de tu vehículo (o marca, modelo y año) y qué repuesto(s) buscas. También puedes probar el cierre de compra en modo Sandbox sin tarjeta de crédito.`,
+            ? `¡Hola! 👋 Ya identifiqué tu **${vehiculoContexto.marca} ${vehiculoContexto.modelo} ${vehiculoContexto.anio || ''}** (Patente \`${vehiculoContexto.patente}\`). ¿Qué repuesto necesitas cotizar hoy?`
+            : `¡Hola! 👋 Soy Repuestín, especialista de **FácilRepuestos.cl**. Cuéntame qué repuesto buscas y la **patente** de tu vehículo (o marca, modelo y año) para revisarlo al tiro.`,
           creadoEn: now,
         },
       ],
@@ -2056,6 +2357,14 @@ router.post('/sesiones/:id/mensaje', async (req, res, next) => {
       comunaCliente: resultadoCascada.comunaCliente ?? sesion.comunaCliente ?? null,
       modalidadEntrega: resultadoCascada.modalidadEntrega ?? sesion.modalidadEntrega ?? null,
       pedidoActivo: resultadoCascada.pedidoActivo ?? sesion.pedidoActivo ?? null,
+      flujoCompra:
+        resultadoCascada.flujoCompra !== undefined
+          ? resultadoCascada.flujoCompra
+          : sesion.flujoCompra ?? null,
+      repuestoPendienteContexto:
+        resultadoCascada.repuestoPendienteContexto !== undefined
+          ? resultadoCascada.repuestoPendienteContexto
+          : sesion.repuestoPendienteContexto ?? null,
       escalamientosAbiertos: resultadoCascada.escalamientosAbiertos ?? sesion.escalamientosAbiertos ?? [],
       solicitudesWspAbiertas: resultadoCascada.solicitudesWspAbiertas ?? sesion.solicitudesWspAbiertas ?? [],
       mensajes: mensajesActualizados,

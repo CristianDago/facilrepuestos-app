@@ -15,6 +15,41 @@ interface RespuestaListadoSesiones {
   padronDemoPatentes: VehiculoDetectadoAgente[];
 }
 
+function renderTextoFormateado(texto: string) {
+  const lineas = String(texto || '').split('\n');
+  return lineas.map((linea, idxLinea) => {
+    const tokens = linea.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+    return (
+      <span key={idxLinea}>
+        {tokens.map((tok, idxTok) => {
+          if (tok.startsWith('**') && tok.endsWith('**') && tok.length > 4) {
+            return <strong key={idxTok}>{tok.slice(2, -2)}</strong>;
+          }
+          if (tok.startsWith('`') && tok.endsWith('`') && tok.length > 2) {
+            return (
+              <code
+                key={idxTok}
+                style={{
+                  background: 'rgba(15, 23, 42, 0.08)',
+                  padding: '1px 5px',
+                  borderRadius: 4,
+                  fontFamily: 'monospace',
+                  fontSize: '0.88em',
+                  fontWeight: 600,
+                }}
+              >
+                {tok.slice(1, -1)}
+              </code>
+            );
+          }
+          return <span key={idxTok}>{tok}</span>;
+        })}
+        {idxLinea < lineas.length - 1 && <br />}
+      </span>
+    );
+  });
+}
+
 const ESCENARIOS_REALES_LUNA = [
   {
     id: 'luna-multi-parcial',
@@ -259,7 +294,18 @@ export default function ChatClienteWeb() {
         return '🔔 Respuesta Proveedor en Vivo';
       case 'checkout_simulado_creado':
       case 'checkout_simulado_pagado':
-        return '🛒 Checkout Sandbox';
+        return '🛒 Pedido Creado';
+      case 'saludo_conversacional':
+        return '👋 Saludo Conversacional (Luna)';
+      case 'repuesto_identificado_esperando_vehiculo':
+        return '🔧 Pieza Guardada · Pidiendo Patente';
+      case 'vehiculo_identificado_esperando_repuesto':
+        return '🚗 Vehículo Listo · Pidiendo Pieza';
+      case 'flujo_compra_paso_modalidad':
+      case 'flujo_compra_paso_direccion':
+      case 'flujo_compra_paso_documento':
+      case 'flujo_compra_paso_datos':
+        return '🧾 Flujo de Compra Paso a Paso';
       default:
         return '🤖 Respuesta IA';
     }
@@ -421,7 +467,7 @@ export default function ChatClienteWeb() {
                         )}
                       </div>
                     )}
-                    <div className={styles.bubbleText}>{msg.texto}</div>
+                    <div className={styles.bubbleText}>{renderTextoFormateado(msg.texto)}</div>
                     <div className={styles.bubbleMeta}>
                       <span>
                         {new Date(msg.creadoEn).toLocaleTimeString('es-CL', {

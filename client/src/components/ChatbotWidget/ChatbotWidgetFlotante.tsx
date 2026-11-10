@@ -14,7 +14,45 @@ interface ChatbotWidgetFlotanteProps {
   patenteInicial?: string;
 }
 
-const STORAGE_KEY_SESION_CLIENTE = 'frp_widget_cliente_sesion_id_v1';
+const STORAGE_KEY_SESION_CLIENTE = 'frp_widget_cliente_sesion_id_v2';
+
+/**
+ * Formatea negritas (**texto**), códigos (`SKU`) y saltos de línea sin mostrar asteriscos crudos
+ */
+function renderTextoFormateado(texto: string) {
+  const lineas = String(texto || '').split('\n');
+  return lineas.map((linea, idxLinea) => {
+    const tokens = linea.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+    return (
+      <span key={idxLinea}>
+        {tokens.map((tok, idxTok) => {
+          if (tok.startsWith('**') && tok.endsWith('**') && tok.length > 4) {
+            return <strong key={idxTok}>{tok.slice(2, -2)}</strong>;
+          }
+          if (tok.startsWith('`') && tok.endsWith('`') && tok.length > 2) {
+            return (
+              <code
+                key={idxTok}
+                style={{
+                  background: 'rgba(15, 23, 42, 0.08)',
+                  padding: '1px 5px',
+                  borderRadius: 4,
+                  fontFamily: 'monospace',
+                  fontSize: '0.88em',
+                  fontWeight: 600,
+                }}
+              >
+                {tok.slice(1, -1)}
+              </code>
+            );
+          }
+          return <span key={idxTok}>{tok}</span>;
+        })}
+        {idxLinea < lineas.length - 1 && <br />}
+      </span>
+    );
+  });
+}
 
 export default function ChatbotWidgetFlotante({
   modoIframeEmbebido = false,
@@ -65,7 +103,7 @@ export default function ChatbotWidgetFlotante({
 
       const resNueva = await api.post<ApiResponse<SesionAgenteOmnicanal>>('/agente-omnicanal/sesiones', {
         canal: 'web_cliente',
-        clienteNombre: 'Cliente Portal Web',
+        clienteNombre: 'Cliente FácilRepuestos',
         clienteTelefono: 'Chat Web Directo',
         patenteInicial: patente.trim().toUpperCase(),
       });
@@ -130,7 +168,7 @@ export default function ChatbotWidgetFlotante({
       localStorage.removeItem(STORAGE_KEY_SESION_CLIENTE);
       const resNueva = await api.post<ApiResponse<SesionAgenteOmnicanal>>('/agente-omnicanal/sesiones', {
         canal: 'web_cliente',
-        clienteNombre: 'Cliente Portal Web',
+        clienteNombre: 'Cliente FácilRepuestos',
         clienteTelefono: 'Chat Web Directo',
         patenteInicial: '',
       });
@@ -348,7 +386,7 @@ export default function ChatbotWidgetFlotante({
                 className={esCliente ? styles.rowCliente : styles.rowAgente}
               >
                 <div className={esCliente ? styles.bubbleCliente : styles.bubbleAgente}>
-                  <div className={styles.msgText}>{m.texto}</div>
+                  <div className={styles.msgText}>{renderTextoFormateado(m.texto)}</div>
                   <div className={styles.msgTime}>
                     {new Date(m.creadoEn).toLocaleTimeString('es-CL', {
                       hour: '2-digit',

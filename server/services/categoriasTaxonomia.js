@@ -235,225 +235,225 @@ export function clasificarProductoEnTaxonomiaFrp(item = {}) {
 
   // ── 1. DESAMBIGUACIONES CRÍTICAS (Orden de prioridad estricto) ─────────
   // Amortiguadores de portalón / maleta / capot → Carrocería
-  if (has(/\b(AMORTIGUADOR\s+(?:DE\s+)?(?:PORTALON|MALETA|CAPOT|CAPO|COMPUERTA)|BOMBIN\s+(?:DE\s+)?(?:PORTALON|MALETA|CAPOT))\b/)) {
+  if (has(/\b(AMORTIGUADOR(?:ES)?\s+(?:DE\s+)?(?:PORTALON|MALETA|CAPOT|CAPO|COMPUERTA)|BOMBIN(?:ES)?\s+(?:DE\s+)?(?:PORTALON|MALETA|CAPOT))\b/)) {
     return construirResultado('Carrocería y Espejos', 'Accesorios de Carrocería', 'Amortiguadores de Maleta');
   }
 
   // Cremallera alzavidrio → Carrocería > Manillas y Chapas (NO Dirección)
-  if (has(/\b(ALZAVIDRIO|ELEVAVIDRIO|CREMALLERA\s+ALZAVIDRIO)\b/)) {
+  if (has(/\b(ALZAVIDRIOS?|ELEVAVIDRIOS?|CREMALLERAS?\s+ALZAVIDRIOS?)\b/)) {
     return construirResultado('Carrocería y Espejos', 'Accesorios de Carrocería', 'Manillas y Chapas');
   }
 
   // Depósito limpiaparabrisas / agua → Refrigeración > Mangueras y Depósitos
-  if (has(/\b(DEPOSITO|RESERVORIO|BOTELLA)\b/)) {
+  if (has(/\b(DEPOSITOS?|RESERVORIOS?|BOTELLAS?)\b/)) {
     return construirResultado('Refrigeración y Climatización', 'Mangueras y Depósitos', '');
   }
 
   // ── 2. MANTENIMIENTO RÁPIDO (Filtros y Lubricantes) ────────────────────
-  if (has(/\b(FILTRO|PORTAFILTRO|DECANTADOR)\b/)) {
-    if (has(/\b(ACEITE)\b/)) {
+  if (has(/\b(FILTROS?|PORTAFILTROS?|DECANTADOR(?:ES)?)\b/)) {
+    if (has(/\b(ACEITES?)\b/)) {
       return construirResultado('Mantenimiento Rápido', 'Filtros', 'Filtro de Aceite');
     }
-    if (has(/\b(COMBUSTIBLE|BENCINA|PETROLEO|DIESEL|GASOLINA|DECANTADOR)\b/)) {
+    if (has(/\b(COMBUSTIBLES?|BENCINAS?|PETROLEOS?|DIESEL|GASOLINAS?|DECANTADOR(?:ES)?)\b/)) {
       return construirResultado('Mantenimiento Rápido', 'Filtros', 'Filtro de Combustible');
     }
-    if (has(/\b(POLEN|CABINA|AIRE\s+ACONDICIONADO|HABITACULO)\b/)) {
+    if (has(/\b(POLEN|CABINAS?|AIRE\s+ACONDICIONADO|HABITACULOS?)\b/)) {
       return construirResultado('Mantenimiento Rápido', 'Filtros', 'Filtro de Cabina y Polen');
     }
     return construirResultado('Mantenimiento Rápido', 'Filtros', 'Filtro de Aire');
   }
 
-  if (has(/\b(ACEITE\s+(?:DE\s+)?(?:CAJA|TRANSMISION|DIFERENCIAL)|ATF|75W\d+|80W\d+|CVT\s+FLUID)\b/)) {
+  if (has(/\b(ACEITES?\s+(?:DE\s+)?(?:CAJA|TRANSMISION|DIFERENCIAL)|ATF|75W\d+|80W\d+|CVT\s+FLUID)\b/)) {
     return construirResultado('Mantenimiento Rápido', 'Lubricantes y Fluidos', 'Fluidos de Transmisión');
   }
-  if (has(/\b(ACEITE\s+(?:DE\s+)?MOTOR|LUBRICANTE\s+MOTOR|\d+W\d+)\b/) || (has(/\bACEITE\b/) && !has(/\b(BOMBA|ENFRIADOR|FILTRO|RETEN|SENSOR|BULBO|VARILLA|TAPA|CARTER)\b/))) {
+  if (has(/\b(ACEITES?\s+(?:DE\s+)?MOTOR|LUBRICANTES?\s+MOTOR|\d+W\d+)\b/) || (has(/\bACEITES?\b/) && !has(/\b(BOMBAS?|ENFRIADOR(?:ES)?|FILTROS?|RETEN(?:ES)?|SENSOR(?:ES)?|BULBOS?|VARILLAS?|TAPAS?|CARTER)\b/))) {
     return construirResultado('Mantenimiento Rápido', 'Lubricantes y Fluidos', 'Aceites de Motor');
   }
-  if (has(/\b(LIQUIDO\s+(?:DE\s+)?FRENO|DOT\s*[345])\b/)) {
+  if (has(/\b(LIQUIDOS?\s+(?:DE\s+)?FRENOS?|DOT\s*[345])\b/)) {
     return construirResultado('Mantenimiento Rápido', 'Lubricantes y Fluidos', 'Líquido de Frenos');
   }
-  if (has(/\b(COOLANT|ANTICONGELANTE|REFRIGERANTE|AGUA\s+VERDE|AGUA\s+ROJA|AGUA\s+DESMINERALIZADA)\b/)) {
+  if (has(/\b(COOLANT|ANTICONGELANTES?|REFRIGERANTES?|AGUA\s+VERDE|AGUA\s+ROJA|AGUA\s+DESMINERALIZADA)\b/)) {
     return construirResultado('Mantenimiento Rápido', 'Lubricantes y Fluidos', 'Anticongelante y Refrigerante');
   }
-  if (has(/\b(ADITIVO|LIMPIA\s+INYECTOR|PINO\s+AROMATIZANTE|AROMATIZANTE)\b/)) {
+  if (has(/\b(ADITIVOS?|LIMPIA\s+INYECTOR(?:ES)?|PINOS?\s+AROMATIZANTES?|AROMATIZANTES?)\b/)) {
     return construirResultado('Mantenimiento Rápido', 'Lubricantes y Fluidos', 'Aditivos');
   }
 
   // ── 3. FRENOS ──────────────────────────────────────────────────────────
-  if (has(/\b(PASTILLA|BALATA|ZAPATA|PATIN\s+FRENO)\b/)) {
+  if (has(/\b(PASTILLAS?|BALATAS?|ZAPATAS?|PATIN(?:ES)?\s+FRENO)\b/)) {
     return construirResultado('Frenos', 'Pastillas y Balatas', '');
   }
-  if (has(/\b(DISCO\s+(?:DE\s+)?FRENO|TAMBOR\s+(?:DE\s+)?FRENO|TAMBOR)\b/) || (has(/\bDISCO\b/) && !has(/\bEMBRAGUE\b/))) {
+  if (has(/\b(DISCOS?\s+(?:DE\s+)?FRENOS?|TAMBOR(?:ES)?\s+(?:DE\s+)?FRENOS?|TAMBOR(?:ES)?)\b/) || (has(/\bDISCOS?\b/) && !has(/\bEMBRAGUES?\b/))) {
     return construirResultado('Frenos', 'Discos y Tambores', '');
   }
-  if (has(/\b(CALIPER|MORDAZA|CILINDRO\s+(?:DE\s+)?(?:FRENO|RUEDA))\b/)) {
+  if (has(/\b(CALIPERS?|MORDAZAS?|CILINDROS?\s+(?:DE\s+)?(?:FRENOS?|RUEDAS?))\b/)) {
     return construirResultado('Frenos', 'Calipers y Cilindros', '');
   }
-  if (has(/\b(BOMBA\s+(?:DE\s+)?FRENO|SERVOFRENO|SERVO\s+FRENO|FLEXIBLE\s+(?:DE\s+)?FRENO|CAÑERIA\s+FRENO)\b/)) {
+  if (has(/\b(BOMBAS?\s+(?:DE\s+)?FRENOS?|SERVOFRENOS?|SERVO\s+FRENOS?|FLEXIBLES?\s+(?:DE\s+)?FRENOS?|CAÑERIAS?\s+FRENOS?)\b/)) {
     return construirResultado('Frenos', 'Líneas y Bombas de Freno', '');
   }
-  if (has(/\b(SENSOR\s+(?:DE\s+)?ABS|ABS)\b/) && has(/\bSENSOR\b/)) {
+  if (has(/\b(SENSOR(?:ES)?\s+(?:DE\s+)?ABS|ABS)\b/) && has(/\bSENSOR(?:ES)?\b/)) {
     return construirResultado('Frenos', 'Sensores y Cables de Freno', 'Sensores ABS');
   }
-  if (has(/\b(CABLE\s+(?:DE\s+)?FRENO|PIOLA\s+(?:DE\s+)?FRENO)\b/)) {
+  if (has(/\b(CABLES?\s+(?:DE\s+)?FRENOS?|PIOLAS?\s+(?:DE\s+)?FRENOS?)\b/)) {
     return construirResultado('Frenos', 'Sensores y Cables de Freno', 'Cables de Freno de Mano');
   }
 
   // ── 4. TRANSMISIÓN Y MANDO ─────────────────────────────────────────────
-  if (has(/\b(RODAMIENTO\s+(?:DE\s+)?MAZA|RODAMIENTO\s+(?:DE\s+)?RUEDA|MAZA|CUBO\s+RUEDA)\b/)) {
+  if (has(/\b(RODAMIENTOS?\s+(?:DE\s+)?MAZAS?|RODAMIENTOS?\s+(?:DE\s+)?RUEDAS?|MAZAS?|CUBOS?\s+RUEDAS?)\b/)) {
     return construirResultado('Transmisión y Mando', 'Rodamientos de Maza', '');
   }
-  if (has(/\b(EMBRAGUE|PRENSA|COLLARIN|BOMBIN\s+EMBRAGUE|BOMBA\s+EMBRAGUE|CILINDRO\s+EMBRAGUE|HORQUILLA\s+EMBRAGUE|VOLANTE\s+INERCIA|VOLANTE\s+MOTOR)\b/)) {
+  if (has(/\b(EMBRAGUES?|PRENSAS?|COLLARIN(?:ES)?|BOMBIN(?:ES)?\s+EMBRAGUES?|BOMBAS?\s+EMBRAGUES?|CILINDROS?\s+EMBRAGUES?|HORQUILLAS?\s+EMBRAGUES?|VOLANTES?\s+INERCIA|VOLANTES?\s+MOTOR)\b/)) {
     return construirResultado('Transmisión y Mando', 'Embrague y Ejes', 'Kits de Embrague');
   }
-  if (has(/\b(HOMOCINETICA|SEMI\s*EJE|PALIER|TRIPOIDE|CARDAN|CRUCETA|DIFERENCIAL|CAJA\s+CAMBIO|PALANCA\s+CAMBIO|FUELLE\s+HOMOCINETICA)\b/) || (has(/\bEJE\b/) && !has(/\bLEVA\b/))) {
+  if (has(/\b(HOMOCINETICAS?|SEMI\s*EJES?|PALIER(?:ES)?|TRIPOIDES?|CARDAN(?:ES)?|CRUCETAS?|DIFERENCIAL(?:ES)?|CAJAS?\s+CAMBIOS?|PALANCAS?\s+CAMBIOS?|FUELLES?\s+HOMOCINETICAS?)\b/) || (has(/\bEJES?\b/) && !has(/\bLEVAS?\b/))) {
     return construirResultado('Transmisión y Mando', 'Embrague y Ejes', 'Homocinéticas y Ejes');
   }
 
   // ── 5. SUSPENSIÓN Y DIRECCIÓN ──────────────────────────────────────────
-  if (has(/\b(CAZOLETA|RODAMIENTO\s+AMORTIGUADOR)\b/)) {
+  if (has(/\b(CAZOLETAS?|RODAMIENTOS?\s+AMORTIGUADOR(?:ES)?)\b/)) {
     return construirResultado('Suspensión y Dirección', 'Suspensión', 'Cazoletas y Rodamientos');
   }
-  if (has(/\b(ESPIRAL|RESORTE\s+SUSPENSION|BALLESTA|PAQUETE\s+RESORTE)\b/)) {
+  if (has(/\b(ESPIRAL(?:ES)?|RESORTES?\s+SUSPENSION|BALLESTAS?|PAQUETES?\s+RESORTES?)\b/)) {
     return construirResultado('Suspensión y Dirección', 'Suspensión', 'Espirales y Resortes');
   }
-  if (has(/\b(AMORTIGUADOR)\b/)) {
+  if (has(/\b(AMORTIGUADOR(?:ES)?)\b/)) {
     return construirResultado('Suspensión y Dirección', 'Suspensión', 'Amortiguadores');
   }
-  if (has(/\b(BANDEJA|BRAZO\s+SUSPENSION|BIELETA|BARRA\s+ESTABILIZADORA|BUJE|MUÑON|MUNON|CUNA|PUENTE\s+SUSPENSION)\b/)) {
+  if (has(/\b(BANDEJAS?|BRAZOS?\s+SUSPENSION|BIELETAS?|BARRAS?\s+ESTABILIZADORAS?|BUJES?|MUÑON(?:ES)?|MUNON(?:ES)?|CUNAS?|PUENTES?\s+SUSPENSION)\b/)) {
     return construirResultado('Suspensión y Dirección', 'Dirección', 'Bandejas y Brazos');
   }
-  if (has(/\b(TERMINAL|AXIAL|BARRA\s+DIRECCION)\b/)) {
+  if (has(/\b(TERMINAL(?:ES)?|AXIAL(?:ES)?|BARRAS?\s+DIRECCION)\b/)) {
     return construirResultado('Suspensión y Dirección', 'Dirección', 'Terminales de Dirección');
   }
-  if (has(/\b(ROTULA)\b/)) {
+  if (has(/\b(ROTULAS?)\b/)) {
     return construirResultado('Suspensión y Dirección', 'Dirección', 'Rótulas');
   }
-  if (has(/\b(CREMALLERA|CAJA\s+DIRECCION|COLUMNA\s+DIRECCION|BOMBA\s+DIRECCION)\b/)) {
+  if (has(/\b(CREMALLERAS?|CAJAS?\s+DIRECCION|COLUMNAS?\s+DIRECCION|BOMBAS?\s+DIRECCION)\b/)) {
     return construirResultado('Suspensión y Dirección', 'Dirección', 'Cremalleras');
   }
 
   // ── 6. REFRIGERACIÓN Y CLIMATIZACIÓN ───────────────────────────────────
-  if (has(/\b(COMPRESOR|CONDENSADOR)\b/)) {
+  if (has(/\b(COMPRESOR(?:ES)?|CONDENSADOR(?:ES)?)\b/)) {
     return construirResultado('Refrigeración y Climatización', 'Aire Acondicionado', 'Compresores y Condensadores');
   }
-  if (has(/\b(EVAPORADOR|CALEFACCION|VALVULA\s+EXPANSION)\b/)) {
+  if (has(/\b(EVAPORADOR(?:ES)?|CALEFACCION|VALVULAS?\s+EXPANSION)\b/)) {
     return construirResultado('Refrigeración y Climatización', 'Aire Acondicionado', 'Evaporadores y Válvulas');
   }
-  if (has(/\b(RADIADOR|ELECTROVENTILADOR|VENTILADOR|ASPAS|ENCACUZADOR|INTERCOOLER|ENFRIADOR)\b/)) {
+  if (has(/\b(RADIADOR(?:ES)?|ELECTROVENTILADOR(?:ES)?|VENTILADOR(?:ES)?|ASPAS|ENCACUZADOR(?:ES)?|INTERCOOLER(?:ES)?|ENFRIADOR(?:ES)?)\b/)) {
     return construirResultado('Refrigeración y Climatización', 'Radiadores y Electroventiladores', '');
   }
-  if (has(/\b(BOMBA\s+(?:DE\s+)?AGUA|TERMOSTATO|TAPA\s+TERMOSTATO|BASE\s+TERMOSTATO|CAJA\s+TERMOSTATO|CAÑERIA\s+AGUA|TUBO\s+AGUA)\b/)) {
+  if (has(/\b(BOMBAS?\s+(?:DE\s+)?AGUA|TERMOSTATOS?|TAPAS?\s+TERMOSTATOS?|BASES?\s+TERMOSTATOS?|CAJAS?\s+TERMOSTATOS?|CAÑERIAS?\s+AGUA|TUBOS?\s+AGUA)\b/)) {
     return construirResultado('Refrigeración y Climatización', 'Bombas de Agua y Termostatos', '');
   }
-  if (has(/\b(MANGUERA|TAPA\s+RADIADOR)\b/)) {
+  if (has(/\b(MANGUERAS?|TAPAS?\s+RADIADOR(?:ES)?)\b/)) {
     return construirResultado('Refrigeración y Climatización', 'Mangueras y Depósitos', '');
   }
 
   // ── 7. SISTEMA ELÉCTRICO E ILUMINACIÓN ─────────────────────────────────
-  if (has(/\b(BATERIA|ALTERNADOR)\b/)) {
+  if (has(/\b(BATERIAS?|ALTERNADOR(?:ES)?)\b/)) {
     return construirResultado('Sistema Eléctrico e Iluminación', 'Baterías y Alternadores', '');
   }
-  if (has(/\b(MOTOR\s+(?:DE\s+)?(?:PARTIDA|ARRANQUE)|ARRANQUE|BENDIX)\b/)) {
+  if (has(/\b(MOTOR(?:ES)?\s+(?:DE\s+)?(?:PARTIDA|ARRANQUE)|ARRANQUES?|BENDIX)\b/)) {
     return construirResultado('Sistema Eléctrico e Iluminación', 'Motores de Arranque', '');
   }
-  if (has(/\b(INTERMITENTE|CORNER|DIRECCIONAL)\b/)) {
+  if (has(/\b(INTERMITENTES?|CORNER|DIRECCIONAL(?:ES)?)\b/)) {
     return construirResultado('Sistema Eléctrico e Iluminación', 'Iluminación', 'Intermitentes');
   }
-  if (has(/\b(AMPOLLETA|BULBO\s+LUZ|HALOGENO)\b/)) {
+  if (has(/\b(AMPOLLETAS?|BULBOS?\s+LUZ|HALOGENOS?)\b/)) {
     return construirResultado('Sistema Eléctrico e Iluminación', 'Iluminación', 'Ampolletas y Bulbos');
   }
-  if (has(/\b(FAROL|FARO|OPTICO|NEBLINERO|FOCO|LUZ|REFLECTANTE|CATADIOPTRICO)\b/)) {
+  if (has(/\b(FAROL(?:ES)?|FAROS?|OPTICOS?|NEBLINEROS?|FOCOS?|LUZ|LUCES|REFLECTANTES?|CATADIOPTRICOS?)\b/)) {
     return construirResultado('Sistema Eléctrico e Iluminación', 'Iluminación', 'Faros y Focos Traseros');
   }
-  if (has(/\b(BOBINA)\b/)) {
+  if (has(/\b(BOBINAS?)\b/)) {
     return construirResultado('Sistema Eléctrico e Iluminación', 'Encendido', 'Bobinas de Encendido');
   }
-  if (has(/\b(BUJIA|CABLE\s+BUJIA|CABLES\s+BUJIA)\b/)) {
+  if (has(/\b(BUJIAS?|CABLES?\s+BUJIAS?)\b/)) {
     return construirResultado('Sistema Eléctrico e Iluminación', 'Encendido', 'Bujías y Cables');
   }
-  if (has(/\b(SENSOR\s+(?:DE\s+)?OXIGENO|SONDA\s+LAMBDA)\b/)) {
+  if (has(/\b(SENSOR(?:ES)?\s+(?:DE\s+)?OXIGENO|SONDAS?\s+LAMBDA)\b/)) {
     return construirResultado('Motor', 'Escape', 'Sensores de Oxígeno');
   }
-  if (has(/\b(SENSOR\s+(?:DE\s+)?(?:CKP|CMP|CIGUEÑAL|CIGUENAL|LEVA|POSICION))\b/)) {
+  if (has(/\b(SENSOR(?:ES)?\s+(?:DE\s+)?(?:CKP|CMP|CIGUEÑAL|CIGUENAL|LEVAS?|POSICION))\b/)) {
     return construirResultado('Sistema Eléctrico e Iluminación', 'Sensores y Switches', 'Sensores CKP y CMP');
   }
-  if (has(/\b(SENSOR\s+(?:DE\s+)?(?:TEMPERATURA|PRESION|MAP|MAF|ACEITE|AGUA)|BULBO)\b/)) {
+  if (has(/\b(SENSOR(?:ES)?\s+(?:DE\s+)?(?:TEMPERATURA|PRESION|MAP|MAF|ACEITE|AGUA)|BULBOS?)\b/)) {
     return construirResultado('Sistema Eléctrico e Iluminación', 'Sensores y Switches', 'Sensores de Temperatura y Presión');
   }
-  if (has(/\b(SENSOR|TELECOMANDO|BOTONERA|BOTON|SWITCH|INTERRUPTOR|CINTA\s+AIRBAG|RELE|RELAY|MODULO|ECU|COMPUTADOR)\b/)) {
+  if (has(/\b(SENSOR(?:ES)?|TELECOMANDOS?|BOTONERAS?|BOTON(?:ES)?|SWITCH(?:ES)?|INTERRUPTOR(?:ES)?|CINTAS?\s+AIRBAG|RELES?|RELAYS?|MODULOS?|ECU|COMPUTADOR(?:ES)?)\b/)) {
     return construirResultado('Sistema Eléctrico e Iluminación', 'Sensores y Switches', 'Sensores de Temperatura y Presión');
   }
 
   // ── 8. CORREAS Y PIOLAS ────────────────────────────────────────────────
-  if (has(/\b(KIT\s+(?:DE\s+)?DISTRIBUCION|CORREA\s+(?:DE\s+)?DISTRIBUCION|RODILLO\s+DISTRIBUCION)\b/)) {
+  if (has(/\b(KITS?\s+(?:DE\s+)?DISTRIBUCION|CORREAS?\s+(?:DE\s+)?DISTRIBUCION|RODILLOS?\s+DISTRIBUCION)\b/)) {
     return construirResultado('Motor', 'Distribución', 'Kits de Distribución');
   }
-  if (has(/\b(CADENA\s+(?:DE\s+)?DISTRIBUCION|TENSOR\s+(?:DE\s+)?(?:DISTRIBUCION|CADENA)|GUIA\s+CADENA|KIT\s+CADENA)\b/)) {
+  if (has(/\b(CADENAS?\s+(?:DE\s+)?DISTRIBUCION|TENSOR(?:ES)?\s+(?:DE\s+)?(?:DISTRIBUCION|CADENA)|GUIAS?\s+CADENA|KITS?\s+CADENA)\b/)) {
     return construirResultado('Motor', 'Distribución', 'Cadenas y Tensores');
   }
-  if (has(/\b(CORREA)\b/)) {
+  if (has(/\b(CORREAS?)\b/)) {
     return construirResultado('Correas y Piolas', 'Correas de Accesorios', '');
   }
-  if (has(/\b(TENSOR|POLEA|DAMPER|RODILLO)\b/)) {
+  if (has(/\b(TENSOR(?:ES)?|POLEAS?|DAMPERS?|RODILLOS?)\b/)) {
     return construirResultado('Correas y Piolas', 'Tensores y Poleas', '');
   }
-  if (has(/\b(PIOLA|CABLE\s+ACELERADOR|CABLE\s+EMBRAGUE|CABLE\s+SELECTORA)\b/)) {
+  if (has(/\b(PIOLAS?|CABLES?\s+ACELERADOR|CABLES?\s+EMBRAGUE|CABLES?\s+SELECTORA)\b/)) {
     return construirResultado('Correas y Piolas', 'Piolas y Cables', '');
   }
 
   // ── 9. CARROCERÍA Y ESPEJOS ────────────────────────────────────────────
-  if (has(/\b(PLUMILLA|BRAZO\s+LIMPIAPARABRISAS|LIMPIAPARABRISAS)\b/)) {
+  if (has(/\b(PLUMILLAS?|BRAZOS?\s+LIMPIAPARABRISAS|LIMPIAPARABRISAS)\b/)) {
     return construirResultado('Carrocería y Espejos', 'Limpiaparabrisas', 'Plumillas');
   }
-  if (has(/\b(CRISTAL\s+(?:DE\s+)?ESPEJO|VIDRIO\s+(?:DE\s+)?ESPEJO)\b/)) {
+  if (has(/\b(CRISTAL(?:ES)?\s+(?:DE\s+)?ESPEJOS?|VIDRIOS?\s+(?:DE\s+)?ESPEJOS?)\b/)) {
     return construirResultado('Carrocería y Espejos', 'Espejos Retrovisores', 'Cristales de Espejo');
   }
-  if (has(/\b(ESPEJO)\b/)) {
+  if (has(/\b(ESPEJOS?)\b/)) {
     return construirResultado('Carrocería y Espejos', 'Espejos Retrovisores', 'Espejos Completos');
   }
-  if (has(/\b(CAPOT|CAPO|PUERTA|PORTALON|MALETERO|BISAGRA)\b/)) {
+  if (has(/\b(CAPOT|CAPO|PUERTAS?|PORTALON(?:ES)?|MALETEROS?|BISAGRAS?)\b/)) {
     return construirResultado('Carrocería y Espejos', 'Componentes de Chapa', 'Capó y Puertas');
   }
-  if (has(/\b(TAPABARRO|GUARDAFANGO|GUARDABARRO|MOLDURA|ALETA|PASA\s+RUEDA)\b/)) {
+  if (has(/\b(TAPABARROS?|GUARDAFANGOS?|GUARDABARROS?|MOLDURAS?|ALETAS?|PASA\s+RUEDAS?)\b/)) {
     return construirResultado('Carrocería y Espejos', 'Componentes de Chapa', 'Tapabarros y Guardabarros');
   }
-  if (has(/\b(MANILLA|CHAPA|CERRADURA|CILINDRO\s+CONTACTO)\b/)) {
+  if (has(/\b(MANILLAS?|CHAPAS?|CERRADURAS?|CILINDROS?\s+CONTACTO)\b/)) {
     return construirResultado('Carrocería y Espejos', 'Accesorios de Carrocería', 'Manillas y Chapas');
   }
-  if (has(/\b(PARACHOQUE|REJILLA|MASCARA|BISEL|CROMADO|MENSULA|DEFENSA|FRONTAL|EMBELLECEDOR|MARCO|PORTAPATENTE|LOGO|EMBLEMA|CUBIERTA|SPOILER|PISADERA)\b/)) {
+  if (has(/\b(PARACHOQUES?|REJILLAS?|MASCARAS?|BISEL(?:ES)?|CROMADOS?|MENSULAS?|DEFENSAS?|FRONTAL(?:ES)?|EMBELLECEDOR(?:ES)?|MARCOS?|PORTAPATENTES?|LOGOS?|EMBLEMAS?|CUBIERTAS?|SPOILERS?|PISADERAS?)\b/)) {
     return construirResultado('Carrocería y Espejos', 'Parachoques y Rejillas', '');
   }
 
   // ── 10. MOTOR ──────────────────────────────────────────────────────────
-  if (has(/\b(SOPORTE)\b/)) {
+  if (has(/\b(SOPORTES?)\b/)) {
     return construirResultado('Motor', 'Soportes de Motor', '');
   }
-  if (has(/\b(INYECTOR|RIEL\s+INYECTOR)\b/)) {
+  if (has(/\b(INYECTOR(?:ES)?|RIEL(?:ES)?\s+INYECTOR(?:ES)?)\b/)) {
     return construirResultado('Motor', 'Alimentación e Inyección', 'Inyectores');
   }
-  if (has(/\b(BOMBA\s+(?:DE\s+)?(?:BENCINA|COMBUSTIBLE|PETROLEO|INYECTORA))\b/)) {
+  if (has(/\b(BOMBAS?\s+(?:DE\s+)?(?:BENCINA|COMBUSTIBLE|PETROLEO|INYECTORAS?))\b/)) {
     return construirResultado('Motor', 'Alimentación e Inyección', 'Bombas de Combustible');
   }
-  if (has(/\b(CUERPO\s+(?:DE\s+)?ACELERACION|PEDAL\s+ACELERACION|ADMISION)\b/) && !has(/\bMULTIPLE\b/)) {
+  if (has(/\b(CUERPOS?\s+(?:DE\s+)?ACELERACION|PEDAL(?:ES)?\s+ACELERACION|ADMISION)\b/) && !has(/\bMULTIPLES?\b/)) {
     return construirResultado('Motor', 'Alimentación e Inyección', 'Cuerpo de Aceleración');
   }
-  if (has(/\b(MULTIPLE|CATALIZADOR|CATALITICO|TURBO)\b/)) {
+  if (has(/\b(MULTIPLES?|CATALIZADOR(?:ES)?|CATALITICOS?|TURBOS?)\b/)) {
     return construirResultado('Motor', 'Escape', 'Múltiples y Catalizadores');
   }
-  if (has(/\b(SILENCIADOR|ESCAPE|TUBO\s+ESCAPE)\b/)) {
+  if (has(/\b(SILENCIADOR(?:ES)?|ESCAPES?|TUBOS?\s+ESCAPE)\b/)) {
     return construirResultado('Motor', 'Escape', 'Silenciadores');
   }
-  if (has(/\b(VALVULA|EJE\s+LEVA|LEVA|TAQUIES|TAQUE|BALANCIN|CULATA)\b/)) {
+  if (has(/\b(VALVULAS?|EJES?\s+LEVAS?|LEVAS?|TAQUIES|TAQUES?|BALANCIN(?:ES)?|CULATAS?)\b/)) {
     return construirResultado('Motor', 'Componentes Internos', 'Válvulas');
   }
-  if (has(/\b(EMPAQUETADURA|JUNTA|RETEN|SELLO|SILICONA|ORING|TAPA\s+VALVULA)\b/)) {
+  if (has(/\b(EMPAQUETADURAS?|JUNTAS?|RETEN(?:ES)?|SELLOS?|SILICONAS?|ORING|TAPAS?\s+VALVULAS?)\b/)) {
     return construirResultado('Motor', 'Componentes Internos', 'Empaquetaduras y Juntas');
   }
-  if (has(/\b(CIGUEÑAL|CIGUENAL|METAL\s+BIELA|METAL\s+BANCADA|METAL|PIÑON\s+CIGUEÑAL|PINON\s+CIGUENAL)\b/)) {
+  if (has(/\b(CIGUEÑAL(?:ES)?|CIGUENAL(?:ES)?|METAL(?:ES)?\s+BIELAS?|METAL(?:ES)?\s+BANCADAS?|METAL(?:ES)?|PIÑON(?:ES)?\s+CIGUEÑAL|PINON(?:ES)?\s+CIGUENAL)\b/)) {
     return construirResultado('Motor', 'Componentes Internos', 'Cigüeñal');
   }
-  if (has(/\b(PISTON|ANILLO|BIELA|CARTER|BOMBA\s+ACEITE|ENSAMBLE\s+MOTOR|BLOCK)\b/)) {
+  if (has(/\b(PISTON(?:ES)?|ANILLOS?|BIELAS?|CARTER|BOMBAS?\s+ACEITE|ENSAMBLES?\s+MOTOR|BLOCK)\b/)) {
     return construirResultado('Motor', 'Componentes Internos', 'Pistones');
   }
 

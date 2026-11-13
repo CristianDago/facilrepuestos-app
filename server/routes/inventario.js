@@ -18,6 +18,7 @@ async function autoSyncWooDeltaSiConfigurado() {
 import { buscarRepuestoPorCodigo, analizarCodigoProductoAutomotriz } from '../services/partLookup.js';
 import { generarSkuPublicoFrp } from '../services/ailooBridge.js';
 import { calcularHashCatalogoItem } from '../services/ailooCatalogSync.js';
+import { clasificarProductoEnTaxonomiaFrp } from '../services/categoriasTaxonomia.js';
 import { limpiarReservasMostradorExpiradas } from './pos.js';
 
 const router = Router();
@@ -1338,15 +1339,25 @@ router.post('/', requireAuth, async (req, res, next) => {
     const now = new Date().toISOString();
     const prefijoSku = rest.prefijoSku || 'FRP-LOC';
     const skuPublicoFrp = rest.skuPublicoFrp || generarSkuPublicoFrp(prefijoSku, rest.codigo || nombre.slice(0, 12));
-    const nuevoItem = {
+    const taxonomia = clasificarProductoEnTaxonomiaFrp({
       nombre,
       categoria,
+      subcategoria: rest.subcategoria,
+      subcategoriaDetalle: rest.subcategoriaDetalle,
+      tipoPieza: rest.tipoPieza,
+    });
+    const nuevoItem = {
+      nombre,
       stock: stock || 0,
       stockReservado: 0,
       origenDatos: rest.origenDatos || 'proveedor_local',
       prefijoSku,
       skuPublicoFrp,
       ...rest,
+      categoria: taxonomia.categoria,
+      subcategoria: taxonomia.subcategoria,
+      subcategoriaDetalle: taxonomia.subcategoriaDetalle,
+      categoriaRuta: taxonomia.categoriaRuta,
       needsWooSync: true,
       wooSyncMotivo: 'creacion_inventario',
       createdAt: now,
@@ -1397,7 +1408,13 @@ router.put('/:id', requireAuth, async (req, res, next) => {
 
     const estadoPrevio = snapItem.data();
     const estadoCombinado = { ...estadoPrevio, ...data };
-    const nuevoHash = calcularHashCatalogoItem(estadoCombinado);
+    const taxonomia = clasificarProductoEnTaxonomiaFrp(estadoCombinado);
+    data.categoria = taxonomia.categoria;
+    data.subcategoria = taxonomia.subcategoria;
+    data.subcategoriaDetalle = taxonomia.subcategoriaDetalle;
+    data.categoriaRuta = taxonomia.categoriaRuta;
+
+    const nuevoHash = calcularHashCatalogoItem({ ...estadoPrevio, ...data });
     const cambioRelevanteWoo = nuevoHash !== estadoPrevio.deltaHash;
 
     await db.collection('inventario').doc(id).update({

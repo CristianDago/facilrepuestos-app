@@ -356,7 +356,7 @@ router.post('/:id/responder', async (req, res, next) => {
       if (nodoSnap.exists) {
         const nodo = nodoSnap.data();
         prefijoSku = nodo.prefijoSku || `FRP-${esc.nodoAilooId.slice(0, 3).toUpperCase()}`;
-        margenPct = Number(nodo.margenPct) || 25;
+        margenPct = esc.nodoAilooId === 'soluparts' ? 0 : (nodo.margenPct !== undefined ? Number(nodo.margenPct) : 0);
         datasetOrigenConocimiento = `${nodo.datasetId}.${nodo.tablaConocimiento || 'conocimiento_aprendido'}`;
       }
     }

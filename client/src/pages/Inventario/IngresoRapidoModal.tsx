@@ -887,7 +887,7 @@ export default function IngresoRapidoModal({
                       const nuevaCat = e.target.value;
                       const subs = obtenerSubcategorias(nuevaCat);
                       const primeraSub = subs[0]?.nombre || '';
-                      const primeraDet = subs[0]?.hijas?.[0] || '';
+                      const primeraDet = subs[0]?.hijos?.[0] || '';
                       setCategoriaNueva(nuevaCat);
                       setSubcategoriaNueva(primeraSub);
                       setSubcategoriaDetalleNueva(primeraDet);

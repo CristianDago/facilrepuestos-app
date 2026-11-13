@@ -1,5 +1,12 @@
 import { db } from '../config/firebase.js';
 import { generarSkuPublicoFrp } from './ailooBridge.js';
+import {
+  ARBOL_CATEGORIAS_TIENDA,
+  normCat,
+  resolverRutaCategoriasTienda,
+} from './categoriasTaxonomia.js';
+
+export { ARBOL_CATEGORIAS_TIENDA, resolverRutaCategoriasTienda };
 
 function getWooConfig() {
   return {
@@ -47,7 +54,12 @@ async function obtenerProductosExistentes() {
     const productos = await wcFetch(`/products?per_page=100&page=${page}&_fields=id,sku,images`);
     if (!productos.length) break;
     for (const p of productos) {
-      if (p.sku) mapa.set(String(p.sku).trim().toUpperCase(), { id: p.id, tieneImagen: (p.images || []).length > 0 });
+      if (p.sku) {
+        mapa.set(String(p.sku).trim().toUpperCase(), {
+          id: p.id,
+          tieneImagen: (p.images || []).length > 0,
+        });
+      }
     }
     if (productos.length < 100) break;
     page++;
@@ -55,208 +67,15 @@ async function obtenerProductosExistentes() {
   return mapa;
 }
 
-// Árbol oficial de 9 categorías y subcategorías de la tienda WordPress (https://facilrepuestos.cl)
-const ARBOL_CATEGORIAS_TIENDA = [
-  {
-    nombre: 'Motor',
-    subcategorias: [
-      { nombre: 'Soportes de Motor' },
-      { nombre: 'Alimentación e Inyección', hijas: ['Inyectores', 'Bombas de Combustible', 'Cuerpo de Aceleración'] },
-      { nombre: 'Escape', hijas: ['Múltiples y Catalizadores', 'Silenciadores', 'Sensores de Oxígeno'] },
-      { nombre: 'Componentes Internos', hijas: ['Válvulas', 'Empaquetaduras y Juntas', 'Cigüeñal', 'Pistones'] },
-      { nombre: 'Distribución', hijas: ['Kits de Distribución', 'Cadenas y Tensores'] },
-    ],
-  },
-  {
-    nombre: 'Refrigeración y Climatización',
-    subcategorias: [
-      { nombre: 'Radiadores y Electroventiladores' },
-      { nombre: 'Bombas de Agua y Termostatos' },
-      { nombre: 'Mangueras y Depósitos' },
-      { nombre: 'Aire Acondicionado', hijas: ['Compresores y Condensadores', 'Evaporadores y Válvulas'] },
-    ],
-  },
-  {
-    nombre: 'Mantenimiento Rápido',
-    subcategorias: [
-      { nombre: 'Filtros', hijas: ['Filtro de Aceite', 'Filtro de Aire', 'Filtro de Combustible', 'Filtro de Cabina y Polen'] },
-      { nombre: 'Lubricantes y Fluidos', hijas: ['Aceites de Motor', 'Fluidos de Transmisión', 'Líquido de Frenos', 'Anticongelante y Refrigerante', 'Aditivos'] },
-    ],
-  },
-  {
-    nombre: 'Frenos',
-    subcategorias: [
-      { nombre: 'Pastillas y Balatas' },
-      { nombre: 'Discos y Tambores' },
-      { nombre: 'Calipers y Cilindros' },
-      { nombre: 'Líneas y Bombas de Freno' },
-      { nombre: 'Sensores y Cables de Freno', hijas: ['Sensores ABS', 'Cables de Freno de Mano'] },
-    ],
-  },
-  {
-    nombre: 'Suspensión y Dirección',
-    subcategorias: [
-      { nombre: 'Suspensión', hijas: ['Amortiguadores', 'Espirales y Resortes', 'Cazoletas y Rodamientos'] },
-      { nombre: 'Dirección', hijas: ['Bandejas y Brazos', 'Terminales de Dirección', 'Cremalleras', 'Rótulas'] },
-    ],
-  },
-  {
-    nombre: 'Transmisión y Mando',
-    subcategorias: [
-      { nombre: 'Embrague y Ejes', hijas: ['Homocinéticas y Ejes', 'Kits de Embrague'] },
-      { nombre: 'Rodamientos de Maza' },
-    ],
-  },
-  {
-    nombre: 'Sistema Eléctrico e Iluminación',
-    subcategorias: [
-      { nombre: 'Baterías y Alternadores' },
-      { nombre: 'Motores de Arranque' },
-      { nombre: 'Iluminación', hijas: ['Intermitentes', 'Faros y Focos Traseros', 'Ampolletas y Bulbos'] },
-      { nombre: 'Sensores y Switches', hijas: ['Sensores CKP y CMP', 'Sensores de Temperatura y Presión'] },
-      { nombre: 'Encendido', hijas: ['Bujías y Cables', 'Bobinas de Encendido'] },
-    ],
-  },
-  {
-    nombre: 'Carrocería y Espejos',
-    subcategorias: [
-      { nombre: 'Parachoques y Rejillas' },
-      { nombre: 'Componentes de Chapa', hijas: ['Capó y Puertas', 'Tapabarros y Guardabarros'] },
-      { nombre: 'Espejos Retrovisores', hijas: ['Cristales de Espejo', 'Espejos Completos'] },
-      { nombre: 'Accesorios de Carrocería', hijas: ['Manillas y Chapas', 'Amortiguadores de Maleta'] },
-      { nombre: 'Limpiaparabrisas', hijas: ['Plumillas'] },
-    ],
-  },
-  {
-    nombre: 'Correas y Piolas',
-    subcategorias: [
-      { nombre: 'Correas de Accesorios' },
-      { nombre: 'Tensores y Poleas' },
-      { nombre: 'Piolas y Cables' },
-    ],
-  },
-];
-
-const normCat = (s = '') =>
-  String(s || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toUpperCase()
-    .replace(/\s+/g, ' ')
-    .trim();
-
-/**
- * Resuelve la ruta jerárquica de categorías de la tienda (`[categoria, subcategoria, subcategoriaDetalle]`)
- * para un ítem de inventario, soportando tanto ítems nuevos con subcategorías explícitas como
- * ítems históricos o federados con categorías en mayúsculas.
- */
-export function resolverRutaCategoriasTienda(item = {}) {
-  const catRaw = normCat(item.categoria);
-  const subRaw = normCat(item.subcategoria);
-  const detRaw = normCat(item.subcategoriaDetalle);
-  const tipoRaw = normCat(item.tipoPieza);
-  const nomRaw = normCat(item.nombre);
-
-  // 1. Coincidencia directa con categoría principal del árbol
-  const catMatch = ARBOL_CATEGORIAS_TIENDA.find((c) => normCat(c.nombre) === catRaw);
-  if (catMatch) {
-    const subMatch =
-      catMatch.subcategorias.find((s) => normCat(s.nombre) === subRaw) ||
-      catMatch.subcategorias.find((s) => normCat(s.nombre) === tipoRaw) ||
-      catMatch.subcategorias.find((s) => (s.hijas || []).some((h) => normCat(h) === detRaw || normCat(h) === tipoRaw));
-
-    const detMatch = subMatch?.hijas?.find(
-      (h) => normCat(h) === detRaw || normCat(h) === tipoRaw || normCat(h) === subRaw
-    );
-
-    return [catMatch.nombre, subMatch?.nombre || '', detMatch || ''].filter(Boolean);
-  }
-
-  // 2. Búsqueda de hoja (nivel 3 o nivel 2) por subcategoría o tipoPieza
-  const aguja = detRaw || subRaw || tipoRaw;
-  if (aguja) {
-    for (const c of ARBOL_CATEGORIAS_TIENDA) {
-      for (const s of c.subcategorias) {
-        if (normCat(s.nombre) === aguja) {
-          return [c.nombre, s.nombre];
-        }
-        for (const h of s.hijas || []) {
-          if (normCat(h) === aguja) {
-            return [c.nombre, s.nombre, h];
-          }
-        }
-      }
-    }
-  }
-
-  // 3. Inferencia por palabras clave y categorías legadas
-  const texto = `${catRaw} ${tipoRaw} ${nomRaw}`;
-  if (texto.includes('PASTILLA') || texto.includes('BALATA')) return ['Frenos', 'Pastillas y Balatas'];
-  if (texto.includes('DISCO DE FRENO') || texto.includes('TAMBOR')) return ['Frenos', 'Discos y Tambores'];
-  if (texto.includes('CALIPER') || texto.includes('CILINDRO DE FRENO')) return ['Frenos', 'Calipers y Cilindros'];
-  if (texto.includes('SENSOR ABS')) return ['Frenos', 'Sensores y Cables de Freno', 'Sensores ABS'];
-  if (catRaw === 'FRENOS') return ['Frenos', 'Pastillas y Balatas'];
-
-  if (texto.includes('FILTRO DE ACEITE')) return ['Mantenimiento Rápido', 'Filtros', 'Filtro de Aceite'];
-  if (texto.includes('FILTRO DE AIRE')) return ['Mantenimiento Rápido', 'Filtros', 'Filtro de Aire'];
-  if (texto.includes('FILTRO DE COMBUSTIBLE') || texto.includes('FILTRO BENCINA') || texto.includes('FILTRO PETROLEO')) {
-    return ['Mantenimiento Rápido', 'Filtros', 'Filtro de Combustible'];
-  }
-  if (texto.includes('CABINA') || texto.includes('POLEN')) return ['Mantenimiento Rápido', 'Filtros', 'Filtro de Cabina y Polen'];
-  if (catRaw === 'FILTROS') return ['Mantenimiento Rápido', 'Filtros'];
-  if (catRaw === 'LUBRICANTES' || texto.includes('ACEITE')) return ['Mantenimiento Rápido', 'Lubricantes y Fluidos', 'Aceites de Motor'];
-
-  if (texto.includes('AMORTIGUADOR') && !texto.includes('MALETA') && !texto.includes('PORTALON')) {
-    return ['Suspensión y Dirección', 'Suspensión', 'Amortiguadores'];
-  }
-  if (texto.includes('ESPIRAL') || texto.includes('RESORTE')) return ['Suspensión y Dirección', 'Suspensión', 'Espirales y Resortes'];
-  if (texto.includes('CAZOLETA')) return ['Suspensión y Dirección', 'Suspensión', 'Cazoletas y Rodamientos'];
-  if (texto.includes('BANDEJA') || texto.includes('BRAZO')) return ['Suspensión y Dirección', 'Dirección', 'Bandejas y Brazos'];
-  if (texto.includes('TERMINAL') || texto.includes('AXIAL')) return ['Suspensión y Dirección', 'Dirección', 'Terminales de Dirección'];
-  if (texto.includes('CREMALLERA')) return ['Suspensión y Dirección', 'Dirección', 'Cremalleras'];
-  if (texto.includes('ROTULA')) return ['Suspensión y Dirección', 'Dirección', 'Rótulas'];
-  if (catRaw === 'SUSPENSION') return ['Suspensión y Dirección', 'Suspensión'];
-  if (catRaw === 'DIRECCION') return ['Suspensión y Dirección', 'Dirección'];
-
-  if (texto.includes('HOMOCINETICA') || texto.includes('EJE')) return ['Transmisión y Mando', 'Embrague y Ejes', 'Homocinéticas y Ejes'];
-  if (texto.includes('EMBRAGUE')) return ['Transmisión y Mando', 'Embrague y Ejes', 'Kits de Embrague'];
-  if (texto.includes('MAZA')) return ['Transmisión y Mando', 'Rodamientos de Maza'];
-  if (catRaw === 'TRANSMISION') return ['Transmisión y Mando', 'Embrague y Ejes'];
-
-  if (texto.includes('RADIADOR') || texto.includes('ELECTROVENTILADOR')) return ['Refrigeración y Climatización', 'Radiadores y Electroventiladores'];
-  if (texto.includes('BOMBA DE AGUA') || texto.includes('TERMOSTATO')) return ['Refrigeración y Climatización', 'Bombas de Agua y Termostatos'];
-
-  if (texto.includes('BUJIA')) return ['Sistema Eléctrico e Iluminación', 'Encendido', 'Bujías y Cables'];
-  if (texto.includes('BOBINA')) return ['Sistema Eléctrico e Iluminación', 'Encendido', 'Bobinas de Encendido'];
-  if (texto.includes('BATERIA') || texto.includes('ALTERNADOR')) return ['Sistema Eléctrico e Iluminación', 'Baterías y Alternadores'];
-  if (texto.includes('ARRANQUE')) return ['Sistema Eléctrico e Iluminación', 'Motores de Arranque'];
-  if (texto.includes('SENSOR')) return ['Sistema Eléctrico e Iluminación', 'Sensores y Switches'];
-  if (catRaw === 'ELECTRICO') return ['Sistema Eléctrico e Iluminación', 'Sensores y Switches'];
-
-  if (texto.includes('PARACHOQUE') || texto.includes('REJILLA') || texto.includes('MASCARA')) return ['Carrocería y Espejos', 'Parachoques y Rejillas'];
-  if (texto.includes('ESPEJO')) return ['Carrocería y Espejos', 'Espejos Retrovisores', 'Espejos Completos'];
-  if (texto.includes('PLUMILLA')) return ['Carrocería y Espejos', 'Limpiaparabrisas', 'Plumillas'];
-  if (catRaw === 'CARROCERIA') return ['Carrocería y Espejos', 'Parachoques y Rejillas'];
-
-  if (texto.includes('CORREA') && !texto.includes('DISTRIBUCION')) return ['Correas y Piolas', 'Correas de Accesorios'];
-  if (texto.includes('PIOLA')) return ['Correas y Piolas', 'Piolas y Cables'];
-
-  if (texto.includes('SOPORTE DE MOTOR') || texto.includes('SOPORTE MOTOR')) return ['Motor', 'Soportes de Motor'];
-  if (texto.includes('DISTRIBUCION')) return ['Motor', 'Distribución', 'Kits de Distribución'];
-  if (texto.includes('EMPAQUETADURA') || texto.includes('JUNTA') || texto.includes('CULATA')) {
-    return ['Motor', 'Componentes Internos', 'Empaquetaduras y Juntas'];
-  }
-  return ['Motor'];
-}
-
 // Trae/crea categorías jerárquicas de WooCommerce (respetando padre -> hijo -> nieto)
-// y devuelve una función `resolverIdsParaItem(item)` que entrega `[{ id }, ...]`
+// únicamente dentro del árbol oficial de 9 categorías y devuelve una función `resolverIdsParaItem(item)`
+// que entrega `[{ id }, ...]`.
 async function prepararCategoriasWooCommerce(items = []) {
   const existentes = [];
   let page = 1;
   while (true) {
     const lote = await wcFetch(`/products/categories?per_page=100&page=${page}`);
-    if (!lote.length) break;
+    if (!Array.isArray(lote) || !lote.length) break;
     existentes.push(...lote);
     if (lote.length < 100) break;
     page++;
@@ -479,8 +298,18 @@ function descripcionDeItem(item) {
   if (item.marcasCompatibles?.length) {
     partes.push(`<strong>Compatible con:</strong> ${item.marcasCompatibles.join(', ')}`);
   }
-  if (item.modelosCompatibles?.length) {
+  if (Array.isArray(item.modelosCompatibles) && item.modelosCompatibles.length) {
     partes.push(`<strong>Modelos compatibles:</strong> ${item.modelosCompatibles.join(', ')}`);
+  } else if (item.modelosCompatibles && typeof item.modelosCompatibles === 'object') {
+    const entradasModelos = Object.entries(item.modelosCompatibles)
+      .filter(([, mods]) => Array.isArray(mods) && mods.length > 0)
+      .map(([marca, mods]) => `${escHtml(marca)}: ${mods.map(escHtml).join(', ')}`);
+    if (entradasModelos.length > 0) {
+      partes.push(`<strong>Modelos compatibles:</strong> ${entradasModelos.join(' · ')}`);
+    }
+  }
+  if (Array.isArray(item.cilindradasCompatibles) && item.cilindradasCompatibles.length) {
+    partes.push(`<strong>Cilindrada:</strong> ${item.cilindradasCompatibles.map(escHtml).join(', ')}`);
   }
   if (item.anioDesde || item.anioHasta) {
     partes.push(`<strong>Años compatibles:</strong> ${item.anioDesde || ''}${item.anioHasta ? ` - ${item.anioHasta}` : '+'}`);
@@ -507,6 +336,7 @@ function descripcionDeItem(item) {
 function construirPayload(id, item, obtenerCategoriasItem, esNuevo, puedeAgregarImagen) {
   const disponible = Math.max(0, Math.floor((item.stock || 0) - (item.stockReservado || 0)));
   const rutaCategorias = resolverRutaCategoriasTienda(item);
+  const rutaTexto = rutaCategorias.join(' > ');
   const categories = typeof obtenerCategoriasItem === 'function' ? obtenerCategoriasItem(item) : [];
 
   const payload = {
@@ -521,7 +351,8 @@ function construirPayload(id, item, obtenerCategoriasItem, esNuevo, puedeAgregar
       { key: '_drmotors_inventario_id', value: id },
       { key: '_frp_origen_datos', value: String(item.origenDatos || 'proveedor_local') },
       { key: '_frp_proveedor_id', value: String(item.proveedorId || 'local') },
-      { key: '_frp_categoria_jerarquia', value: rutaCategorias.join(' > ') },
+      { key: '_frp_categoria_jerarquia', value: rutaTexto },
+      { key: '_frp_categoria_ruta', value: rutaTexto },
     ],
   };
 
@@ -555,7 +386,7 @@ export async function obtenerEstadoColaWooCommerce() {
   };
 
   for (const item of items) {
-    const isPendiente = item.needsWooSync === true || !item.lastWooSyncAt;
+    const isPendiente = item.needsWooSync === true || !i.lastWooSyncAt;
     const bucket =
       item.nodoAilooId === 'soluparts' || item.proveedorId === 'soluparts'
         ? 'soluparts'
@@ -583,6 +414,8 @@ export async function obtenerEstadoColaWooCommerce() {
       codigoInterno: i.codigo || '',
       nombre: i.nombre,
       categoria: i.categoria || 'General',
+      subcategoria: i.subcategoria || '',
+      subcategoriaDetalle: i.subcategoriaDetalle || '',
       proveedor: i.proveedor || 'Taller / Local',
       origenDatos: i.origenDatos || 'proveedor_local',
       nodoAilooId: i.nodoAilooId || null,
@@ -600,17 +433,18 @@ export async function obtenerEstadoColaWooCommerce() {
  * - Por defecto (`soloDelta = true`) sincroniza únicamente los ítems con `needsWooSync === true`
  *   o que nunca se han sincronizado (`!lastWooSyncAt`), logrando sincronización incremental rápida.
  * - Si `soloDelta = false`, sincroniza el catálogo completo.
- * - Si las credenciales `WOOCOMMERCE_*` no están configuradas en entorno local, ejecuta el
- *   procesamiento de la cola en modo simulación local para permitir pruebas end-to-end.
+ * - Soporta `maxItems` para procesar grandes volúmenes (ej. 8.500 SKUs) en lotes seguros.
  */
-export async function sincronizarInventarioConWooCommerce({ soloDelta = true } = {}) {
+export async function sincronizarInventarioConWooCommerce({ soloDelta = true, maxItems = 0 } = {}) {
   const configured = isWooConfigured();
   const snap = await db.collection('inventario').get();
   const todos = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-  const items = soloDelta
+  const candidatos = soloDelta
     ? todos.filter(i => i.needsWooSync === true || !i.lastWooSyncAt)
     : todos;
+  const items = maxItems > 0 ? candidatos.slice(0, maxItems) : candidatos;
+  const pendientesRestantes = Math.max(0, candidatos.length - items.length);
 
   const omitidosSinCambio = todos.length - items.length;
   const ahora = new Date().toISOString();
@@ -635,6 +469,7 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true } =
       modoConexion: configured ? 'woocommerce_rest_live' : 'simulacion_local_delta',
       total: todos.length,
       procesados: huerfanosEliminados,
+      pendientesRestantes: 0,
       creados: 0,
       actualizados: 0,
       ocultados: huerfanosEliminados,
@@ -687,6 +522,7 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true } =
       modoConexion: 'simulacion_local_delta',
       total: todos.length,
       procesados: items.length,
+      pendientesRestantes,
       creados,
       actualizados,
       ocultados,
@@ -752,27 +588,33 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true } =
     const createdList = r.create || [];
     creados += createdList.length;
 
+    const batch = db.batch();
+    let batchCount = 0;
     for (let j = 0; j < metaLote.length; j++) {
       const m = metaLote[j];
       const cw = createdList[j];
       if (m && cw && !cw.error) {
-        await db.collection('inventario').doc(m.docId).update({
+        batch.update(db.collection('inventario').doc(m.docId), {
           skuPublicoFrp: m.sku,
           wooProductId: cw.id || null,
           needsWooSync: false,
           wooSyncMotivo: null,
           lastWooSyncAt: ahora,
         });
-        procesadosDetalle.push({
-          id: m.docId,
-          skuPublicoFrp: m.sku,
-          nombre: m.item.nombre,
-          proveedor: m.item.proveedor || 'Local',
-          accion: 'creado',
-          wooProductId: cw.id || null,
-        });
+        batchCount++;
+        if (procesadosDetalle.length < 200) {
+          procesadosDetalle.push({
+            id: m.docId,
+            skuPublicoFrp: m.sku,
+            nombre: m.item.nombre,
+            proveedor: m.item.proveedor || 'Local',
+            accion: 'creado',
+            wooProductId: cw.id || null,
+          });
+        }
       }
     }
+    if (batchCount > 0) await batch.commit();
   }
 
   for (let i = 0; i < actualizar.length; i += CHUNK) {
@@ -783,27 +625,33 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true } =
     const updatedList = r.update || [];
     actualizados += updatedList.length;
 
+    const batch = db.batch();
+    let batchCount = 0;
     for (let j = 0; j < metaLote.length; j++) {
       const m = metaLote[j];
       const uw = updatedList[j];
       if (m && (!uw || !uw.error)) {
-        await db.collection('inventario').doc(m.docId).update({
+        batch.update(db.collection('inventario').doc(m.docId), {
           skuPublicoFrp: m.sku,
           wooProductId: uw?.id || m.wooId,
           needsWooSync: false,
           wooSyncMotivo: null,
           lastWooSyncAt: ahora,
         });
-        procesadosDetalle.push({
-          id: m.docId,
-          skuPublicoFrp: m.sku,
-          nombre: m.item.nombre,
-          proveedor: m.item.proveedor || 'Local',
-          accion: 'actualizado',
-          wooProductId: uw?.id || m.wooId,
-        });
+        batchCount++;
+        if (procesadosDetalle.length < 200) {
+          procesadosDetalle.push({
+            id: m.docId,
+            skuPublicoFrp: m.sku,
+            nombre: m.item.nombre,
+            proveedor: m.item.proveedor || 'Local',
+            accion: 'actualizado',
+            wooProductId: uw?.id || m.wooId,
+          });
+        }
       }
     }
+    if (batchCount > 0) await batch.commit();
   }
 
   for (let i = 0; i < ocultosParaEliminar.length; i += CHUNK) {
@@ -813,8 +661,9 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true } =
     const r = await wcFetch('/products/batch', { method: 'POST', body: JSON.stringify({ delete: lote }) });
     ocultados += r.delete?.length || 0;
 
+    const batch = db.batch();
     for (const m of metaLote) {
-      await db.collection('inventario').doc(m.docId).update({
+      batch.update(db.collection('inventario').doc(m.docId), {
         skuPublicoFrp: m.sku,
         wooProductId: null,
         needsWooSync: false,
@@ -822,17 +671,23 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true } =
         lastWooSyncAt: ahora,
       });
     }
+    if (metaLote.length > 0) await batch.commit();
   }
 
-  // También limpiar productos que fueron eliminados del inventario y quedaron huérfanos en WooCommerce
-  const limpieza = await limpiarProductosHuerfanos(todos);
-  ocultados += limpieza.eliminados || 0;
+  // Cuando terminamos todos los lotes pendientes (o no se paginó con maxItems), limpiamos huérfanos
+  let huerfanosEliminados = 0;
+  if (pendientesRestantes === 0) {
+    const limpieza = await limpiarProductosHuerfanos(todos);
+    huerfanosEliminados = limpieza.eliminados || 0;
+    ocultados += huerfanosEliminados;
+  }
 
   return {
     modoSync: soloDelta ? 'delta_incremental' : 'catalogo_completo',
     modoConexion: 'woocommerce_rest_live',
     total: todos.length,
-    procesados: items.length + (limpieza.eliminados || 0),
+    procesados: items.length + huerfanosEliminados,
+    pendientesRestantes,
     creados,
     actualizados,
     ocultados,

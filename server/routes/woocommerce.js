@@ -51,7 +51,8 @@ router.get('/status', requireAuth, async (req, res, next) => {
 router.post('/sync', requireSyncAccess, async (req, res, next) => {
   try {
     const soloDelta = req.body?.soloDelta !== false && req.query?.soloDelta !== 'false';
-    const resultado = await sincronizarInventarioConWooCommerce({ soloDelta });
+    const maxItems = Number(req.body?.maxItems || req.query?.maxItems || 0) || 0;
+    const resultado = await sincronizarInventarioConWooCommerce({ soloDelta, maxItems });
     res.json({ success: true, data: resultado });
   } catch (error) {
     next(error);

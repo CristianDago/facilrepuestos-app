@@ -5,7 +5,7 @@ const IVA_CHILE = 1.19;
 /**
  * Calcula el precio neto de venta de FácilRepuestos aplicando el % de margen sobre el costo del proveedor.
  */
-export function calcularPrecioPublicoFrp(precioCosto, margenPct = 25) {
+export function calcularPrecioPublicoFrp(precioCosto, margenPct = 0) {
   const costo = Number(precioCosto) || 0;
   const margen = Number(margenPct) || 0;
   if (costo <= 0) return 0;

@@ -439,99 +439,114 @@ export function resolverJerarquiaCategoria(item: {
     }
   }
 
-  // 3. Inferencia inteligente para ítems heredados (FILTROS, LUBRICANTES, FRENOS, SUSPENSIÓN, DISTRIBUCIÓN, EMBRAGUE, ELÉCTRICO, MOTOR, etc.)
-  if (rawCat === "FILTROS" || /FILTRO/.test(rawTexto)) {
-    let det = "Filtro de Aceite";
-    if (/AIRE/.test(rawTexto)) det = "Filtro de Aire";
-    else if (/COMBUSTIBLE|BENCINA|PETROLEO|DIESEL/.test(rawTexto)) det = "Filtro de Combustible";
-    else if (/CABINA|POLEN|HABITACULO/.test(rawTexto)) det = "Filtro de Cabina y Polen";
+  // 3. Inferencia inteligente para ítems heredados o federados de Soluparts / Global (8.500+ SKUs)
+  const nombreAntesDePara = normCatStr(String(item.nombre || "").split(/\s+para\s+/i)[0]);
+  const baseTexto = `${rawTipo} ${nombreAntesDePara} ${rawCat}`;
+  const has = (re: RegExp) => re.test(baseTexto) || re.test(rawTexto);
+
+  // Desambiguaciones prioritarias
+  if (has(/\b(AMORTIGUADOR\s+(?:DE\s+)?(?:PORTALON|MALETA|CAPOT|CAPO|COMPUERTA)|BOMBIN\s+(?:DE\s+)?(?:PORTALON|MALETA|CAPOT))\b/)) {
+    return { categoria: "Carrocería y Espejos", subcategoria: "Accesorios de Carrocería", subcategoriaDetalle: "Amortiguadores de Maleta" };
+  }
+  if (has(/\b(ALZAVIDRIO|ELEVAVIDRIO|CREMALLERA\s+ALZAVIDRIO)\b/)) {
+    return { categoria: "Carrocería y Espejos", subcategoria: "Accesorios de Carrocería", subcategoriaDetalle: "Manillas y Chapas" };
+  }
+  if (has(/\b(DEPOSITO|RESERVORIO|BOTELLA)\b/)) {
+    return { categoria: "Refrigeración y Climatización", subcategoria: "Mangueras y Depósitos", subcategoriaDetalle: "" };
+  }
+
+  if (rawCat === "FILTROS" || has(/\b(FILTRO|PORTAFILTRO|DECANTADOR)\b/)) {
+    let det = "Filtro de Aire";
+    if (has(/\bACEITE\b/)) det = "Filtro de Aceite";
+    else if (has(/\b(COMBUSTIBLE|BENCINA|PETROLEO|DIESEL|GASOLINA|DECANTADOR)\b/)) det = "Filtro de Combustible";
+    else if (has(/\b(CABINA|POLEN|HABITACULO|AIRE\s+ACONDICIONADO)\b/)) det = "Filtro de Cabina y Polen";
     return { categoria: "Mantenimiento Rápido", subcategoria: "Filtros", subcategoriaDetalle: det };
   }
-  if (rawCat === "LUBRICANTES" || /ACEITE DE MOTOR|LUBRICANTE|LIQUIDO DE FRENO|REFRIGERANTE|COOLANT|ANTICONGELANTE|ADITIVO/.test(rawTexto)) {
+  if (rawCat === "LUBRICANTES" || has(/\b(ACEITE\s+(?:DE\s+)?(?:MOTOR|CAJA|TRANSMISION|DIFERENCIAL)|LUBRICANTE|LIQUIDO\s+(?:DE\s+)?FRENO|REFRIGERANTE|COOLANT|ANTICONGELANTE|ADITIVO|ATF|\d+W\d+|DOT\s*[345])\b/)) {
     let det = "Aceites de Motor";
-    if (/TRANSMISION|ATF|CAJA/.test(rawTexto)) det = "Fluidos de Transmisión";
-    else if (/LIQUIDO DE FRENO/.test(rawTexto)) det = "Líquido de Frenos";
-    else if (/REFRIGERANTE|COOLANT|ANTICONGELANTE/.test(rawTexto)) det = "Anticongelante y Refrigerante";
-    else if (/ADITIVO/.test(rawTexto)) det = "Aditivos";
+    if (has(/\b(TRANSMISION|ATF|CAJA|DIFERENCIAL|75W\d+|80W\d+)\b/)) det = "Fluidos de Transmisión";
+    else if (has(/\b(LIQUIDO\s+(?:DE\s+)?FRENO|DOT\s*[345])\b/)) det = "Líquido de Frenos";
+    else if (has(/\b(REFRIGERANTE|COOLANT|ANTICONGELANTE|AGUA\s+VERDE|AGUA\s+ROJA)\b/)) det = "Anticongelante y Refrigerante";
+    else if (has(/\b(ADITIVO|AROMATIZANTE)\b/)) det = "Aditivos";
     return { categoria: "Mantenimiento Rápido", subcategoria: "Lubricantes y Fluidos", subcategoriaDetalle: det };
   }
-  if (rawCat === "FRENOS" || /PASTILLA|BALATA|DISCO DE FRENO|TAMBOR|CALIPER|BOMBA DE FRENO|SENSOR ABS/.test(rawTexto)) {
-    if (/DISCO|TAMBOR/.test(rawTexto)) return { categoria: "Frenos", subcategoria: "Discos y Tambores", subcategoriaDetalle: "" };
-    if (/CALIPER|CILINDRO/.test(rawTexto)) return { categoria: "Frenos", subcategoria: "Calipers y Cilindros", subcategoriaDetalle: "" };
-    if (/LINEA|FLEXIBLE|BOMBA DE FRENO/.test(rawTexto)) return { categoria: "Frenos", subcategoria: "Líneas y Bombas de Freno", subcategoriaDetalle: "" };
-    if (/ABS/.test(rawTexto)) return { categoria: "Frenos", subcategoria: "Sensores y Cables de Freno", subcategoriaDetalle: "Sensores ABS" };
-    if (/CABLE.*FRENO|PIOLA.*FRENO/.test(rawTexto)) return { categoria: "Frenos", subcategoria: "Sensores y Cables de Freno", subcategoriaDetalle: "Cables de Freno de Mano" };
+  if (rawCat === "FRENOS" || has(/\b(PASTILLA|BALATA|ZAPATA|DISCO\s+(?:DE\s+)?FRENO|TAMBOR|CALIPER|MORDAZA|CILINDRO\s+(?:DE\s+)?(?:FRENO|RUEDA)|BOMBA\s+(?:DE\s+)?FRENO|SERVOFRENO|FLEXIBLE\s+(?:DE\s+)?FRENO|SENSOR\s+(?:DE\s+)?ABS|CABLE\s+(?:DE\s+)?FRENO|PIOLA\s+(?:DE\s+)?FRENO)\b/)) {
+    if (has(/\b(DISCO|TAMBOR)\b/) && !has(/\bEMBRAGUE\b/)) return { categoria: "Frenos", subcategoria: "Discos y Tambores", subcategoriaDetalle: "" };
+    if (has(/\b(CALIPER|MORDAZA|CILINDRO)\b/)) return { categoria: "Frenos", subcategoria: "Calipers y Cilindros", subcategoriaDetalle: "" };
+    if (has(/\b(LINEA|FLEXIBLE|BOMBA\s+(?:DE\s+)?FRENO|SERVOFRENO)\b/)) return { categoria: "Frenos", subcategoria: "Líneas y Bombas de Freno", subcategoriaDetalle: "" };
+    if (has(/\bABS\b/)) return { categoria: "Frenos", subcategoria: "Sensores y Cables de Freno", subcategoriaDetalle: "Sensores ABS" };
+    if (has(/\b(CABLE.*FRENO|PIOLA.*FRENO)\b/)) return { categoria: "Frenos", subcategoria: "Sensores y Cables de Freno", subcategoriaDetalle: "Cables de Freno de Mano" };
     return { categoria: "Frenos", subcategoria: "Pastillas y Balatas", subcategoriaDetalle: "" };
   }
-  if (rawCat === "SUSPENSION" || /AMORTIGUADOR|ESPIRAL|RESORTE|CAZOLETA|BANDEJA|ROTULA|TERMINAL|CREMALLERA|DIRECCION/.test(rawTexto)) {
-    if (/BANDEJA|BRAZO/.test(rawTexto)) return { categoria: "Suspensión y Dirección", subcategoria: "Dirección", subcategoriaDetalle: "Bandejas y Brazos" };
-    if (/TERMINAL|AXIAL/.test(rawTexto)) return { categoria: "Suspensión y Dirección", subcategoria: "Dirección", subcategoriaDetalle: "Terminales de Dirección" };
-    if (/CREMALLERA/.test(rawTexto)) return { categoria: "Suspensión y Dirección", subcategoria: "Dirección", subcategoriaDetalle: "Cremalleras" };
-    if (/ROTULA/.test(rawTexto)) return { categoria: "Suspensión y Dirección", subcategoria: "Dirección", subcategoriaDetalle: "Rótulas" };
-    if (/ESPIRAL|RESORTE/.test(rawTexto)) return { categoria: "Suspensión y Dirección", subcategoria: "Suspensión", subcategoriaDetalle: "Espirales y Resortes" };
-    if (/CAZOLETA/.test(rawTexto)) return { categoria: "Suspensión y Dirección", subcategoria: "Suspensión", subcategoriaDetalle: "Cazoletas y Rodamientos" };
-    return { categoria: "Suspensión y Dirección", subcategoria: "Suspensión", subcategoriaDetalle: "Amortiguadores" };
-  }
-  if (rawCat === "EMBRAGUE" || rawCat === "TRANSMISION" || /EMBRAGUE|HOMOCINETICA|PALIER|RODAMIENTO DE MAZA|MAZA/.test(rawTexto)) {
-    if (/HOMOCINETICA|EJE|PALIER/.test(rawTexto)) return { categoria: "Transmisión y Mando", subcategoria: "Embrague y Ejes", subcategoriaDetalle: "Homocinéticas y Ejes" };
-    if (/MAZA|RODAMIENTO/.test(rawTexto)) return { categoria: "Transmisión y Mando", subcategoria: "Rodamientos de Maza", subcategoriaDetalle: "" };
+  if (rawCat === "EMBRAGUE" || rawCat === "TRANSMISION" || has(/\b(EMBRAGUE|PRENSA|COLLARIN|BOMBIN\s+EMBRAGUE|BOMBA\s+EMBRAGUE|VOLANTE\s+INERCIA|HOMOCINETICA|SEMI\s*EJE|PALIER|TRIPOIDE|CARDAN|CRUCETA|RODAMIENTO\s+(?:DE\s+)?(?:MAZA|RUEDA)|MAZA)\b/)) {
+    if (has(/\b(MAZA|RODAMIENTO\s+(?:DE\s+)?(?:MAZA|RUEDA))\b/)) return { categoria: "Transmisión y Mando", subcategoria: "Rodamientos de Maza", subcategoriaDetalle: "" };
+    if (has(/\b(HOMOCINETICA|SEMI\s*EJE|PALIER|TRIPOIDE|CARDAN|CRUCETA)\b/)) return { categoria: "Transmisión y Mando", subcategoria: "Embrague y Ejes", subcategoriaDetalle: "Homocinéticas y Ejes" };
     return { categoria: "Transmisión y Mando", subcategoria: "Embrague y Ejes", subcategoriaDetalle: "Kits de Embrague" };
   }
-  if (rawCat === "DISTRIBUCION" || /KIT DE DISTRIBUCION|CORREA DE DISTRIBUCION|CADENA.*DISTRIBUCION/.test(rawTexto)) {
-    if (/CADENA/.test(rawTexto)) return { categoria: "Motor", subcategoria: "Distribución", subcategoriaDetalle: "Cadenas y Tensores" };
+  if (rawCat === "SUSPENSION" || has(/\b(AMORTIGUADOR|ESPIRAL|RESORTE|BALLESTA|CAZOLETA|BANDEJA|BRAZO\s+SUSPENSION|BIELETA|BARRA\s+ESTABILIZADORA|BUJE|MUÑON|MUNON|ROTULA|TERMINAL|AXIAL|CREMALLERA|CAJA\s+DIRECCION|BOMBA\s+DIRECCION)\b/)) {
+    if (has(/\b(BANDEJA|BRAZO|BIELETA|BARRA\s+ESTABILIZADORA|BUJE|MUÑON|MUNON)\b/)) return { categoria: "Suspensión y Dirección", subcategoria: "Dirección", subcategoriaDetalle: "Bandejas y Brazos" };
+    if (has(/\b(TERMINAL|AXIAL|BARRA\s+DIRECCION)\b/)) return { categoria: "Suspensión y Dirección", subcategoria: "Dirección", subcategoriaDetalle: "Terminales de Dirección" };
+    if (has(/\b(CREMALLERA|CAJA\s+DIRECCION|COLUMNA\s+DIRECCION|BOMBA\s+DIRECCION)\b/)) return { categoria: "Suspensión y Dirección", subcategoria: "Dirección", subcategoriaDetalle: "Cremalleras" };
+    if (has(/\bROTULA\b/)) return { categoria: "Suspensión y Dirección", subcategoria: "Dirección", subcategoriaDetalle: "Rótulas" };
+    if (has(/\b(ESPIRAL|RESORTE|BALLESTA)\b/)) return { categoria: "Suspensión y Dirección", subcategoria: "Suspensión", subcategoriaDetalle: "Espirales y Resortes" };
+    if (has(/\bCAZOLETA\b/)) return { categoria: "Suspensión y Dirección", subcategoria: "Suspensión", subcategoriaDetalle: "Cazoletas y Rodamientos" };
+    return { categoria: "Suspensión y Dirección", subcategoria: "Suspensión", subcategoriaDetalle: "Amortiguadores" };
+  }
+  if (rawCat === "DISTRIBUCION" || has(/\b(KIT\s+(?:DE\s+)?DISTRIBUCION|CORREA\s+(?:DE\s+)?DISTRIBUCION|CADENA\s+(?:DE\s+)?DISTRIBUCION|GUIA\s+CADENA|TENSOR\s+(?:DE\s+)?(?:DISTRIBUCION|CADENA))\b/)) {
+    if (has(/\bCADENA\b/)) return { categoria: "Motor", subcategoria: "Distribución", subcategoriaDetalle: "Cadenas y Tensores" };
     return { categoria: "Motor", subcategoria: "Distribución", subcategoriaDetalle: "Kits de Distribución" };
   }
-  if (/RADIADOR|ELECTROVENTILADOR|BOMBA DE AGUA|TERMOSTATO|COMPRESOR.*AIRE|CONDENSADOR|EVAPORADOR/.test(rawTexto)) {
-    if (/RADIADOR|ELECTROVENTILADOR/.test(rawTexto)) return { categoria: "Refrigeración y Climatización", subcategoria: "Radiadores y Electroventiladores", subcategoriaDetalle: "" };
-    if (/BOMBA DE AGUA|TERMOSTATO/.test(rawTexto)) return { categoria: "Refrigeración y Climatización", subcategoria: "Bombas de Agua y Termostatos", subcategoriaDetalle: "" };
-    if (/MANGUERA|DEPOSITO/.test(rawTexto)) return { categoria: "Refrigeración y Climatización", subcategoria: "Mangueras y Depósitos", subcategoriaDetalle: "" };
-    if (/EVAPORADOR/.test(rawTexto)) return { categoria: "Refrigeración y Climatización", subcategoria: "Aire Acondicionado", subcategoriaDetalle: "Evaporadores y Válvulas" };
-    return { categoria: "Refrigeración y Climatización", subcategoria: "Aire Acondicionado", subcategoriaDetalle: "Compresores y Condensadores" };
+  if (has(/\b(RADIADOR|ELECTROVENTILADOR|VENTILADOR|ASPAS|INTERCOOLER|ENFRIADOR|BOMBA\s+(?:DE\s+)?AGUA|TERMOSTATO|CAJA\s+TERMOSTATO|COMPRESOR|CONDENSADOR|EVAPORADOR|CALEFACCION|MANGUERA)\b/)) {
+    if (has(/\b(COMPRESOR|CONDENSADOR)\b/)) return { categoria: "Refrigeración y Climatización", subcategoria: "Aire Acondicionado", subcategoriaDetalle: "Compresores y Condensadores" };
+    if (has(/\b(EVAPORADOR|CALEFACCION)\b/)) return { categoria: "Refrigeración y Climatización", subcategoria: "Aire Acondicionado", subcategoriaDetalle: "Evaporadores y Válvulas" };
+    if (has(/\b(RADIADOR|ELECTROVENTILADOR|VENTILADOR|ASPAS|INTERCOOLER|ENFRIADOR)\b/)) return { categoria: "Refrigeración y Climatización", subcategoria: "Radiadores y Electroventiladores", subcategoriaDetalle: "" };
+    if (has(/\b(BOMBA\s+(?:DE\s+)?AGUA|TERMOSTATO)\b/)) return { categoria: "Refrigeración y Climatización", subcategoria: "Bombas de Agua y Termostatos", subcategoriaDetalle: "" };
+    return { categoria: "Refrigeración y Climatización", subcategoria: "Mangueras y Depósitos", subcategoriaDetalle: "" };
   }
-  if (rawCat === "ELECTRICO" || /BATERIA|ALTERNADOR|ARRANQUE|PARTIDA|BUJIA|BOBINA|FOCO|FAROL|AMPOLLETA|INTERMITENTE|SENSOR CKP|SENSOR CMP/.test(rawTexto)) {
-    if (/BATERIA|ALTERNADOR/.test(rawTexto)) return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Baterías y Alternadores", subcategoriaDetalle: "" };
-    if (/ARRANQUE|PARTIDA/.test(rawTexto)) return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Motores de Arranque", subcategoriaDetalle: "" };
-    if (/BUJIA/.test(rawTexto)) return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Encendido", subcategoriaDetalle: "Bujías y Cables" };
-    if (/BOBINA/.test(rawTexto)) return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Encendido", subcategoriaDetalle: "Bobinas de Encendido" };
-    if (/INTERMITENTE/.test(rawTexto)) return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Iluminación", subcategoriaDetalle: "Intermitentes" };
-    if (/FARO|FOCO|OPTICO/.test(rawTexto)) return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Iluminación", subcategoriaDetalle: "Faros y Focos Traseros" };
-    if (/AMPOLLETA|BULBO/.test(rawTexto)) return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Iluminación", subcategoriaDetalle: "Ampolletas y Bulbos" };
-    if (/TEMPERATURA|PRESION/.test(rawTexto)) return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Sensores y Switches", subcategoriaDetalle: "Sensores de Temperatura y Presión" };
-    return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Sensores y Switches", subcategoriaDetalle: "Sensores CKP y CMP" };
+  if (rawCat === "ELECTRICO" || has(/\b(BATERIA|ALTERNADOR|ARRANQUE|PARTIDA|BUJIA|BOBINA|FOCO|FAROL|FARO|OPTICO|NEBLINERO|AMPOLLETA|INTERMITENTE|SENSOR|TELECOMANDO|BOTONERA|SWITCH|CINTA\s+AIRBAG|BULBO)\b/)) {
+    if (has(/\b(SENSOR\s+(?:DE\s+)?OXIGENO|SONDA\s+LAMBDA)\b/)) return { categoria: "Motor", subcategoria: "Escape", subcategoriaDetalle: "Sensores de Oxígeno" };
+    if (has(/\b(BATERIA|ALTERNADOR)\b/)) return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Baterías y Alternadores", subcategoriaDetalle: "" };
+    if (has(/\b(ARRANQUE|PARTIDA)\b/)) return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Motores de Arranque", subcategoriaDetalle: "" };
+    if (has(/\bBUJIA\b/)) return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Encendido", subcategoriaDetalle: "Bujías y Cables" };
+    if (has(/\bBOBINA\b/)) return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Encendido", subcategoriaDetalle: "Bobinas de Encendido" };
+    if (has(/\b(INTERMITENTE|DIRECCIONAL)\b/)) return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Iluminación", subcategoriaDetalle: "Intermitentes" };
+    if (has(/\b(FARO|FAROL|FOCO|OPTICO|NEBLINERO|REFLECTANTE)\b/)) return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Iluminación", subcategoriaDetalle: "Faros y Focos Traseros" };
+    if (has(/\bAMPOLLETA\b/)) return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Iluminación", subcategoriaDetalle: "Ampolletas y Bulbos" };
+    if (has(/\b(CKP|CMP|CIGUEÑAL|CIGUENAL|LEVA|POSICION)\b/)) return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Sensores y Switches", subcategoriaDetalle: "Sensores CKP y CMP" };
+    return { categoria: "Sistema Eléctrico e Iluminación", subcategoria: "Sensores y Switches", subcategoriaDetalle: "Sensores de Temperatura y Presión" };
   }
-  if (rawCat === "CARROCERIA" || /PARACHOQUE|REJILLA|MASCARA|CAPO|PUERTA|TAPABARRO|GUARDABARRO|ESPEJO|MANILLA|CHAPA|PLUMILLA|MALETA/.test(rawTexto)) {
-    if (/PARACHOQUE|REJILLA|MASCARA/.test(rawTexto)) return { categoria: "Carrocería y Espejos", subcategoria: "Parachoques y Rejillas", subcategoriaDetalle: "" };
-    if (/CAPO|PUERTA/.test(rawTexto)) return { categoria: "Carrocería y Espejos", subcategoria: "Componentes de Chapa", subcategoriaDetalle: "Capó y Puertas" };
-    if (/TAPABARRO|GUARDABARRO/.test(rawTexto)) return { categoria: "Carrocería y Espejos", subcategoria: "Componentes de Chapa", subcategoriaDetalle: "Tapabarros y Guardabarros" };
-    if (/CRISTAL.*ESPEJO/.test(rawTexto)) return { categoria: "Carrocería y Espejos", subcategoria: "Espejos Retrovisores", subcategoriaDetalle: "Cristales de Espejo" };
-    if (/ESPEJO/.test(rawTexto)) return { categoria: "Carrocería y Espejos", subcategoria: "Espejos Retrovisores", subcategoriaDetalle: "Espejos Completos" };
-    if (/MANILLA|CHAPA/.test(rawTexto)) return { categoria: "Carrocería y Espejos", subcategoria: "Accesorios de Carrocería", subcategoriaDetalle: "Manillas y Chapas" };
-    if (/MALETA|PORTALON/.test(rawTexto)) return { categoria: "Carrocería y Espejos", subcategoria: "Accesorios de Carrocería", subcategoriaDetalle: "Amortiguadores de Maleta" };
-    return { categoria: "Carrocería y Espejos", subcategoria: "Limpiaparabrisas", subcategoriaDetalle: "Plumillas" };
-  }
-  if (/CORREA.*ACCESORIO|CORREA.*PK|POLEA|PIOLA/.test(rawTexto)) {
-    if (/TENSOR|POLEA/.test(rawTexto)) return { categoria: "Correas y Piolas", subcategoria: "Tensores y Poleas", subcategoriaDetalle: "" };
-    if (/PIOLA|CABLE/.test(rawTexto)) return { categoria: "Correas y Piolas", subcategoria: "Piolas y Cables", subcategoriaDetalle: "" };
+  if (has(/\b(CORREA|TENSOR|POLEA|DAMPER|RODILLO|PIOLA)\b/)) {
+    if (has(/\b(TENSOR|POLEA|DAMPER|RODILLO)\b/)) return { categoria: "Correas y Piolas", subcategoria: "Tensores y Poleas", subcategoriaDetalle: "" };
+    if (has(/\b(PIOLA|CABLE)\b/)) return { categoria: "Correas y Piolas", subcategoria: "Piolas y Cables", subcategoriaDetalle: "" };
     return { categoria: "Correas y Piolas", subcategoria: "Correas de Accesorios", subcategoriaDetalle: "" };
+  }
+  if (rawCat === "CARROCERIA" || has(/\b(PARACHOQUE|REJILLA|MASCARA|BISEL|CROMADO|MENSULA|DEFENSA|FRONTAL|CAPO|CAPOT|PUERTA|PORTALON|TAPABARRO|GUARDABARRO|GUARDAFANGO|MOLDURA|ESPEJO|MANILLA|CHAPA|PLUMILLA|LIMPIAPARABRISAS)\b/)) {
+    if (has(/\b(PLUMILLA|LIMPIAPARABRISAS)\b/)) return { categoria: "Carrocería y Espejos", subcategoria: "Limpiaparabrisas", subcategoriaDetalle: "Plumillas" };
+    if (has(/\b(CRISTAL\s+(?:DE\s+)?ESPEJO|VIDRIO\s+(?:DE\s+)?ESPEJO)\b/)) return { categoria: "Carrocería y Espejos", subcategoria: "Espejos Retrovisores", subcategoriaDetalle: "Cristales de Espejo" };
+    if (has(/\bESPEJO\b/)) return { categoria: "Carrocería y Espejos", subcategoria: "Espejos Retrovisores", subcategoriaDetalle: "Espejos Completos" };
+    if (has(/\b(CAPO|CAPOT|PUERTA|PORTALON|BISAGRA)\b/)) return { categoria: "Carrocería y Espejos", subcategoria: "Componentes de Chapa", subcategoriaDetalle: "Capó y Puertas" };
+    if (has(/\b(TAPABARRO|GUARDABARRO|GUARDAFANGO|MOLDURA)\b/)) return { categoria: "Carrocería y Espejos", subcategoria: "Componentes de Chapa", subcategoriaDetalle: "Tapabarros y Guardabarros" };
+    if (has(/\b(MANILLA|CHAPA|CERRADURA)\b/)) return { categoria: "Carrocería y Espejos", subcategoria: "Accesorios de Carrocería", subcategoriaDetalle: "Manillas y Chapas" };
+    return { categoria: "Carrocería y Espejos", subcategoria: "Parachoques y Rejillas", subcategoriaDetalle: "" };
   }
 
   // Fallback a Motor
-  if (/SOPORTE.*MOTOR/.test(rawTexto)) return { categoria: "Motor", subcategoria: "Soportes de Motor", subcategoriaDetalle: "" };
-  if (/INYECTOR/.test(rawTexto)) return { categoria: "Motor", subcategoria: "Alimentación e Inyección", subcategoriaDetalle: "Inyectores" };
-  if (/BOMBA.*COMBUSTIBLE|BOMBA.*BENCINA/.test(rawTexto)) return { categoria: "Motor", subcategoria: "Alimentación e Inyección", subcategoriaDetalle: "Bombas de Combustible" };
-  if (/CUERPO.*ACELERACION/.test(rawTexto)) return { categoria: "Motor", subcategoria: "Alimentación e Inyección", subcategoriaDetalle: "Cuerpo de Aceleración" };
-  if (/MULTIPLE|CATALIZADOR/.test(rawTexto)) return { categoria: "Motor", subcategoria: "Escape", subcategoriaDetalle: "Múltiples y Catalizadores" };
-  if (/SILENCIADOR/.test(rawTexto)) return { categoria: "Motor", subcategoria: "Escape", subcategoriaDetalle: "Silenciadores" };
-  if (/OXIGENO|LAMBDA/.test(rawTexto)) return { categoria: "Motor", subcategoria: "Escape", subcategoriaDetalle: "Sensores de Oxígeno" };
-  if (/EMPAQUETADURA|JUNTA|CULATA/.test(rawTexto)) return { categoria: "Motor", subcategoria: "Componentes Internos", subcategoriaDetalle: "Empaquetaduras y Juntas" };
-  if (/VALVULA/.test(rawTexto)) return { categoria: "Motor", subcategoria: "Componentes Internos", subcategoriaDetalle: "Válvulas" };
-  if (/CIGUENAL/.test(rawTexto)) return { categoria: "Motor", subcategoria: "Componentes Internos", subcategoriaDetalle: "Cigüeñal" };
-  if (/PISTON|ANILLO/.test(rawTexto)) return { categoria: "Motor", subcategoria: "Componentes Internos", subcategoriaDetalle: "Pistones" };
+  if (has(/\bSOPORTE\b/)) return { categoria: "Motor", subcategoria: "Soportes de Motor", subcategoriaDetalle: "" };
+  if (has(/\bINYECTOR\b/)) return { categoria: "Motor", subcategoria: "Alimentación e Inyección", subcategoriaDetalle: "Inyectores" };
+  if (has(/\b(BOMBA\s+(?:DE\s+)?(?:COMBUSTIBLE|BENCINA|PETROLEO|INYECTORA))\b/)) return { categoria: "Motor", subcategoria: "Alimentación e Inyección", subcategoriaDetalle: "Bombas de Combustible" };
+  if (has(/\b(CUERPO\s+(?:DE\s+)?ACELERACION|ADMISION)\b/) && !has(/\bMULTIPLE\b/)) return { categoria: "Motor", subcategoria: "Alimentación e Inyección", subcategoriaDetalle: "Cuerpo de Aceleración" };
+  if (has(/\b(MULTIPLE|CATALIZADOR|TURBO)\b/)) return { categoria: "Motor", subcategoria: "Escape", subcategoriaDetalle: "Múltiples y Catalizadores" };
+  if (has(/\b(SILENCIADOR|ESCAPE)\b/)) return { categoria: "Motor", subcategoria: "Escape", subcategoriaDetalle: "Silenciadores" };
+  if (has(/\b(OXIGENO|LAMBDA)\b/)) return { categoria: "Motor", subcategoria: "Escape", subcategoriaDetalle: "Sensores de Oxígeno" };
+  if (has(/\b(VALVULA|EJE\s+LEVA|LEVA|TAQUE|TAQUIES|BALANCIN|CULATA)\b/)) return { categoria: "Motor", subcategoria: "Componentes Internos", subcategoriaDetalle: "Válvulas" };
+  if (has(/\b(EMPAQUETADURA|JUNTA|RETEN|SELLO|TAPA\s+VALVULA)\b/)) return { categoria: "Motor", subcategoria: "Componentes Internos", subcategoriaDetalle: "Empaquetaduras y Juntas" };
+  if (has(/\b(CIGUENAL|CIGUEÑAL|METAL\s+BIELA|METAL\s+BANCADA|METAL)\b/)) return { categoria: "Motor", subcategoria: "Componentes Internos", subcategoriaDetalle: "Cigüeñal" };
+  if (has(/\b(PISTON|ANILLO|BIELA|CARTER|BOMBA\s+ACEITE|BLOCK)\b/)) return { categoria: "Motor", subcategoria: "Componentes Internos", subcategoriaDetalle: "Pistones" };
 
   return {
     categoria: catDirecta?.nombre || "Motor",
     subcategoria: item.subcategoria || "Componentes Internos",
-    subcategoriaDetalle: item.subcategoriaDetalle || "",
+    subcategoriaDetalle: item.subcategoriaDetalle || "Empaquetaduras y Juntas",
   };
 }
 

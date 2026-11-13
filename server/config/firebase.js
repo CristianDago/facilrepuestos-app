@@ -11,16 +11,25 @@ let db;
 
 try {
   // ── Producción (Cloud Run): credenciales vienen como variable de entorno ──
-  // ── Local: se leen desde server/serviceAccount.json ────────────────────────
-  const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
-    ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-    : JSON.parse(readFileSync(join(__dirname, '../serviceAccount.json'), 'utf8'));
+  // ── Local con ADC: FIREBASE_USE_ADC=true usa Application Default Credentials
+  // ── Local con archivo: se leen desde server/serviceAccount.json ───────────
+  if (process.env.FIREBASE_USE_ADC === 'true') {
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        projectId: process.env.FIREBASE_PROJECT_ID || 'facilrepuestos-prod',
+      });
+    }
+  } else {
+    const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
+      ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+      : JSON.parse(readFileSync(join(__dirname, '../serviceAccount.json'), 'utf8'));
 
-  if (!admin.apps.length) {
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-      projectId: process.env.FIREBASE_PROJECT_ID,
-    });
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        projectId: process.env.FIREBASE_PROJECT_ID,
+      });
+    }
   }
 
   db = admin.firestore();

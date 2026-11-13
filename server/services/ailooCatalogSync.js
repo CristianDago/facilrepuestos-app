@@ -845,15 +845,23 @@ export async function sincronizarCatalogoNodoAiloo(nodoId, { forzar = false } = 
     }
   }
 
+  const skusEnUso = new Map(); // skuPublicoFrp -> docId
   for (const rawItem of origen.items) {
     const codigoLookup = String(rawItem.codigo || '').trim().toUpperCase();
     const idAiloo = String(rawItem.id_ailoo || rawItem.codigo || '').replace(/[^a-zA-Z0-9_-]/g, '');
     const compositeId = `ailoo_${nodo.id}_${idAiloo}`;
 
-    const existente = existentesPorId.get(compositeId) || existentesPorCodigo.get(codigoLookup) || null;
+    const existente = existentesPorId.get(compositeId) || (!idAiloo ? existentesPorCodigo.get(codigoLookup) : null) || null;
     const targetDocId = existente ? existente.id : compositeId;
 
     const { itemNormalizado } = normalizarItemAilooAInventario(rawItem, nodo, existente);
+    const ownerPrevio = skusEnUso.get(itemNormalizado.skuPublicoFrp);
+    if (ownerPrevio && ownerPrevio !== targetDocId) {
+      const suffix = String(idAiloo || targetDocId).replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(-6);
+      itemNormalizado.skuPublicoFrp = `${itemNormalizado.skuPublicoFrp}-${suffix}`;
+      itemNormalizado.deltaHash = calcularHashCatalogoItem(itemNormalizado);
+    }
+    skusEnUso.set(itemNormalizado.skuPublicoFrp, targetDocId);
 
     if (!existente) {
       const ref = db.collection('inventario').doc(targetDocId);

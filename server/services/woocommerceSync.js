@@ -27,22 +27,52 @@ function wcAuthHeader() {
   return `Basic ${token}`;
 }
 
-async function wcFetch(path, options = {}) {
+async function wcFetch(path, options = {}, retries = 3) {
   const { url } = getWooConfig();
-  const res = await fetch(`${url}/wp-json/wc/v3${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: wcAuthHeader(),
-      ...(options.headers || {}),
-    },
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    const msg = data?.message || `WooCommerce respondió ${res.status}`;
-    throw new Error(msg);
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`${url}/wp-json/wc/v3${path}`, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: wcAuthHeader(),
+          ...(options.headers || {}),
+        },
+      });
+      const rawText = await res.text();
+      let data = null;
+      try {
+        data = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        if (attempt < retries && (res.status >= 500 || res.status === 429)) {
+          const waitMs = attempt * 2500;
+          console.warn(`[woo-sync] Respuesta no-JSON (${res.status}) en ${path}. Reintentando (${attempt}/${retries}) en ${waitMs}ms...`);
+          await new Promise(r => setTimeout(r, waitMs));
+          continue;
+        }
+        throw new Error(`WooCommerce respondió HTTP ${res.status} (no-JSON) en ${path}: ${rawText.slice(0, 160)}`);
+      }
+      if (!res.ok) {
+        if (attempt < retries && (res.status >= 500 || res.status === 429)) {
+          const waitMs = attempt * 2500;
+          console.warn(`[woo-sync] HTTP ${res.status} en ${path}. Reintentando (${attempt}/${retries}) en ${waitMs}ms...`);
+          await new Promise(r => setTimeout(r, waitMs));
+          continue;
+        }
+        const msg = data?.message || `WooCommerce respondió ${res.status}`;
+        throw new Error(msg);
+      }
+      return data;
+    } catch (err) {
+      if (attempt < retries && !String(err.message || '').includes('WooCommerce respondió 4')) {
+        const waitMs = attempt * 2500;
+        console.warn(`[woo-sync] Error de red en ${path}: ${err.message}. Reintentando (${attempt}/${retries}) en ${waitMs}ms...`);
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
+      throw err;
+    }
   }
-  return data;
 }
 
 // Trae TODOS los productos existentes (id, sku, y si ya tienen alguna imagen) para saber
@@ -575,18 +605,22 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true, ma
     }
   }
 
-  // WooCommerce recomienda lotes de máximo ~90 ítems por llamada
-  const CHUNK = 90;
+  // Lotes de 50 ítems por llamada para evitar timeouts PHP/Cloudflare en WordPress
+  const CHUNK = 50;
   let creados = 0, actualizados = 0, ocultados = 0;
   const procesadosDetalle = [];
+  const totalLotesCrear = Math.ceil(crear.length / CHUNK);
+  const totalLotesActualizar = Math.ceil(actualizar.length / CHUNK);
 
   for (let i = 0; i < crear.length; i += CHUNK) {
     const lote = crear.slice(i, i + CHUNK);
     const metaLote = metaCrear.slice(i, i + CHUNK);
     if (!lote.length) continue;
+    const numLote = Math.floor(i / CHUNK) + 1;
     const r = await wcFetch('/products/batch', { method: 'POST', body: JSON.stringify({ create: lote }) });
     const createdList = r.create || [];
-    creados += createdList.length;
+    creados += createdList.filter(x => x && !x.error).length;
+    console.log(`[woo-sync] Crear lote ${numLote}/${totalLotesCrear}: +${createdList.length} (acumulado creados: ${creados}/${crear.length})`);
 
     const batch = db.batch();
     let batchCount = 0;
@@ -621,9 +655,11 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true, ma
     const lote = actualizar.slice(i, i + CHUNK);
     const metaLote = metaActualizar.slice(i, i + CHUNK);
     if (!lote.length) continue;
+    const numLote = Math.floor(i / CHUNK) + 1;
     const r = await wcFetch('/products/batch', { method: 'POST', body: JSON.stringify({ update: lote }) });
     const updatedList = r.update || [];
-    actualizados += updatedList.length;
+    actualizados += updatedList.filter(x => x && !x.error).length;
+    console.log(`[woo-sync] Actualizar lote ${numLote}/${totalLotesActualizar}: +${updatedList.length} (acumulado actualizados: ${actualizados}/${actualizar.length})`);
 
     const batch = db.batch();
     let batchCount = 0;

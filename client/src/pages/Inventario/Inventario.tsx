@@ -32,6 +32,10 @@ import {
   MARCAS_VEHICULOS,
   TIPOS_PIEZA_DEFAULT,
   CATEGORIAS_DEFAULT,
+  ARBOL_CATEGORIAS_TIENDA,
+  obtenerSubcategorias,
+  obtenerSubcategoriasDetalle,
+  resolverJerarquiaCategoria,
   ORIGENES_REPUESTO,
 } from "../../types";
 
@@ -83,33 +87,35 @@ const fmtCLP = (n: number) => "$" + Math.round(n).toLocaleString("es-CL");
 const conIva = (neto: number) => Math.round((neto || 0) * 1.19);
 
 const emptyItem = (): Omit<ItemInventario, "id"> => ({
-  nombre:             "",
-  codigo:             "",
-  codigoProducto:     "",
-  fabricante:         "",
-  origen:             "",
-  descripcion:        "",
-  equivalencias:      [] as Equivalencia[],
-  categoria:          "FRENOS",
-  proveedor:          "",
-  tipoPieza:          "",
-  posicion:           "NO APLICA",
-  lado:               "NO APLICA",
-  marcasCompatibles:  [],
-  modelosCompatibles: {},
-  anioDesde:          null,
-  anioHasta:          null,
-  precioImportacion:  0,
-  precioLista:        0,
-  descuentoTaller:    0,
-  precioCompra:       0,
-  precioVenta:        0,
-  stock:              0,
-  stockReservado:     0,
-  stockMinimo:        2,
-  unidad:             "unidad",
-  imagenUrl:          "",
-  ocultarEnTienda:    false,
+  nombre:              "",
+  codigo:              "",
+  codigoProducto:      "",
+  fabricante:          "",
+  origen:              "",
+  descripcion:         "",
+  equivalencias:       [] as Equivalencia[],
+  categoria:           "Frenos",
+  subcategoria:        "Pastillas y Balatas",
+  subcategoriaDetalle: "",
+  proveedor:           "",
+  tipoPieza:           "PASTILLAS Y BALATAS",
+  posicion:            "NO APLICA",
+  lado:                "NO APLICA",
+  marcasCompatibles:   [],
+  modelosCompatibles:  {},
+  anioDesde:           null,
+  anioHasta:           null,
+  precioImportacion:   0,
+  precioLista:         0,
+  descuentoTaller:     0,
+  precioCompra:        0,
+  precioVenta:         0,
+  stock:               0,
+  stockReservado:      0,
+  stockMinimo:         2,
+  unidad:              "unidad",
+  imagenUrl:           "",
+  ocultarEnTienda:     false,
 });
 
 // Correo/medio de contacto que se muestra a los proveedores cuando necesitan que el taller
@@ -130,6 +136,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
   const { inventario, setInventario, setLoading, notify } = useAppStore();
   const [search, setSearch]       = useState("");
   const [filtrocat, setFiltrocat] = useState("");
+  const [filtroSubcat, setFiltroSubcat] = useState("");
   const [filtroMarca, setFiltroMarca] = useState("");
   const [vista, setVista]         = useState<"grid" | "tabla">("grid");
   const [modal, setModal]         = useState(false);
@@ -299,34 +306,37 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
     setEditingId(item.id!);
     const marcasConocidas = (item.marcasCompatibles || []).filter(m => allMarcasVehiculo.includes(m));
     const extra           = (item.marcasCompatibles || []).filter(m => !allMarcasVehiculo.includes(m));
+    const jerarquia       = resolverJerarquiaCategoria(item);
     setForm({
-      nombre:             item.nombre            || "",
-      codigo:             item.codigo            || "",
-      codigoProducto:     item.codigoProducto    || "",
-      fabricante:         item.fabricante        || "",
-      origen:             item.origen            || "",
-      descripcion:        item.descripcion       || "",
-      equivalencias:      (item.equivalencias || []) as Equivalencia[],
-      categoria:          item.categoria         || "FRENOS",
-      proveedor:          item.proveedor         || "",
-      tipoPieza:          item.tipoPieza         || "",
-      posicion:           item.posicion          || "NO APLICA",
-      lado:               item.lado              || "NO APLICA",
-      marcasCompatibles:  marcasConocidas,
-      modelosCompatibles: item.modelosCompatibles || {},
-      anioDesde:          item.anioDesde         || null,
-      anioHasta:          item.anioHasta         || null,
-      precioImportacion:  item.precioImportacion  || 0,
-      precioLista:        item.precioLista         || 0,
-      descuentoTaller:    item.descuentoTaller     || 0,
-      precioCompra:       item.precioCompra        || 0,
-      precioVenta:        item.precioVenta         || 0,
-      stock:              item.stock             || 0,
-      stockReservado:     item.stockReservado    || 0,
-      stockMinimo:        item.stockMinimo       || 0,
-      unidad:             item.unidad            || "unidad",
-      imagenUrl:          item.imagenUrl         || "",
-      ocultarEnTienda:    item.ocultarEnTienda   || false,
+      nombre:              item.nombre            || "",
+      codigo:              item.codigo            || "",
+      codigoProducto:      item.codigoProducto    || "",
+      fabricante:          item.fabricante        || "",
+      origen:              item.origen            || "",
+      descripcion:         item.descripcion       || "",
+      equivalencias:       (item.equivalencias || []) as Equivalencia[],
+      categoria:           jerarquia.categoria,
+      subcategoria:        jerarquia.subcategoria,
+      subcategoriaDetalle: jerarquia.subcategoriaDetalle,
+      proveedor:           item.proveedor         || "",
+      tipoPieza:           item.tipoPieza || (jerarquia.subcategoriaDetalle || jerarquia.subcategoria || "").toUpperCase(),
+      posicion:            item.posicion          || "NO APLICA",
+      lado:                item.lado              || "NO APLICA",
+      marcasCompatibles:   marcasConocidas,
+      modelosCompatibles:  item.modelosCompatibles || {},
+      anioDesde:           item.anioDesde         || null,
+      anioHasta:           item.anioHasta         || null,
+      precioImportacion:   item.precioImportacion  || 0,
+      precioLista:         item.precioLista         || 0,
+      descuentoTaller:     item.descuentoTaller     || 0,
+      precioCompra:        item.precioCompra        || 0,
+      precioVenta:         item.precioVenta         || 0,
+      stock:               item.stock             || 0,
+      stockReservado:      item.stockReservado    || 0,
+      stockMinimo:         item.stockMinimo       || 0,
+      unidad:              item.unidad            || "unidad",
+      imagenUrl:           item.imagenUrl         || "",
+      ocultarEnTienda:     item.ocultarEnTienda   || false,
     });
     const fabsExistentes = [...new Set((item.equivalencias || []).map((e: Equivalencia) => e.fabricante))];
     setEqPanel(fabsExistentes);
@@ -476,20 +486,22 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
   const totalValue = inventario.reduce((s, i) => s + (i.precioCompra || 0) * (i.stock || 0), 0);
   const cats       = [...new Set(inventario.map(i => i.categoria).filter(Boolean))].length;
 
-  // Contadores de categorías y marcas de vehículo presentes en el inventario
+  // Contadores de categorías y marcas de vehículo presentes en el inventario (alineados con facilrepuestos.cl)
   const categoriasConConteo = (() => {
     const map = new Map<string, number>();
     for (const c of allCategorias) {
       map.set(c.nombre, 0);
     }
     for (const it of inventario) {
-      if (it.categoria) {
-        map.set(it.categoria, (map.get(it.categoria) || 0) + 1);
+      const catNorm = resolverJerarquiaCategoria(it).categoria || it.categoria;
+      if (catNorm) {
+        map.set(catNorm, (map.get(catNorm) || 0) + 1);
       }
     }
-    // Mostrar primero las que tienen repuestos o todas las categorías activas
     return [...map.entries()];
   })();
+
+  const subcategoriasFiltroOpciones = filtrocat ? obtenerSubcategorias(filtrocat) : [];
 
   const marcasVehiculoConConteo = (() => {
     const map = new Map<string, number>();
@@ -505,6 +517,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
 
   const filtered = inventario.filter(i => {
     const q = search.toLowerCase();
+    const jer = resolverJerarquiaCategoria(i);
     const modelosFlat = Object.values(i.modelosCompatibles || {}).flat().join(" ").toLowerCase();
     const matchSearch = !q
       || i.nombre.toLowerCase().includes(q)
@@ -514,14 +527,17 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
       || (i.fabricante || "").toLowerCase().includes(q)
       || (i.origen || "").toLowerCase().includes(q)
       || (i.descripcion || "").toLowerCase().includes(q)
+      || (i.subcategoria || jer.subcategoria || "").toLowerCase().includes(q)
+      || (i.subcategoriaDetalle || jer.subcategoriaDetalle || "").toLowerCase().includes(q)
       || modelosFlat.includes(q)
       || (i.equivalencias || []).some((e: Equivalencia) => (`${e.fabricante} ${e.codigo}`).toLowerCase().includes(q))
       || (i.proveedor || "").toLowerCase().includes(q)
       || (i.tipoPieza || "").toLowerCase().includes(q)
       || (i.marcasCompatibles || []).some(m => m.toLowerCase().includes(q));
-    const matchCat = !filtrocat || i.categoria === filtrocat;
+    const matchCat = !filtrocat || i.categoria === filtrocat || jer.categoria === filtrocat;
+    const matchSubcat = !filtroSubcat || i.subcategoria === filtroSubcat || jer.subcategoria === filtroSubcat || i.subcategoriaDetalle === filtroSubcat || jer.subcategoriaDetalle === filtroSubcat;
     const matchMarca = !filtroMarca || (i.marcasCompatibles || []).some(m => m.toUpperCase() === filtroMarca);
-    return matchSearch && matchCat && matchMarca;
+    return matchSearch && matchCat && matchSubcat && matchMarca;
   });
   const { paged, page, pageSize, totalPages, goTo, changeSize } = usePagination(filtered);
 
@@ -575,34 +591,39 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
   };
 
   const exportarExcel = () => {
-    const filas = filtered.map(item => ({
-      codigo:            item.codigo             || "",
-      nombre:            item.nombre             || "",
-      fabricante:        item.fabricante         || "",
-      categoria:         item.categoria          || "",
-      tipoPieza:         item.tipoPieza          || "",
-      posicion:          item.posicion           || "",
-      lado:              item.lado               || "",
-      marcas:            (item.marcasCompatibles || []).join(","),
-      modelos:           Object.entries(item.modelosCompatibles || {}).filter(([, v]) => v.length > 0).map(([m, v]) => `${m}:${v.join(",")}`).join(";"),
-      anioDesde:         item.anioDesde          ?? "",
-      anioHasta:         item.anioHasta          ?? "",
-      precioImportacion: item.precioImportacion  || 0,
-      precioLista:       item.precioLista         || 0,
-      descuentoTaller:   item.descuentoTaller    || 0,
-      precioCompra:      item.precioCompra       || 0,
-      precioVenta:       item.precioVenta         || 0,
-      stock:             item.stock              || 0,
-      stockReservado:    item.stockReservado     || 0,
-      stockMinimo:       item.stockMinimo        || 0,
-      unidad:            item.unidad             || "",
-      imagenUrl:         item.imagenUrl          || "",
-      proveedor:         item.proveedor          || "",
-      eq_fabricante:     (item.equivalencias || []).map((e: Equivalencia) => e.fabricante).join(","),
-      eq_codigo:         (item.equivalencias || []).map((e: Equivalencia) => e.codigo).join(","),
-      origen:            item.origen             || "",
-      descripcion:       item.descripcion        || "",
-    }));
+    const filas = filtered.map(item => {
+      const jer = resolverJerarquiaCategoria(item);
+      return {
+        codigo:              item.codigo             || "",
+        nombre:              item.nombre             || "",
+        fabricante:          item.fabricante         || "",
+        categoria:           item.categoria || jer.categoria || "",
+        subcategoria:        item.subcategoria || jer.subcategoria || "",
+        subcategoriaDetalle: item.subcategoriaDetalle || jer.subcategoriaDetalle || "",
+        tipoPieza:           item.tipoPieza          || "",
+        posicion:            item.posicion           || "",
+        lado:                item.lado               || "",
+        marcas:              (item.marcasCompatibles || []).join(","),
+        modelos:             Object.entries(item.modelosCompatibles || {}).filter(([, v]) => v.length > 0).map(([m, v]) => `${m}:${v.join(",")}`).join(";"),
+        anioDesde:           item.anioDesde          ?? "",
+        anioHasta:           item.anioHasta          ?? "",
+        precioImportacion:   item.precioImportacion  || 0,
+        precioLista:         item.precioLista        || 0,
+        descuentoTaller:     item.descuentoTaller    || 0,
+        precioCompra:        item.precioCompra       || 0,
+        precioVenta:         item.precioVenta        || 0,
+        stock:               item.stock              || 0,
+        stockReservado:      item.stockReservado     || 0,
+        stockMinimo:         item.stockMinimo        || 0,
+        unidad:              item.unidad             || "",
+        imagenUrl:           item.imagenUrl          || "",
+        proveedor:           item.proveedor          || "",
+        eq_fabricante:       (item.equivalencias || []).map((e: Equivalencia) => e.fabricante).join(","),
+        eq_codigo:           (item.equivalencias || []).map((e: Equivalencia) => e.codigo).join(","),
+        origen:              item.origen             || "",
+        descripcion:         item.descripcion        || "",
+      };
+    });
     // El proveedor no exporta datos internos del taller (precio de venta, costo de importación)
     const filasExport = filas.map(f => {
       if (!esProveedor) return f;
@@ -614,7 +635,8 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
     });
     const ws = XLSX.utils.json_to_sheet(filasExport);
     const ANCHOS: Record<string, number> = {
-      codigo: 14, nombre: 30, fabricante: 14, categoria: 14, tipoPieza: 22, posicion: 12, lado: 12,
+      codigo: 14, nombre: 30, fabricante: 14, categoria: 24, subcategoria: 26, subcategoriaDetalle: 26,
+      tipoPieza: 22, posicion: 12, lado: 12,
       marcas: 30, modelos: 40, anioDesde: 10, anioHasta: 10, precioImportacion: 16, precioLista: 14,
       descuentoTaller: 14, precioCompra: 14, precioVenta: 12, stock: 8, stockReservado: 10,
       stockMinimo: 10, unidad: 8, imagenUrl: 40, proveedor: 20, eq_fabricante: 30, eq_codigo: 30,
@@ -666,7 +688,10 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
                 id="select-filtro-categoria"
                 className={styles.filtroSelectDropdown}
                 value={filtrocat}
-                onChange={e => setFiltrocat(e.target.value)}
+                onChange={e => {
+                  setFiltrocat(e.target.value);
+                  setFiltroSubcat("");
+                }}
               >
                 <option value="">Todas las categorías ({inventario.length})</option>
                 {categoriasConConteo.map(([nombreCat, cant]) => (
@@ -676,6 +701,27 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
                 ))}
               </select>
             </div>
+
+            {subcategoriasFiltroOpciones.length > 0 && (
+              <div className={styles.filtroDropdownGroup}>
+                <label htmlFor="select-filtro-subcategoria" className={styles.filtroGrupoLabel}>
+                  ↳ Subcategoría:
+                </label>
+                <select
+                  id="select-filtro-subcategoria"
+                  className={styles.filtroSelectDropdown}
+                  value={filtroSubcat}
+                  onChange={e => setFiltroSubcat(e.target.value)}
+                >
+                  <option value="">Todas las subcategorías</option>
+                  {subcategoriasFiltroOpciones.map(sub => (
+                    <option key={sub.nombre} value={sub.nombre}>
+                      {sub.nombre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className={styles.filtroDropdownGroup}>
               <label htmlFor="select-filtro-marca" className={styles.filtroGrupoLabel}>
@@ -696,12 +742,13 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
               </select>
             </div>
 
-            {(filtrocat !== "" || filtroMarca !== "") && (
+            {(filtrocat !== "" || filtroSubcat !== "" || filtroMarca !== "") && (
               <button
                 type="button"
                 className={styles.btnLimpiarFiltros}
                 onClick={() => {
                   setFiltrocat("");
+                  setFiltroSubcat("");
                   setFiltroMarca("");
                 }}
               >
@@ -753,24 +800,22 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
               {sincronizandoAiloo ? "Ingestando Ailoo..." : "📦 Ingestar Catálogo Ailoo"}
             </button>
           )}
-          {!esProveedor && (
-            <button
-              className="btn btn-dark"
-              style={{
-                background: pendientesWooCount > 0 ? '#059669' : undefined,
-                borderColor: pendientesWooCount > 0 ? '#059669' : undefined,
-                color: pendientesWooCount > 0 ? '#ffffff' : undefined,
-                fontWeight: pendientesWooCount > 0 ? 700 : undefined,
-              }}
-              onClick={handleSyncWoo}
-              disabled={sincronizando}
-              title="Sincroniza incrementalmente hacia WooCommerce solo los productos con cambios (Delta Hash)"
-            >
-              {sincronizando
-                ? "Sincronizando..."
-                : `🛒 Sync Delta WooCommerce${pendientesWooCount > 0 ? ` (${pendientesWooCount})` : ""}`}
-            </button>
-          )}
+          <button
+            className="btn btn-dark"
+            style={{
+              background: pendientesWooCount > 0 ? '#059669' : undefined,
+              borderColor: pendientesWooCount > 0 ? '#059669' : undefined,
+              color: pendientesWooCount > 0 ? '#ffffff' : undefined,
+              fontWeight: pendientesWooCount > 0 ? 700 : undefined,
+            }}
+            onClick={handleSyncWoo}
+            disabled={sincronizando}
+            title="Sincroniza incrementalmente hacia WooCommerce (facilrepuestos.cl) los productos con cambios"
+          >
+            {sincronizando
+              ? "Sincronizando..."
+              : `🛒 Sync Delta WooCommerce${pendientesWooCount > 0 ? ` (${pendientesWooCount})` : ""}`}
+          </button>
           <button className="btn btn-primary" onClick={openNuevo}>+ Agregar Repuesto</button>
         </div>
       </div>
@@ -794,11 +839,15 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
               const margen     = item.precioCompra && item.precioVenta
                 ? (((item.precioVenta - item.precioCompra) / item.precioVenta) * 100).toFixed(0) : null;
               const modResumen = resumenModelos(item);
+              const jerCard    = resolverJerarquiaCategoria(item);
+              const rutaCatTxt = [jerCard.categoria || item.categoria, jerCard.subcategoria, jerCard.subcategoriaDetalle]
+                .filter(Boolean)
+                .join(" › ");
               return (
                 <div className="inv-card" key={item.id}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.6rem' }}>
                     <div style={{ flex: 1 }}>
-                      <div className="inv-card-cat">{item.categoria}</div>
+                      <div className="inv-card-cat">{rutaCatTxt}</div>
                       <div className="inv-card-name">{item.nombre}</div>
                     </div>
                     {item.imagenUrl && (
@@ -1015,13 +1064,20 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
                           });
                           if (r.success && r.data) {
                             const d = r.data;
+                            const jer = resolverJerarquiaCategoria({
+                              categoria: d.categoria,
+                              tipoPieza: d.tipoPieza,
+                              nombre: d.nombre,
+                            });
                             setForm(prev => ({
                               ...prev,
                               codigoProducto: d.codigoProducto || prev.codigoProducto,
                               nombre: d.nombre || prev.nombre,
                               fabricante: d.fabricante || prev.fabricante,
                               origen: d.origen || prev.origen,
-                              categoria: d.categoria && d.categoria !== "OTROS" ? d.categoria : prev.categoria,
+                              categoria: jer.categoria || prev.categoria,
+                              subcategoria: jer.subcategoria || prev.subcategoria,
+                              subcategoriaDetalle: jer.subcategoriaDetalle || prev.subcategoriaDetalle,
                               tipoPieza: d.tipoPieza || prev.tipoPieza,
                               marcasCompatibles: d.marcasCompatibles?.length ? d.marcasCompatibles : prev.marcasCompatibles,
                               modelosCompatibles: Object.keys(d.modelosCompatibles || {}).length ? d.modelosCompatibles : prev.modelosCompatibles,
@@ -1063,13 +1119,20 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
                         });
                         if (r.success && r.data) {
                           const d = r.data;
+                          const jer = resolverJerarquiaCategoria({
+                            categoria: d.categoria,
+                            tipoPieza: d.tipoPieza,
+                            nombre: d.nombre,
+                          });
                           setForm(prev => ({
                             ...prev,
                             codigoProducto: d.codigoProducto || prev.codigoProducto,
                             nombre: d.nombre || prev.nombre,
                             fabricante: d.fabricante || prev.fabricante,
                             origen: d.origen || prev.origen,
-                            categoria: d.categoria && d.categoria !== "OTROS" ? d.categoria : prev.categoria,
+                            categoria: jer.categoria || prev.categoria,
+                            subcategoria: jer.subcategoria || prev.subcategoria,
+                            subcategoriaDetalle: jer.subcategoriaDetalle || prev.subcategoriaDetalle,
                             tipoPieza: d.tipoPieza || prev.tipoPieza,
                             marcasCompatibles: d.marcasCompatibles?.length ? d.marcasCompatibles : prev.marcasCompatibles,
                             modelosCompatibles: Object.keys(d.modelosCompatibles || {}).length ? d.modelosCompatibles : prev.modelosCompatibles,
@@ -1123,25 +1186,115 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
                 </datalist>
               </div>
               <div className="field">
-                <label>Categoría *</label>
-                <select value={form.categoria} onChange={e => setField("categoria", e.target.value)}>
+                <label>Categoría Principal (Tienda) *</label>
+                <select
+                  value={form.categoria}
+                  onChange={e => {
+                    const nuevaCat = e.target.value;
+                    const subs = obtenerSubcategorias(nuevaCat);
+                    const primeraSub = subs[0]?.nombre || "";
+                    const primerHijo = subs[0]?.hijos?.[0] || "";
+                    const nuevoTipo = (primerHijo || primeraSub || form.tipoPieza || "").toUpperCase();
+                    setForm(prev => {
+                      const antes = autoNombre(prev.tipoPieza, prev.codigo);
+                      const nombreEsAuto = !prev.nombre || prev.nombre === antes;
+                      return {
+                        ...prev,
+                        categoria: nuevaCat,
+                        subcategoria: primeraSub,
+                        subcategoriaDetalle: primerHijo,
+                        tipoPieza: nuevoTipo,
+                        nombre: nombreEsAuto ? autoNombre(nuevoTipo, prev.codigo) : prev.nombre,
+                      };
+                    });
+                  }}
+                >
                   {allCategorias.map(c => <option key={c.nombre} value={c.nombre}>{c.nombre}</option>)}
                 </select>
-                {esProveedor && <AvisoContacto que="tu categoría" />}
                 {!esProveedor && <div className={styles.addRow}>
-                  <input value={categoriaCustom} onChange={e => setCategoriaCustom(e.target.value.toUpperCase())} onKeyDown={e => e.key === "Enter" && agregarCategoria()} placeholder="+ Nueva categoría..." className={styles.addInput} />
+                  <input value={categoriaCustom} onChange={e => setCategoriaCustom(e.target.value)} onKeyDown={e => e.key === "Enter" && agregarCategoria()} placeholder="+ Nueva categoría..." className={styles.addInput} />
                   <button type="button" className="btn btn-dark btn-sm" onClick={agregarCategoria} disabled={guardandoCategoria || !categoriaCustom.trim()}>{guardandoCategoria ? "..." : "+"}</button>
                 </div>}
-                {!esProveedor && categoriasList.length > 0 && (
-                  <div className={`${styles.chipsRow} ${styles.chipsRowMt}`}>
-                    {categoriasList.map(c => (
-                      <span key={c.id} className={styles.chipEquivalencia}>
-                        {c.nombre}
-                        <button type="button" onClick={() => eliminarCategoria(c.id!, c.nombre)} className={styles.chipRemove} title="Eliminar categoría">×</button>
-                      </span>
+              </div>
+
+              {obtenerSubcategorias(form.categoria).length > 0 && (
+                <div className="field">
+                  <label>Subcategoría *</label>
+                  <select
+                    value={form.subcategoria || ""}
+                    onChange={e => {
+                      const nuevaSub = e.target.value;
+                      const hijos = obtenerSubcategoriasDetalle(form.categoria, nuevaSub);
+                      const primerHijo = hijos[0] || "";
+                      const nuevoTipo = (primerHijo || nuevaSub || form.tipoPieza || "").toUpperCase();
+                      setForm(prev => {
+                        const antes = autoNombre(prev.tipoPieza, prev.codigo);
+                        const nombreEsAuto = !prev.nombre || prev.nombre === antes;
+                        return {
+                          ...prev,
+                          subcategoria: nuevaSub,
+                          subcategoriaDetalle: primerHijo,
+                          tipoPieza: nuevoTipo,
+                          nombre: nombreEsAuto ? autoNombre(nuevoTipo, prev.codigo) : prev.nombre,
+                        };
+                      });
+                    }}
+                  >
+                    <option value="">— Seleccionar subcategoría —</option>
+                    {obtenerSubcategorias(form.categoria).map(sub => (
+                      <option key={sub.nombre} value={sub.nombre}>
+                        {sub.nombre}
+                      </option>
                     ))}
-                  </div>
-                )}
+                  </select>
+                </div>
+              )}
+
+              {obtenerSubcategoriasDetalle(form.categoria, form.subcategoria).length > 0 && (
+                <div className="field">
+                  <label>Subcategoría Específica (Nivel 3) *</label>
+                  <select
+                    value={form.subcategoriaDetalle || ""}
+                    onChange={e => {
+                      const nuevoDetalle = e.target.value;
+                      const nuevoTipo = (nuevoDetalle || form.subcategoria || form.tipoPieza || "").toUpperCase();
+                      setForm(prev => {
+                        const antes = autoNombre(prev.tipoPieza, prev.codigo);
+                        const nombreEsAuto = !prev.nombre || prev.nombre === antes;
+                        return {
+                          ...prev,
+                          subcategoriaDetalle: nuevoDetalle,
+                          tipoPieza: nuevoTipo,
+                          nombre: nombreEsAuto ? autoNombre(nuevoTipo, prev.codigo) : prev.nombre,
+                        };
+                      });
+                    }}
+                  >
+                    <option value="">— Seleccionar tipo específico —</option>
+                    {obtenerSubcategoriasDetalle(form.categoria, form.subcategoria).map(h => (
+                      <option key={h} value={h}>
+                        {h}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className={`field ${styles.fullWidth}`} style={{ marginTop: "-0.25rem", marginBottom: "0.25rem" }}>
+                <div style={{
+                  background: "#f0f9ff",
+                  border: "1px solid #bae6fd",
+                  borderRadius: 6,
+                  padding: "0.45rem 0.75rem",
+                  fontSize: "0.8rem",
+                  color: "#0369a1",
+                  fontWeight: 600,
+                }}>
+                  📍 Ruta en facilrepuestos.cl:{" "}
+                  <strong>
+                    {[form.categoria, form.subcategoria, form.subcategoriaDetalle].filter(Boolean).join(" › ")}
+                  </strong>
+                </div>
               </div>
 
               {/* DESCRIPCIÓN */}

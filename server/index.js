@@ -125,10 +125,15 @@ app.use('/api/drive',                  driveRouter);                 // upload e
 app.use('/auth',                       driveRouter);
 app.use('/api/calendario',             staff, calendarioRouter);
 
-// API pública para WordPress (drmotors.cl) — protegida por X-API-Key, no por login.
+// API pública para WordPress (facilrepuestos.cl / drmotors.cl) — protegida por X-API-Key, no por login.
 // CORS propio y más permisivo porque solo expone datos ya pensados para ser públicos.
 app.use('/api/public', cors({
-  origin: ['https://drmotors.cl', 'https://www.drmotors.cl'],
+  origin: [
+    'https://facilrepuestos.cl',
+    'https://www.facilrepuestos.cl',
+    'https://drmotors.cl',
+    'https://www.drmotors.cl',
+  ],
   methods: ['GET'],
   allowedHeaders: ['Content-Type', 'X-API-Key'],
 }), apiPublicaRouter);

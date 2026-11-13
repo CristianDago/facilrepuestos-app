@@ -1,6 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { inventarioService } from '../../services/inventario';
-import { CATEGORIAS_DEFAULT, ORIGENES_REPUESTO } from '../../types';
+import {
+  CATEGORIAS_DEFAULT,
+  ORIGENES_REPUESTO,
+  obtenerSubcategorias,
+  obtenerSubcategoriasDetalle,
+  resolverJerarquiaCategoria,
+} from '../../types';
 import type { ItemInventario, PosicionPieza, LadoPieza, Equivalencia } from '../../types';
 import styles from './IngresoRapidoModal.module.css';
 
@@ -80,7 +86,9 @@ export default function IngresoRapidoModal({
   const [nombreNuevo, setNombreNuevo] = useState('');
   const [fabricanteNuevo, setFabricanteNuevo] = useState('');
   const [origenNuevo, setOrigenNuevo] = useState('');
-  const [categoriaNueva, setCategoriaNueva] = useState('ELÉCTRICO');
+  const [categoriaNueva, setCategoriaNueva] = useState('Frenos');
+  const [subcategoriaNueva, setSubcategoriaNueva] = useState('Pastillas y Balatas');
+  const [subcategoriaDetalleNueva, setSubcategoriaDetalleNueva] = useState('');
   const [tipoPiezaNuevo, setTipoPiezaNuevo] = useState('');
   const [marcasCompatiblesNuevas, setMarcasCompatiblesNuevas] = useState('');
   const [modelosCompatiblesMap, setModelosCompatiblesMap] = useState<{ [marca: string]: string[] }>({});
@@ -152,8 +160,15 @@ export default function IngresoRapidoModal({
     if (data.origen) {
       setOrigenNuevo(data.origen);
     }
-    if (data.categoria && data.categoria !== 'OTROS') {
-      setCategoriaNueva(data.categoria);
+    if (data.categoria || data.tipoPieza || data.nombre) {
+      const jer = resolverJerarquiaCategoria({
+        categoria: data.categoria,
+        tipoPieza: data.tipoPieza,
+        nombre: data.nombre,
+      });
+      if (jer.categoria) setCategoriaNueva(jer.categoria);
+      if (jer.subcategoria) setSubcategoriaNueva(jer.subcategoria);
+      setSubcategoriaDetalleNueva(jer.subcategoriaDetalle || '');
     }
     if (data.tipoPieza) {
       setTipoPiezaNuevo(data.tipoPieza);
@@ -208,8 +223,17 @@ export default function IngresoRapidoModal({
           setNombreNuevo(item.nombre || '');
           setFabricanteNuevo(item.fabricante || '');
           setOrigenNuevo(item.origen || '');
-          setCategoriaNueva(item.categoria && item.categoria !== 'OTROS' ? item.categoria : 'ELÉCTRICO');
-          setTipoPiezaNuevo(item.tipoPieza || '');
+          const jer = resolverJerarquiaCategoria({
+            categoria: item.categoria,
+            subcategoria: item.subcategoria,
+            subcategoriaDetalle: item.subcategoriaDetalle,
+            tipoPieza: item.tipoPieza,
+            nombre: item.nombre,
+          });
+          setCategoriaNueva(jer.categoria || 'Frenos');
+          setSubcategoriaNueva(jer.subcategoria || 'Pastillas y Balatas');
+          setSubcategoriaDetalleNueva(jer.subcategoriaDetalle || '');
+          setTipoPiezaNuevo(item.tipoPieza || (jer.subcategoriaDetalle || jer.subcategoria || '').toUpperCase());
           const marcasArr = item.marcasCompatibles || [];
           setMarcasCompatiblesNuevas(marcasArr.join(', '));
           setMarcaParaNuevoModelo(marcasArr[0] || 'SUZUKI');
@@ -437,6 +461,10 @@ export default function IngresoRapidoModal({
         eqList.push({ fabricante: `OEM ${marcas[0] || 'ORIGINAL'}`, codigo: codigoOemRaizDetectado });
       }
 
+      const tipoPiezaFinal =
+        tipoPiezaNuevo.trim().toUpperCase() ||
+        (subcategoriaDetalleNueva || subcategoriaNueva || 'REPUESTO').toUpperCase();
+
       const payload: Omit<ItemInventario, 'id'> = {
         nombre: nombreNuevo.trim().toUpperCase(),
         codigo: codBarrasFinal,
@@ -445,7 +473,9 @@ export default function IngresoRapidoModal({
         origen: origenNuevo.trim().toUpperCase(),
         descripcion: descripcionTecnicaNueva.trim(),
         categoria: categoriaNueva,
-        tipoPieza: tipoPiezaNuevo.trim().toUpperCase() || 'REPUESTO',
+        subcategoria: subcategoriaNueva,
+        subcategoriaDetalle: subcategoriaDetalleNueva,
+        tipoPieza: tipoPiezaFinal,
         posicion: (resultado.item.posicion as PosicionPieza) || 'NO APLICA',
         lado: (resultado.item.lado as LadoPieza) || 'NO APLICA',
         marcasCompatibles: marcas,
@@ -849,11 +879,20 @@ export default function IngresoRapidoModal({
                 </div>
 
                 <div className={styles.fieldGroup}>
-                  <label className={styles.fieldLabel}>Categoría</label>
+                  <label className={styles.fieldLabel}>1️⃣ Categoría Principal (Tienda)</label>
                   <select
                     className={styles.fieldInput}
                     value={categoriaNueva}
-                    onChange={(e) => setCategoriaNueva(e.target.value)}
+                    onChange={(e) => {
+                      const nuevaCat = e.target.value;
+                      const subs = obtenerSubcategorias(nuevaCat);
+                      const primeraSub = subs[0]?.nombre || '';
+                      const primeraDet = subs[0]?.hijas?.[0] || '';
+                      setCategoriaNueva(nuevaCat);
+                      setSubcategoriaNueva(primeraSub);
+                      setSubcategoriaDetalleNueva(primeraDet);
+                      setTipoPiezaNuevo((primeraDet || primeraSub || '').toUpperCase());
+                    }}
                   >
                     {CATEGORIAS_DEFAULT.map((cat) => (
                       <option key={cat} value={cat}>
@@ -864,12 +903,55 @@ export default function IngresoRapidoModal({
                 </div>
 
                 <div className={styles.fieldGroup}>
+                  <label className={styles.fieldLabel}>2️⃣ Subcategoría</label>
+                  <select
+                    className={styles.fieldInput}
+                    value={subcategoriaNueva}
+                    onChange={(e) => {
+                      const nuevaSub = e.target.value;
+                      const dets = obtenerSubcategoriasDetalle(categoriaNueva, nuevaSub);
+                      const primeraDet = dets[0] || '';
+                      setSubcategoriaNueva(nuevaSub);
+                      setSubcategoriaDetalleNueva(primeraDet);
+                      setTipoPiezaNuevo((primeraDet || nuevaSub || '').toUpperCase());
+                    }}
+                  >
+                    {obtenerSubcategorias(categoriaNueva).map((sub) => (
+                      <option key={sub.nombre} value={sub.nombre}>
+                        {sub.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {obtenerSubcategoriasDetalle(categoriaNueva, subcategoriaNueva).length > 0 && (
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>3️⃣ Subcategoría Específica</label>
+                    <select
+                      className={styles.fieldInput}
+                      value={subcategoriaDetalleNueva}
+                      onChange={(e) => {
+                        const det = e.target.value;
+                        setSubcategoriaDetalleNueva(det);
+                        if (det) setTipoPiezaNuevo(det.toUpperCase());
+                      }}
+                    >
+                      {obtenerSubcategoriasDetalle(categoriaNueva, subcategoriaNueva).map((det) => (
+                        <option key={det} value={det}>
+                          {det}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className={styles.fieldGroup}>
                   <label className={styles.fieldLabel}>Tipo de Pieza</label>
                   <input
                     type="text"
                     className={styles.fieldInput}
                     value={tipoPiezaNuevo}
-                    placeholder="Ej: SENSOR, PASTILLAS DE FRENO..."
+                    placeholder="Ej: SENSOR, PASTILLAS Y BALATAS..."
                     onChange={(e) => setTipoPiezaNuevo(e.target.value.toUpperCase())}
                   />
                 </div>

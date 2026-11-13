@@ -25,8 +25,13 @@ function requireSyncAccess(req, res, next) {
   if (key && process.env.DRMOTORS_SYNC_SECRET && key === process.env.DRMOTORS_SYNC_SECRET) {
     return next();
   }
-  // Si no vino la clave de servidor, exigir sesión de admin normal
-  return requireAuth(req, res, () => requireAdmin(req, res, next));
+  // Permitir a administradores y proveedores autenticados disparar la sincronización hacia WooCommerce
+  return requireAuth(req, res, () => {
+    if (req.user?.rol === 'admin' || req.user?.rol === 'proveedor') {
+      return next();
+    }
+    return requireAdmin(req, res, next);
+  });
 }
 
 // GET /api/woocommerce/status

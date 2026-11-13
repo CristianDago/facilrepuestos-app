@@ -376,6 +376,8 @@ export function calcularHashCatalogoItem(item = {}) {
     skuPublicoFrp: String(item.skuPublicoFrp || item.codigo || '').trim().toUpperCase(),
     nombre: String(item.nombre || '').trim(),
     categoria: String(item.categoria || '').trim().toUpperCase(),
+    subcategoria: String(item.subcategoria || '').trim().toUpperCase(),
+    subcategoriaDetalle: String(item.subcategoriaDetalle || '').trim().toUpperCase(),
     stock: Number(item.stock) || 0,
     precioCompra: Number(item.precioCompra) || 0,
     precioVenta: Number(item.precioVenta) || 0,

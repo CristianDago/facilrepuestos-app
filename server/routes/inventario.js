@@ -1,7 +1,20 @@
 import { Router } from 'express';
 import { db } from '../config/firebase.js';
 import { requireAuth, requireAdmin, requireAuthOrLector, ROL_LECTOR_DRPARTES } from '../middleware/auth.js';
-import { eliminarProductoDeWooCommerce } from '../services/woocommerceSync.js';
+import { eliminarProductoDeWooCommerce, sincronizarInventarioConWooCommerce } from '../services/woocommerceSync.js';
+
+// Dispara sincronización incremental (Delta) con WooCommerce automáticamente cuando las credenciales reales están activas
+async function autoSyncWooDeltaSiConfigurado() {
+  if (!process.env.WOOCOMMERCE_URL || !process.env.WOOCOMMERCE_CONSUMER_KEY || !process.env.WOOCOMMERCE_CONSUMER_SECRET) {
+    return null;
+  }
+  try {
+    return await sincronizarInventarioConWooCommerce({ soloDelta: true });
+  } catch (err) {
+    console.error('[auto-woo-sync] Error al sincronizar cambio de inventario con WooCommerce:', err.message);
+    return { error: err.message };
+  }
+}
 import { buscarRepuestoPorCodigo, analizarCodigoProductoAutomotriz } from '../services/partLookup.js';
 import { generarSkuPublicoFrp } from '../services/ailooBridge.js';
 import { calcularHashCatalogoItem } from '../services/ailooCatalogSync.js';
@@ -1024,12 +1037,14 @@ router.post('/facturas/ingresar', requireAuth, async (req, res, next) => {
     };
 
     const facturaRef = await db.collection('facturas_compra_proveedor').add(facturaRecord);
+    const wooSync = await autoSyncWooDeltaSiConfigurado();
 
     res.status(201).json({
       success: true,
       data: {
         facturaId: facturaRef.id,
         ...facturaRecord,
+        wooSync,
       },
     });
   } catch (error) {
@@ -1340,8 +1355,9 @@ router.post('/', requireAuth, async (req, res, next) => {
     nuevoItem.deltaHash = calcularHashCatalogoItem(nuevoItem);
 
     const docRef = await db.collection('inventario').add(nuevoItem);
+    const wooSync = await autoSyncWooDeltaSiConfigurado();
 
-    res.json({ success: true, data: { id: docRef.id, skuPublicoFrp } });
+    res.json({ success: true, data: { id: docRef.id, skuPublicoFrp, wooSync } });
   } catch (error) {
     next(error);
   }
@@ -1391,7 +1407,9 @@ router.put('/:id', requireAuth, async (req, res, next) => {
       updatedAt: new Date().toISOString(),
     });
 
-    res.json({ success: true });
+    const wooSync = cambioRelevanteWoo ? await autoSyncWooDeltaSiConfigurado() : null;
+
+    res.json({ success: true, wooSync });
   } catch (error) {
     next(error);
   }
@@ -1435,7 +1453,9 @@ router.put('/:id/stock', requireAuth, async (req, res, next) => {
       updatedAt: new Date().toISOString(),
     });
 
-    res.json({ success: true });
+    const wooSync = await autoSyncWooDeltaSiConfigurado();
+
+    res.json({ success: true, wooSync });
   } catch (error) {
     next(error);
   }

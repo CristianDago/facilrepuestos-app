@@ -3,9 +3,15 @@ import { getAuth } from 'firebase/auth';
 const API_ORIGIN = (import.meta.env.VITE_API_URL || '').replace(/\/+$/, '');
 const BASE_URL = `${API_ORIGIN}/api`;
 
-// Obtiene el token del usuario autenticado (Firebase o sesión local de desarrollo)
+// Obtiene el token del usuario autenticado (prioriza sesión real de Firebase; usa dev-token solo si no hay sesión Firebase en DEV)
 async function getAuthHeaders(): Promise<Record<string, string>> {
   try {
+    const auth = getAuth();
+    const user = auth.currentUser;
+    if (user) {
+      const token = await user.getIdToken();
+      return { Authorization: `Bearer ${token}` };
+    }
     if (import.meta.env.DEV) {
       const devStored =
         localStorage.getItem('facilrepuestos_dev_user') ||
@@ -18,12 +24,6 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
         });
       const encoded = btoa(unescape(encodeURIComponent(devStored)));
       return { Authorization: `Bearer dev-token:${encoded}` };
-    }
-    const auth = getAuth();
-    const user = auth.currentUser;
-    if (user) {
-      const token = await user.getIdToken();
-      return { Authorization: `Bearer ${token}` };
     }
     return {};
   } catch {

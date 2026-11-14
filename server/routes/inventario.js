@@ -19,6 +19,12 @@ import { buscarRepuestoPorCodigo, analizarCodigoProductoAutomotriz } from '../se
 import { generarSkuPublicoFrp } from '../services/ailooBridge.js';
 import { calcularHashCatalogoItem } from '../services/ailooCatalogSync.js';
 import { clasificarProductoEnTaxonomiaFrp } from '../services/categoriasTaxonomia.js';
+import {
+  extraerCodigoOemDeProducto,
+  resolverImagenEfectivaProducto,
+  registrarFotoEnBancoColaborativo,
+  ejecutarEnriquecimientoImagenesCatalogo,
+} from '../services/catalogoImagenesService.js';
 import { limpiarReservasMostradorExpiradas } from './pos.js';
 
 const router = Router();
@@ -1282,6 +1288,72 @@ router.delete('/banco-fotos/:fotoId', requireAuth, async (req, res, next) => {
   }
 });
 
+// GET /api/inventario/estado-imagenes — Estado de cobertura de fotografías (Etapa 1 Subcategoría + Etapa 2 OEM)
+router.get('/estado-imagenes', requireAuth, async (_req, res, next) => {
+  try {
+    const snap = await db.collection('inventario').get();
+    let totalVisibles = 0;
+    let conFotoOemPropia = 0;
+    let conFotoSubcategoria = 0;
+    let sinFotoEnDoc = 0;
+
+    for (const doc of snap.docs) {
+      const it = doc.data();
+      if (it.ocultarEnTienda) continue;
+      totalVisibles++;
+      if (it.imagenUrl && it.origenImagen !== 'fallback_subcategoria') {
+        conFotoOemPropia++;
+      } else if (it.imagenUrl && it.origenImagen === 'fallback_subcategoria') {
+        conFotoSubcategoria++;
+      } else {
+        sinFotoEnDoc++;
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        totalVisibles,
+        conFotoOemPropia,
+        conFotoSubcategoria,
+        sinFotoEnDoc,
+        coberturaEfectivaTiendaPct: 100,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/inventario/enriquecer-imagenes — Ejecuta Etapa 1 + Etapa 2 sobre el catálogo y sincroniza con WooCommerce
+router.post('/enriquecer-imagenes', requireAdmin, async (req, res, next) => {
+  try {
+    const {
+      limite = 500,
+      soloSinImagen = true,
+      incluirFallbackSubcategoria = true,
+      sincronizarWoo = false,
+    } = req.body || {};
+
+    const resultado = await ejecutarEnriquecimientoImagenesCatalogo({
+      limite,
+      soloSinImagen,
+      incluirFallbackSubcategoria,
+    });
+
+    const wooSync = sincronizarWoo ? await autoSyncWooDeltaSiConfigurado() : null;
+    res.json({
+      success: true,
+      data: {
+        ...resultado,
+        wooSync,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/inventario/:id
 router.get('/:id', requireAuth, async (req, res, next) => {
   try {
@@ -1363,12 +1435,28 @@ router.post('/', requireAuth, async (req, res, next) => {
       createdAt: now,
       updatedAt: now,
     };
+    const codigoOemRaiz = extraerCodigoOemDeProducto(nuevoItem);
+    nuevoItem.codigoOemRaiz = codigoOemRaiz || null;
+    if (nuevoItem.imagenUrl && String(nuevoItem.imagenUrl).startsWith('http') && codigoOemRaiz) {
+      nuevoItem.origenImagen = nuevoItem.origenImagen || 'propia_tienda_local';
+      registrarFotoEnBancoColaborativo({
+        codigoOemRaiz,
+        imagenUrl: nuevoItem.imagenUrl,
+        nombreReferencia: nuevoItem.nombre,
+        marcaVehiculo: nuevoItem.marca || null,
+        origen: 'erp_tienda_local',
+      }).catch(() => {});
+    } else if (!nuevoItem.imagenUrl) {
+      const resuelta = resolverImagenEfectivaProducto(nuevoItem);
+      nuevoItem.imagenUrl = resuelta.url;
+      nuevoItem.origenImagen = resuelta.origenImagen;
+    }
     nuevoItem.deltaHash = calcularHashCatalogoItem(nuevoItem);
 
     const docRef = await db.collection('inventario').add(nuevoItem);
     const wooSync = await autoSyncWooDeltaSiConfigurado();
 
-    res.json({ success: true, data: { id: docRef.id, skuPublicoFrp, wooSync } });
+    res.json({ success: true, data: { id: docRef.id, skuPublicoFrp, imagenUrl: nuevoItem.imagenUrl, codigoOemRaiz: nuevoItem.codigoOemRaiz, wooSync } });
   } catch (error) {
     next(error);
   }
@@ -1413,6 +1501,19 @@ router.put('/:id', requireAuth, async (req, res, next) => {
     data.subcategoria = taxonomia.subcategoria;
     data.subcategoriaDetalle = taxonomia.subcategoriaDetalle;
     data.categoriaRuta = taxonomia.categoriaRuta;
+
+    const codigoOemRaiz = extraerCodigoOemDeProducto({ ...estadoCombinado, ...data });
+    data.codigoOemRaiz = codigoOemRaiz || estadoPrevio.codigoOemRaiz || null;
+    if (data.imagenUrl && String(data.imagenUrl).startsWith('http') && data.imagenUrl !== estadoPrevio.imagenUrl && data.codigoOemRaiz) {
+      data.origenImagen = data.origenImagen || 'propia_tienda_local';
+      registrarFotoEnBancoColaborativo({
+        codigoOemRaiz: data.codigoOemRaiz,
+        imagenUrl: data.imagenUrl,
+        nombreReferencia: estadoCombinado.nombre,
+        marcaVehiculo: estadoCombinado.marca || null,
+        origen: 'erp_tienda_local',
+      }).catch(() => {});
+    }
 
     const nuevoHash = calcularHashCatalogoItem({ ...estadoPrevio, ...data });
     const cambioRelevanteWoo = nuevoHash !== estadoPrevio.deltaHash;

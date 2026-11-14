@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../config/firebase.js';
 import { ARBOL_CATEGORIAS_TIENDA, normCat } from '../services/categoriasTaxonomia.js';
 import { construirLinksCarroWooCommerce, obtenerUrlBaseTiendaWoo } from '../services/woocommerceSync.js';
+import { resolverImagenEfectivaProducto } from '../services/catalogoImagenesService.js';
 
 const router = Router();
 
@@ -106,6 +107,7 @@ function sanitizarItem(doc) {
   const wooProductId = Number(d.wooProductId) || null;
   const baseUrl = obtenerUrlBaseTiendaWoo();
   const skuPublicoFrp = d.skuPublicoFrp || d.codigo || '';
+  const imgEfectiva = resolverImagenEfectivaProducto(d);
 
   return {
     id,
@@ -130,6 +132,8 @@ function sanitizarItem(doc) {
     disponible,
     enStock: disponible > 0,
     ocultarEnTienda: Boolean(d.ocultarEnTienda),
+    imagenUrl: imgEfectiva.url,
+    esFotoPropiaOem: imgEfectiva.esFotoPropiaOem,
     wooProductId,
     urlProductoWoo: wooProductId
       ? `${baseUrl}/?p=${wooProductId}`

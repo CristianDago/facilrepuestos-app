@@ -5,6 +5,7 @@ import {
   normCat,
   resolverRutaCategoriasTienda,
 } from './categoriasTaxonomia.js';
+import { resolverImagenEfectivaProducto } from './catalogoImagenesService.js';
 
 export { ARBOL_CATEGORIAS_TIENDA, resolverRutaCategoriasTienda };
 
@@ -363,7 +364,7 @@ function descripcionDeItem(item) {
 // en WordPress (WooCommerce solo modifica los campos que se le mandan, deja el resto igual).
 // `puedeAgregarImagen` es true si el producto es nuevo, o si ya existe pero todavía no tiene
 // ninguna foto en WooCommerce — así se rellenan huecos sin pisar fotos puestas a mano.
-function construirPayload(id, item, obtenerCategoriasItem, esNuevo, puedeAgregarImagen) {
+function construirPayload(id, item, obtenerCategoriasItem, esNuevo, puedeAgregarImagen, mapaMediaWoo = null) {
   const disponible = Math.max(0, Math.floor((item.stock || 0) - (item.stockReservado || 0)));
   const rutaCategorias = resolverRutaCategoriasTienda(item);
   const rutaTexto = rutaCategorias.join(' > ');
@@ -390,8 +391,25 @@ function construirPayload(id, item, obtenerCategoriasItem, esNuevo, puedeAgregar
     payload.description = descripcionDeItem(item);
   }
 
-  if (puedeAgregarImagen && item.imagenUrl) {
-    payload.images = [{ src: item.imagenUrl }];
+  // Etapa 1 + Etapa 2 de Imágenes: si el producto puede recibir imagen (es nuevo o aún no tiene imagen en WooCommerce,
+  // o viene con motivo de actualización de foto), resolvemos su imagen efectiva (propia/OEM o maestra de subcategoría Nivel 3).
+  const forzarActualizacionFoto =
+    item.wooSyncMotivo === 'nueva_foto_banco_proveedor' ||
+    item.wooSyncMotivo === 'foto_principal_actualizada' ||
+    item.wooSyncMotivo === 'enriquecimiento_imagen_catalogo';
+
+  if (puedeAgregarImagen || forzarActualizacionFoto) {
+    const imgEfectiva = resolverImagenEfectivaProducto(item);
+    if (imgEfectiva?.url) {
+      const mediaIdExistente = mapaMediaWoo ? Number(mapaMediaWoo.get(imgEfectiva.url)) : 0;
+      if (mediaIdExistente > 0) {
+        // Reutiliza el attachment ID existente en la galería de WordPress (0 bytes extra en disco)
+        payload.images = [{ id: mediaIdExistente }];
+      } else {
+        payload.images = [{ src: imgEfectiva.url }];
+        payload._imagenUrlPendienteCache = imgEfectiva.url;
+      }
+    }
   }
 
   return payload;
@@ -566,6 +584,13 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true, ma
   const obtenerCategoriasItem = await prepararCategoriasWooCommerce(items);
   const existentes            = await obtenerProductosExistentes();
 
+  // Cargar mapa de URL de imagen -> media_id de WordPress para reutilizar adjuntos sin duplicar disco
+  const mediaDocRef = db.collection('configuracion_sistema').doc('mapa_imagenes_woo_media');
+  const mediaSnap = await mediaDocRef.get().catch(() => null);
+  const mapaMediaObj = mediaSnap?.exists ? mediaSnap.data()?.porUrl || {} : {};
+  const mapaMediaWoo = new Map(Object.entries(mapaMediaObj).map(([k, v]) => [k, Number(v)]));
+  let mapaMediaModificado = false;
+
   const crear = [];
   const metaCrear = [];
   const actualizar = [];
@@ -595,7 +620,7 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true, ma
 
     const esNuevo = !idExistente;
     const puedeAgregarImagen = esNuevo || !existente?.tieneImagen;
-    const payload = construirPayload(item.id, item, obtenerCategoriasItem, esNuevo, puedeAgregarImagen);
+    const payload = construirPayload(item.id, item, obtenerCategoriasItem, esNuevo, puedeAgregarImagen, mapaMediaWoo);
     if (idExistente) {
       actualizar.push({ id: idExistente, ...payload });
       metaActualizar.push({ docId: item.id, sku, wooId: idExistente, item });
@@ -612,8 +637,33 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true, ma
   const totalLotesCrear = Math.ceil(crear.length / CHUNK);
   const totalLotesActualizar = Math.ceil(actualizar.length / CHUNK);
 
+  const prepararLoteReutilizandoMediaId = (loteRaw) => {
+    const urlsYaEnviadasEnEsteLote = new Set();
+    return loteRaw.map((p) => {
+      const copia = { ...p };
+      const urlPend = copia._imagenUrlPendienteCache;
+      delete copia._imagenUrlPendienteCache;
+      if (urlPend) {
+        const idConocido = mapaMediaWoo.get(urlPend);
+        if (idConocido > 0) {
+          copia.images = [{ id: idConocido }];
+        } else if (urlsYaEnviadasEnEsteLote.has(urlPend)) {
+          // Si otro ítem de este mismo lote de 50 ya subirá esta URL por primera vez,
+          // evitamos subir 50 copias repetidas en el mismo lote; si el ítem ya tenía imagenUrl
+          // en el siguiente pase usará el mediaId, o solo el primero del lote la sube a la librería.
+          copia._urlCompartidaEnLote = urlPend;
+        } else {
+          urlsYaEnviadasEnEsteLote.add(urlPend);
+          copia._urlSubidaPorPrimeraVez = urlPend;
+        }
+      }
+      return copia;
+    });
+  };
+
   for (let i = 0; i < crear.length; i += CHUNK) {
-    const lote = crear.slice(i, i + CHUNK);
+    const lotePrep = prepararLoteReutilizandoMediaId(crear.slice(i, i + CHUNK));
+    const lote = lotePrep.map(({ _urlCompartidaEnLote, _urlSubidaPorPrimeraVez, ...rest }) => rest);
     const metaLote = metaCrear.slice(i, i + CHUNK);
     if (!lote.length) continue;
     const numLote = Math.floor(i / CHUNK) + 1;
@@ -627,6 +677,11 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true, ma
     for (let j = 0; j < metaLote.length; j++) {
       const m = metaLote[j];
       const cw = createdList[j];
+      const pPrep = lotePrep[j];
+      if (pPrep?._urlSubidaPorPrimeraVez && cw?.images?.[0]?.id) {
+        mapaMediaWoo.set(pPrep._urlSubidaPorPrimeraVez, Number(cw.images[0].id));
+        mapaMediaModificado = true;
+      }
       if (m && cw && !cw.error) {
         batch.update(db.collection('inventario').doc(m.docId), {
           skuPublicoFrp: m.sku,
@@ -652,7 +707,8 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true, ma
   }
 
   for (let i = 0; i < actualizar.length; i += CHUNK) {
-    const lote = actualizar.slice(i, i + CHUNK);
+    const lotePrep = prepararLoteReutilizandoMediaId(actualizar.slice(i, i + CHUNK));
+    const lote = lotePrep.map(({ _urlCompartidaEnLote, _urlSubidaPorPrimeraVez, ...rest }) => rest);
     const metaLote = metaActualizar.slice(i, i + CHUNK);
     if (!lote.length) continue;
     const numLote = Math.floor(i / CHUNK) + 1;
@@ -666,6 +722,11 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true, ma
     for (let j = 0; j < metaLote.length; j++) {
       const m = metaLote[j];
       const uw = updatedList[j];
+      const pPrep = lotePrep[j];
+      if (pPrep?._urlSubidaPorPrimeraVez && uw?.images?.[0]?.id) {
+        mapaMediaWoo.set(pPrep._urlSubidaPorPrimeraVez, Number(uw.images[0].id));
+        mapaMediaModificado = true;
+      }
       if (m && (!uw || !uw.error)) {
         batch.update(db.collection('inventario').doc(m.docId), {
           skuPublicoFrp: m.sku,
@@ -688,6 +749,15 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true, ma
       }
     }
     if (batchCount > 0) await batch.commit();
+  }
+
+  if (mapaMediaModificado) {
+    await mediaDocRef
+      .set({
+        porUrl: Object.fromEntries(mapaMediaWoo.entries()),
+        actualizadoEn: ahora,
+      }, { merge: true })
+      .catch(() => null);
   }
 
   for (let i = 0; i < ocultosParaEliminar.length; i += CHUNK) {

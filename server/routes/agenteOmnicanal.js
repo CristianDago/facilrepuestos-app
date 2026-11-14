@@ -45,6 +45,11 @@ import {
   conducirFlujoCompraDeterministico,
   redactarRespuestaConGeminiLuna,
 } from '../services/lunaConversacional.js';
+import {
+  construirLinksCarroWooCommerce,
+  crearPedidoPendienteWooCommerce,
+  obtenerUrlBaseTiendaWoo,
+} from '../services/woocommerceSync.js';
 
 const router = Router();
 
@@ -55,6 +60,159 @@ const COLECCION_ESCALAMIENTOS = 'escalamientos_ia';
 const COLECCION_SOLICITUDES_WSP = 'solicitudes_cotizacion_wsp';
 const COLECCION_PROVEEDORES = 'proveedores';
 const COLECCION_PEDIDOS_AGENTE = 'pedidos_agente_omnicanal';
+const COLECCION_CRM_WSP = 'clientes_wsp_crm';
+
+// Caché en memoria (TTL 3 minutos) para el catálogo de 8.600+ productos y reglas aprendidas.
+// Evita hacer miles de lecturas de Firestore en cada mensaje de WhatsApp y responde en < 15 ms.
+let cacheCatalogoAgente = {
+  itemsInventario: null,
+  todasReglas: null,
+  expiraEn: 0,
+  inicializadoDemo: false,
+};
+const CACHE_AGENTE_TTL_MS = 3 * 60 * 1000;
+
+async function obtenerCatalogoEInteligenciaCacheada({ forzar = false } = {}) {
+  const ahora = Date.now();
+  if (
+    !forzar &&
+    cacheCatalogoAgente.itemsInventario &&
+    cacheCatalogoAgente.todasReglas &&
+    ahora < cacheCatalogoAgente.expiraEn
+  ) {
+    return {
+      itemsInventario: cacheCatalogoAgente.itemsInventario,
+      todasReglas: cacheCatalogoAgente.todasReglas,
+    };
+  }
+  const [conSnap, invSnap] = await Promise.all([
+    db.collection(COLECCION_CONOCIMIENTO).get(),
+    db.collection(COLECCION_INVENTARIO).get(),
+  ]);
+  const todasReglas = conSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const itemsInventario = invSnap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((it) => !it.ocultarEnTienda);
+
+  cacheCatalogoAgente = {
+    ...cacheCatalogoAgente,
+    itemsInventario,
+    todasReglas,
+    expiraEn: ahora + CACHE_AGENTE_TTL_MS,
+  };
+  return { itemsInventario, todasReglas };
+}
+
+/**
+ * Registra o enriquece automáticamente el perfil CRM del cliente en `clientes_wsp_crm`,
+ * cruzando Teléfono de WhatsApp + Patente + Vehículo + Repuestos Consultados + Pedidos.
+ */
+async function registrarLeadCrmWhatsapp({
+  sesion = {},
+  vehiculo = null,
+  subConsultas = [],
+  candidatos = [],
+  pedidoCreado = null,
+  datosCliente = null,
+}) {
+  try {
+    const telRaw = String(sesion.clienteTelefono || '').trim();
+    const telNorm = telRaw.replace(/[^\d+]/g, '');
+    const docId =
+      telNorm && telNorm.length >= 8
+        ? `wsp_${telNorm.replace(/^\+/, '')}`
+        : `ses_${sesion.id || 'anon'}`;
+
+    const ref = db.collection(COLECCION_CRM_WSP).doc(docId);
+    const snap = await ref.get();
+    const prev = snap.exists ? snap.data() : {};
+    const now = new Date().toISOString();
+
+    const patentesSet = new Set(Array.isArray(prev.patentes) ? prev.patentes : []);
+    if (vehiculo?.patente) patentesSet.add(String(vehiculo.patente).toUpperCase());
+
+    const vehiculosPrev = Array.isArray(prev.vehiculos) ? [...prev.vehiculos] : [];
+    if (vehiculo && (vehiculo.patente || vehiculo.marca)) {
+      const claveVeh = `${vehiculo.patente || ''}_${vehiculo.marca || ''}_${vehiculo.modelo || ''}`;
+      const idx = vehiculosPrev.findIndex(
+        (v) => `${v.patente || ''}_${v.marca || ''}_${v.modelo || ''}` === claveVeh
+      );
+      const registroVeh = {
+        patente: vehiculo.patente || null,
+        marca: vehiculo.marca || null,
+        modelo: vehiculo.modelo || null,
+        anio: vehiculo.anio || null,
+        motor: vehiculo.motor || null,
+        vin: vehiculo.vin || null,
+        actualizadoEn: now,
+      };
+      if (idx >= 0) vehiculosPrev[idx] = { ...vehiculosPrev[idx], ...registroVeh };
+      else vehiculosPrev.unshift(registroVeh);
+    }
+
+    const repuestosPrev = Array.isArray(prev.repuestosConsultados)
+      ? [...prev.repuestosConsultados]
+      : [];
+    for (const sub of subConsultas || []) {
+      if (!sub?.resumenRepuesto) continue;
+      repuestosPrev.unshift({
+        resumenRepuesto: sub.resumenRepuesto,
+        categoria: sub.categoria || 'GENERAL',
+        patente: vehiculo?.patente || null,
+        marcaVehiculo: vehiculo?.marca || null,
+        modeloVehiculo: vehiculo?.modelo || null,
+        fecha: now,
+      });
+    }
+
+    const skusSet = new Set(Array.isArray(prev.skusCotizados) ? prev.skusCotizados : []);
+    for (const c of candidatos || []) {
+      if (c?.skuPublicoFrp) skusSet.add(c.skuPublicoFrp);
+    }
+
+    const pedidosPrev = Array.isArray(prev.pedidosGenerados) ? [...prev.pedidosGenerados] : [];
+    if (pedidoCreado?.codigoPedido) {
+      if (!pedidosPrev.some((p) => p.codigoPedido === pedidoCreado.codigoPedido)) {
+        pedidosPrev.unshift({
+          codigoPedido: pedidoCreado.codigoPedido,
+          wooOrderId: pedidoCreado.wooOrderId || null,
+          totalConIva: pedidoCreado.totalConIva || 0,
+          urlCarroWooCommerce: pedidoCreado.urlCarroWooCommerce || null,
+          modalidadEntrega: pedidoCreado.modalidadEntrega || null,
+          fecha: now,
+        });
+      }
+    }
+
+    const payloadCrm = {
+      telefono: telRaw || prev.telefono || '',
+      nombre:
+        datosCliente?.nombre ||
+        pedidoCreado?.clienteNombre ||
+        prev.nombre ||
+        sesion.clienteNombre ||
+        'Cliente WhatsApp',
+      rut: datosCliente?.rut || pedidoCreado?.clienteRut || prev.rut || null,
+      email: datosCliente?.email || pedidoCreado?.clienteEmail || prev.email || null,
+      canalOrigen: sesion.canal || prev.canalOrigen || 'whatsapp_cliente',
+      patentes: Array.from(patentesSet),
+      vehiculos: vehiculosPrev.slice(0, 10),
+      repuestosConsultados: repuestosPrev.slice(0, 25),
+      skusCotizados: Array.from(skusSet).slice(0, 40),
+      pedidosGenerados: pedidosPrev.slice(0, 20),
+      totalConsultas: Number(prev.totalConsultas || 0) + 1,
+      ultimaSesionId: sesion.id || prev.ultimaSesionId || null,
+      creadoEn: prev.creadoEn || now,
+      ultimaInteraccionAt: now,
+    };
+
+    await ref.set(payloadCrm, { merge: true });
+    return { id: docId, ...payloadCrm };
+  } catch (err) {
+    console.warn('[CRM-WSP] No se pudo actualizar lead CRM:', err.message);
+    return null;
+  }
+}
 
 // Padrón vehicular verificado (incluye patentes de flota + patentes reales de las conversaciones de Luna)
 const PADRON_PATENTES_DEMO = {
@@ -1070,6 +1228,18 @@ async function crearPedidoSimuladoAgente({
   const totalConIva = itemsCarrito.reduce((acc, it) => acc + Number(it.precioVentaConIva || 0) * Number(it.cantidad || 1), 0);
   const now = new Date().toISOString();
 
+  // Crear orden real en WooCommerce (pending) o generar el link directo de Carro de Compra en facilrepuestos.cl
+  const carroWoo = await crearPedidoPendienteWooCommerce({
+    items: itemsCarrito,
+    datosCliente,
+    modalidadEntrega,
+    comunaEntrega,
+    documentoTributario: documentoTributario || 'BOLETA',
+    vehiculo: sesion.vehiculoContexto || null,
+    codigoPedidoFrp: codigoPedido,
+    clienteTelefono: sesion.clienteTelefono || '',
+  });
+
   const nuevoPedido = {
     codigoPedido,
     sesionId: sesion.id,
@@ -1089,6 +1259,8 @@ async function crearPedidoSimuladoAgente({
       cantidad: Number(it.cantidad || 1),
       precioVentaNeto: Number(it.precioVentaNeto || 0),
       precioVentaConIva: Number(it.precioVentaConIva || 0),
+      wooProductId: Number(it.wooProductId) || null,
+      urlAgregarAlCarroWoo: it.urlAgregarAlCarroWoo || carroWoo.urlAgregarAlCarroWoo,
     })),
     modalidadEntrega,
     comunaEntrega,
@@ -1101,29 +1273,46 @@ async function crearPedidoSimuladoAgente({
     estadoLogistico: 'reservado_en_bodega',
     subtotalNeto,
     totalConIva,
+    wooOrderId: carroWoo.wooOrderId || null,
+    wooOrderKey: carroWoo.wooOrderKey || null,
+    urlPagoCheckoutWoo: carroWoo.urlPagoCheckoutWoo,
+    urlCarroWooCommerce: carroWoo.urlPagoCheckoutWoo || carroWoo.urlAgregarAlCarroWoo,
     urlCheckoutSimulado: `/chat-cliente?pedido=${codigoPedido}`,
     createdAt: now,
     updatedAt: now,
   };
 
   const pedRef = await db.collection(COLECCION_PEDIDOS_AGENTE).add(nuevoPedido);
-  return { id: pedRef.id, ...nuevoPedido };
+  const pedidoFinal = { id: pedRef.id, ...nuevoPedido };
+
+  // Actualizar CRM WhatsApp con los datos de compra (Nombre, RUT, Email, Patente, Orden)
+  await registrarLeadCrmWhatsapp({
+    sesion,
+    vehiculo: sesion.vehiculoContexto || null,
+    candidatos: itemsCarrito,
+    pedidoCreado: pedidoFinal,
+    datosCliente,
+  });
+
+  return pedidoFinal;
 }
 
 /**
- * Asegura que el catálogo unificado tenga los SKUs de Soluparts y Global cargados (incluyendo
- * los repuestos de marcas chinas de Luna) y que existan sesiones demo iniciales con el blindaje comercial activo.
+ * Asegura que el catálogo unificado esté inicializado y que existan sesiones demo iniciales
+ * con el blindaje comercial activo (usando flag en memoria para no escanear 8.600 docs por mensaje).
  */
 async function asegurarDatosInicialesAgente() {
-  const invSnap = await db.collection(COLECCION_INVENTARIO).get();
-  const tieneMarcasChinasLuna = invSnap.docs.some((d) => d.id === 'ailoo_soluparts_SOL-11090');
-  if (!tieneMarcasChinasLuna) {
+  if (cacheCatalogoAgente.inicializadoDemo) return;
+  const { itemsInventario } = await obtenerCatalogoEInteligenciaCacheada();
+  if (!itemsInventario || itemsInventario.length === 0) {
     try {
       await sincronizarTodosLosNodosAiloo({ forzar: true });
+      await obtenerCatalogoEInteligenciaCacheada({ forzar: true });
     } catch {
       // Ignorar si ya está sincronizando
     }
   }
+  cacheCatalogoAgente.inicializadoDemo = true;
 
   const demoDoc = await db.collection(COLECCION_SESIONES_AGENTE).doc('ses-omni-demo-porter').get();
   if (demoDoc.exists) {
@@ -1602,12 +1791,20 @@ async function ejecutarCascadaAgenteOmnicanal({
         : '¡Hola! 👋 Bienvenido a **FácilRepuestos.cl**. Cuéntame, ¿qué repuesto andas buscando y para qué vehículo? Si tienes la **patente** a mano me la das y lo reviso al tiro.';
     }
 
+    // Registrar en CRM WhatsApp incluso si solo dio vehículo o repuesto parcial
+    await registrarLeadCrmWhatsapp({
+      sesion,
+      vehiculo,
+      subConsultas: repuestoPendienteNuevo ? [repuestoPendienteNuevo] : [],
+    });
+
     const respuestaNatural = await redactarRespuestaConGeminiLuna({
       textoCliente: textoBruto,
       historialMensajes: sesion.mensajes || [],
       contextoSituacion: `INTENCIÓN DETECTADA: ${clasificacion.tipo}\nRESPUESTA BASE OBLIGATORIA A TRANSMITIR:\n${hechoBase}`,
       skusPermitidos: carritoActual.map((c) => c.skuPublicoFrp),
       respuestaFallback: hechoBase,
+      intencion: clasificacion.tipo,
     });
 
     return {
@@ -1645,16 +1842,12 @@ async function ejecutarCascadaAgenteOmnicanal({
   // ─── PASO 2 Y 3: SOPORTE MULTI-ÍTEM (CATÁLOGO UNIFICADO + MEMORIA IA) ──────
   const subConsultas = extraerMultiplesRepuestos(textoBusquedaEfectivo, vehiculo);
 
-  const [conSnap, invSnap] = await Promise.all([
-    db.collection(COLECCION_CONOCIMIENTO).get(),
-    db.collection(COLECCION_INVENTARIO).get(),
-  ]);
-  const todasReglas = conSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-  const itemsInventario = invSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const { todasReglas, itemsInventario } = await obtenerCatalogoEInteligenciaCacheada();
 
   const reglasAplicadasGlobal = [];
   const candidatosEncontradosGlobal = [];
   const subConsultasSinStock = [];
+  const baseUrlTienda = obtenerUrlBaseTiendaWoo();
 
   for (const sub of subConsultas) {
     // 2.A) Buscar en Memoria Técnica Aprendida (`conocimiento_aprendido_ia`)
@@ -1722,6 +1915,8 @@ async function ejecutarCascadaAgenteOmnicanal({
           item.nombre,
           item.descripcion,
           item.categoria,
+          item.subcategoria,
+          item.subcategoriaDetalle,
           item.tipoPieza,
           item.codigo,
           item.codigoProducto,
@@ -1796,10 +1991,14 @@ async function ejecutarCascadaAgenteOmnicanal({
       for (const { item } of candidatosSub) {
         if (candidatosEncontradosGlobal.some((x) => x.id === item.id)) continue;
         const costo = Number(item.precioCompra || 0);
-        const ventaNeto = Number(item.precioVenta || Math.round(costo * 1.28));
+        // Regla oficial: en el catálogo unificado, `precioVenta` es el precio de venta final publicado en WooCommerce (`facilrepuestos.cl`).
+        // Para Soluparts (`margenPct = 0`), `precioVenta === precioCompra` y ya es el precio final al público.
+        const precioPublicoFinal = Number(item.precioVenta || costo || 0);
+        const precioNetoReferencia = Math.round(precioPublicoFinal / 1.19);
         const margenPct =
-          Number(item.margenAplicadoPct || 0) ||
-          (costo > 0 ? Math.round(((ventaNeto - costo) / costo) * 100) : 28);
+          item.margenPct !== undefined
+            ? Number(item.margenPct)
+            : Number(item.margenAplicadoPct || 0);
         const origen =
           item.nodoAilooId === 'soluparts'
             ? 'soluparts_ailoo'
@@ -1808,13 +2007,24 @@ async function ejecutarCascadaAgenteOmnicanal({
               : item.origenCatalogo === 'mesa_whatsapp_etapa3'
                 ? 'mesa_whatsapp'
                 : 'portal_proveedor_local';
+        const skuPub = item.skuPublicoFrp || `FRP-LOC-${item.codigo}`;
+        const wooProductId = Number(item.wooProductId) || null;
+        const urlProductoWoo = wooProductId
+          ? `${baseUrlTienda}/?p=${wooProductId}`
+          : `${baseUrlTienda}/?s=${encodeURIComponent(skuPub)}&post_type=product`;
+        const urlAgregarAlCarroWoo = wooProductId
+          ? `${baseUrlTienda}/?add-to-cart=${wooProductId}&quantity=1`
+          : urlProductoWoo;
 
         candidatosEncontradosGlobal.push({
           id: item.id,
           codigoInterno: item.codigo,
-          skuPublicoFrp: item.skuPublicoFrp || `FRP-LOC-${item.codigo}`,
+          skuPublicoFrp: skuPub,
           nombre: item.nombre,
           fabricante: item.fabricante || 'OEM',
+          categoria: item.categoria || '',
+          subcategoria: item.subcategoria || '',
+          subcategoriaDetalle: item.subcategoriaDetalle || '',
           origen,
           nodoAilooId: item.nodoAilooId || null,
           proveedorId: item.proveedorId || null,
@@ -1829,8 +2039,11 @@ async function ejecutarCascadaAgenteOmnicanal({
           cantidad: 1,
           precioCostoProveedor: costo,
           margenPct,
-          precioVentaNeto: ventaNeto,
-          precioVentaConIva: Math.round(ventaNeto * 1.19),
+          precioVentaNeto: precioNetoReferencia,
+          precioVentaConIva: precioPublicoFinal,
+          wooProductId,
+          urlProductoWoo,
+          urlAgregarAlCarroWoo,
           subConsultaResumen: sub.resumenRepuesto,
         });
       }
@@ -1887,6 +2100,8 @@ async function ejecutarCascadaAgenteOmnicanal({
     carritoActual = candidatosEncontradosGlobal.map((c) => ({ ...c, cantidad: 1 }));
   }
 
+  const linksCarroCotizacion = construirLinksCarroWooCommerce(candidatosEncontradosGlobal);
+
   const notaRespuestasPrevias =
     respuestasVivas.length > 0
       ? `🔔 **Actualización en vivo de tu consulta anterior:** Confirmamos **${respuestasVivas[0].repuesto}** (\`${respuestasVivas[0].skuPublicoFrp}\`) a **$${respuestasVivas[0].precioVentaConIva.toLocaleString('es-CL')} IVA inc.**\n\n`
@@ -1896,9 +2111,9 @@ async function ejecutarCascadaAgenteOmnicanal({
   if (accionTomada === 'cotizacion_directa') {
     const lineasOpciones = candidatosEncontradosGlobal.map(
       (c) =>
-        `• **${c.nombre}** (\`${c.skuPublicoFrp}\`) — Marca **${c.fabricante}** · Stock: **${c.stock} un.** · **$${c.precioVentaNeto.toLocaleString(
+        `• **${c.nombre}** (\`${c.skuPublicoFrp}\`) — Marca **${c.fabricante}** · Stock: **${c.stock} un.** · **$${c.precioVentaConIva.toLocaleString(
           'es-CL'
-        )} neto** (**$${c.precioVentaConIva.toLocaleString('es-CL')} IVA inc.**)`
+        )} IVA inc.**\n  🛒 Carro directo en FácilRepuestos.cl: ${c.urlAgregarAlCarroWoo}`
     );
 
     const notaAprendida =
@@ -1910,17 +2125,15 @@ async function ejecutarCascadaAgenteOmnicanal({
       respuestaTexto =
         `${notaRespuestasPrevias}¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** tenemos disponibilidad confirmada en FácilRepuestos:\n\n` +
         `${lineasOpciones.join('\n')}${notaAprendida}\n\n` +
-        `📍 Despachamos a domicilio en **Santiago y todo Chile**, o puedes retirar directamente en nuestra sucursal en **Enrique Olivares 224, La Florida, Santiago de Chile**. ¿De qué comuna nos escribes o prefieres escribir **COMPRAR** para confirmar tu pedido ahora mismo?`;
+        `📍 Puedes comprar al instante haciendo clic en el **Carro de FácilRepuestos.cl** (Webpay / MercadoPago / Toku) o escribir **COMPRAR** aquí mismo para coordinar **Retiro sin costo en Enrique Olivares 224, La Florida** o **Despacho a todo Chile**.`;
     } else if (reglasAplicadasGlobal.length > 0) {
       const r = reglasAplicadasGlobal[0];
-      const conIva = Math.round((r.precioVentaFrp || 0) * 1.19);
+      const conIva = Math.round(r.precioVentaFrp || 0);
       respuestaTexto =
         `${notaRespuestasPrevias}¡Hola! 🚗 Según nuestra base técnica verificada en FácilRepuestos para **${etiquetaVehiculo}**:\n\n` +
         `• **${r.nombreRepuesto}** (\`${r.skuPublicoFrp}\`)${
           r.precioVentaFrp > 0
-            ? ` — Valor FácilRepuestos: **$${r.precioVentaFrp.toLocaleString('es-CL')} neto** (**$${conIva.toLocaleString(
-                'es-CL'
-              )} IVA inc.**)`
+            ? ` — Valor FácilRepuestos: **$${conIva.toLocaleString('es-CL')} IVA inc.**`
             : ''
         }.\n🧠 **Detalle técnico:** ${sanitizarMensajeHaciaClienteFinal(r.explicacionExperta)}\n\n` +
         `📍 Disponible con **Despacho a domicilio en Santiago y todo Chile** o **Retiro en Enrique Olivares 224, La Florida, Santiago de Chile**.`;
@@ -2143,21 +2356,29 @@ async function ejecutarCascadaAgenteOmnicanal({
     if (accionTomada === 'cotizacion_parcial_con_mesa_wsp') {
       const lineasDisponibles = candidatosEncontradosGlobal.map(
         (c) =>
-          `• ✅ **${c.nombre}** (\`${c.skuPublicoFrp}\`) — Stock: **${c.stock} un.** · **$${c.precioVentaNeto.toLocaleString(
+          `• ✅ **${c.nombre}** (\`${c.skuPublicoFrp}\`) — Stock: **${c.stock} un.** · **$${c.precioVentaConIva.toLocaleString(
             'es-CL'
-          )} neto** (**$${c.precioVentaConIva.toLocaleString('es-CL')} IVA inc.**)`
+          )} IVA inc.**\n  🛒 Carro directo en FácilRepuestos.cl: ${c.urlAgregarAlCarroWoo}`
       );
       respuestaTexto =
         `¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** revisé los ${subConsultas.length} repuestos de tu lista en FácilRepuestos:\n\n` +
         `📦 **Disponibles para entrega inmediata:**\n${lineasDisponibles.join('\n')}\n\n` +
         `📲 **En gestión directa de abastecimiento (${resumenFaltantes}):** Ya activé nuestra **Mesa de Abastecimiento FácilRepuestos (\`#${solicitudWspCreada.codigoSolicitud}\`)** con nuestras bodegas asociadas para confirmarte precio en minutos.\n\n` +
-        `💡 Nosotros gestionamos y compramos todo directamente para entregarte con **Despacho en Santiago y todo Chile** o **Retiro en nuestra tienda en Enrique Olivares 224, La Florida, Santiago de Chile**. Puedes escribir **COMPRAR** para asegurar los ítems en stock o esperar la confirmación del faltante.`;
+        `💡 Nosotros gestionamos y compramos todo directamente para entregarte con **Despacho en Santiago y todo Chile** o **Retiro en nuestra tienda en Enrique Olivares 224, La Florida, Santiago de Chile**. Puedes comprar los ítems en stock desde el carro de FácilRepuestos.cl o escribir **COMPRAR** aquí mismo.`;
     } else {
       respuestaTexto =
         `🚗 Identifiqué tu **${etiquetaVehiculo}**. Estamos verificando disponibilidad inmediata para **${resumenFaltantes}** en nuestra red de bodegas asociadas.\n\n` +
         `📲 **¡Sin callejones sin salida! Ya activé nuestra Mesa de Abastecimiento en Vivo (\`#${solicitudWspCreada.codigoSolicitud}\`)** (${solicitudWspCreada.proveedoresContactados.length} bodega(s) especialista(s) consultada(s) en línea por FácilRepuestos) para cotizarte en minutos con **Despacho en Santiago y todo Chile** o **Retiro en nuestra sucursal en Enrique Olivares 224, La Florida, Santiago de Chile**.`;
     }
   }
+
+  // Registrar automáticamente en el CRM WhatsApp (Teléfono + Patente + Vehículo + Repuestos)
+  await registrarLeadCrmWhatsapp({
+    sesion,
+    vehiculo,
+    subConsultas,
+    candidatos: candidatosEncontradosGlobal,
+  });
 
   if (accionTomada === 'cotizacion_directa' && respuestaTexto) {
     respuestaTexto = await redactarRespuestaConGeminiLuna({
@@ -2169,6 +2390,8 @@ async function ejecutarCascadaAgenteOmnicanal({
         ...reglasAplicadasGlobal.map((r) => r.skuPublicoFrp),
       ].filter(Boolean),
       respuestaFallback: respuestaTexto,
+      intencion: 'BUSQUEDA_CATALOGO',
+      tieneNotaTecnica: reglasAplicadasGlobal.length > 0,
     });
   }
 
@@ -2204,6 +2427,7 @@ async function ejecutarCascadaAgenteOmnicanal({
       subConsultasDetectadas: subConsultas.map((s) => s.resumenRepuesto),
       reglasConocimientoAplicadas: reglasAplicadasGlobal,
       candidatosInventario: candidatosEncontradosGlobal,
+      carroWooCommerce: linksCarroCotizacion,
       escalamientoCreado,
       solicitudWspCreada,
     },
@@ -2663,6 +2887,48 @@ router.post('/patente', async (req, res, next) => {
       });
     }
     res.json({ success: true, data: vehiculo });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/agente-omnicanal/crm-clientes
+// Devuelve la base de Leads CRM de WhatsApp (Teléfono + Patente + Vehículos + Repuestos + Pedidos)
+// para campañas promocionales segmentadas por marca, modelo o categoría.
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/crm-clientes', async (req, res, next) => {
+  try {
+    const { marca = '', modelo = '', patente = '' } = req.query;
+    const snap = await db.collection(COLECCION_CRM_WSP).get();
+    let clientes = snap.docs
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => String(b.ultimaInteraccionAt || '').localeCompare(String(a.ultimaInteraccionAt || '')));
+
+    if (marca) {
+      const mUpper = String(marca).toUpperCase();
+      clientes = clientes.filter((c) =>
+        (c.vehiculos || []).some((v) => String(v.marca || '').toUpperCase().includes(mUpper))
+      );
+    }
+    if (modelo) {
+      const modUpper = String(modelo).toUpperCase();
+      clientes = clientes.filter((c) =>
+        (c.vehiculos || []).some((v) => String(v.modelo || '').toUpperCase().includes(modUpper))
+      );
+    }
+    if (patente) {
+      const patUpper = String(patente).toUpperCase().replace(/[^A-Z0-9]/g, '');
+      clientes = clientes.filter((c) =>
+        (c.patentes || []).some((p) => String(p).toUpperCase().includes(patUpper))
+      );
+    }
+
+    res.json({
+      success: true,
+      total: clientes.length,
+      data: clientes,
+    });
   } catch (err) {
     next(err);
   }

@@ -791,3 +791,170 @@ export async function exportarCatalogoCSV() {
 
   return filas.join('\n');
 }
+
+/**
+ * Devuelve la URL pública base de la tienda WordPress/WooCommerce (por defecto https://facilrepuestos.cl).
+ */
+export function obtenerUrlBaseTiendaWoo() {
+  const configured = (process.env.WOOCOMMERCE_URL || '').replace(/\/+$/, '');
+  return configured || 'https://facilrepuestos.cl';
+}
+
+/**
+ * Construye los enlaces directos al carro de compras y ficha de producto en WordPress/WooCommerce
+ * para uno o más ítems cotizados por Repuestín o listados en el buscador inteligente.
+ */
+export function construirLinksCarroWooCommerce(items = []) {
+  const baseUrl = obtenerUrlBaseTiendaWoo();
+  const lista = Array.isArray(items) ? items : [];
+  const conWooId = lista.filter((it) => Number(it?.wooProductId) > 0);
+
+  if (conWooId.length === 0) {
+    const primerSku = lista[0]?.skuPublicoFrp || lista[0]?.codigo || '';
+    const urlBusqueda = primerSku
+      ? `${baseUrl}/?s=${encodeURIComponent(primerSku)}&post_type=product`
+      : `${baseUrl}/tienda/`;
+    return {
+      tieneWooIds: false,
+      urlCarroPrincipal: urlBusqueda,
+      urlCheckoutDirecto: `${baseUrl}/finalizar-compra/`,
+      enlacesPorItem: lista.map((it) => ({
+        skuPublicoFrp: it.skuPublicoFrp || it.codigo || '',
+        wooProductId: null,
+        urlProducto: `${baseUrl}/?s=${encodeURIComponent(it.skuPublicoFrp || it.nombre || '')}&post_type=product`,
+        urlAgregarAlCarro: urlBusqueda,
+      })),
+    };
+  }
+
+  const enlacesPorItem = lista.map((it) => {
+    const wid = Number(it?.wooProductId) || null;
+    const qty = Math.max(1, Number(it?.cantidad || 1));
+    return {
+      skuPublicoFrp: it.skuPublicoFrp || it.codigo || '',
+      wooProductId: wid,
+      cantidad: qty,
+      urlProducto: wid ? `${baseUrl}/?p=${wid}` : `${baseUrl}/?s=${encodeURIComponent(it.skuPublicoFrp || '')}&post_type=product`,
+      urlAgregarAlCarro: wid ? `${baseUrl}/?add-to-cart=${wid}&quantity=${qty}` : `${baseUrl}/tienda/`,
+    };
+  });
+
+  const primero = conWooId[0];
+  const qtyPrimero = Math.max(1, Number(primero.cantidad || 1));
+  const urlCarroPrincipal = `${baseUrl}/?add-to-cart=${Number(primero.wooProductId)}&quantity=${qtyPrimero}`;
+
+  return {
+    tieneWooIds: true,
+    urlCarroPrincipal,
+    urlCheckoutDirecto: `${baseUrl}/finalizar-compra/`,
+    enlacesPorItem,
+  };
+}
+
+/**
+ * Crea una orden real en estado `pending` en WooCommerce (`/wp-json/wc/v3/orders`) cuando el cliente
+ * completa el flujo COMPRAR en WhatsApp/Repuestín, devolviendo el `payment_url` oficial del checkout
+ * de WordPress (para pagar con Webpay / MercadoPago / Toku / Transferencia en facilrepuestos.cl).
+ * Si las credenciales de WooCommerce no están presentes o algún ítem no tiene `wooProductId`,
+ * devuelve de forma transparente el link directo de carrito (`?add-to-cart=`).
+ */
+export async function crearPedidoPendienteWooCommerce({
+  items = [],
+  datosCliente = {},
+  modalidadEntrega = 'retiro_bodega',
+  comunaEntrega = 'La Florida, Santiago (RM)',
+  documentoTributario = 'BOLETA',
+  vehiculo = null,
+  codigoPedidoFrp = '',
+  clienteTelefono = '',
+}) {
+  const linksCarro = construirLinksCarroWooCommerce(items);
+  const conWooId = (Array.isArray(items) ? items : []).filter((it) => Number(it?.wooProductId) > 0);
+
+  if (!isWooConfigured() || conWooId.length === 0) {
+    return {
+      creadoEnWoo: false,
+      wooOrderId: null,
+      wooOrderKey: null,
+      urlPagoCheckoutWoo: linksCarro.urlCarroPrincipal,
+      urlAgregarAlCarroWoo: linksCarro.urlCarroPrincipal,
+      enlacesPorItem: linksCarro.enlacesPorItem,
+    };
+  }
+
+  try {
+    const nombreCompleto = String(datosCliente?.nombre || 'Cliente FácilRepuestos').trim();
+    const partesNombre = nombreCompleto.split(/\s+/);
+    const firstName = partesNombre[0] || 'Cliente';
+    const lastName = partesNombre.slice(1).join(' ') || 'FácilRepuestos';
+    const direccion =
+      modalidadEntrega === 'retiro_bodega'
+        ? 'Retiro en Sucursal FácilRepuestos (Enrique Olivares 224, La Florida)'
+        : String(comunaEntrega || 'Santiago');
+
+    const payload = {
+      status: 'pending',
+      customer_note: [
+        `Pedido generado por Repuestín (${codigoPedidoFrp})`,
+        documentoTributario ? `Documento: ${documentoTributario}` : '',
+        datosCliente?.rut ? `RUT: ${datosCliente.rut}` : '',
+        vehiculo?.patente ? `Patente: ${vehiculo.patente} (${vehiculo.marca || ''} ${vehiculo.modelo || ''})` : '',
+      ]
+        .filter(Boolean)
+        .join(' | '),
+      billing: {
+        first_name: firstName,
+        last_name: lastName,
+        address_1: direccion,
+        city: comunaEntrega || 'Santiago',
+        state: 'RM',
+        country: 'CL',
+        email: datosCliente?.email || 'ventas@facilrepuestos.cl',
+        phone: String(clienteTelefono || '').replace(/[^\d+]/g, '') || '+56900000000',
+      },
+      shipping: {
+        first_name: firstName,
+        last_name: lastName,
+        address_1: direccion,
+        city: comunaEntrega || 'Santiago',
+        state: 'RM',
+        country: 'CL',
+      },
+      line_items: conWooId.map((it) => ({
+        product_id: Number(it.wooProductId),
+        quantity: Math.max(1, Number(it.cantidad || 1)),
+      })),
+      meta_data: [
+        { key: '_frp_codigo_pedido', value: String(codigoPedidoFrp || '') },
+        { key: '_frp_rut_cliente', value: String(datosCliente?.rut || '') },
+        { key: '_frp_documento_tributario', value: String(documentoTributario || 'BOLETA') },
+        { key: '_frp_modalidad_entrega', value: String(modalidadEntrega || 'retiro_bodega') },
+        { key: '_frp_patente_vehiculo', value: String(vehiculo?.patente || '') },
+      ],
+    };
+
+    const ordenWoo = await wcFetch('/orders', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+
+    return {
+      creadoEnWoo: true,
+      wooOrderId: ordenWoo?.id || null,
+      wooOrderKey: ordenWoo?.order_key || null,
+      urlPagoCheckoutWoo: ordenWoo?.payment_url || linksCarro.urlCarroPrincipal,
+      urlAgregarAlCarroWoo: linksCarro.urlCarroPrincipal,
+      enlacesPorItem: linksCarro.enlacesPorItem,
+    };
+  } catch (err) {
+    console.warn('[woo-sync] No se pudo crear orden pending en WooCommerce, usando link directo de carro:', err.message);
+    return {
+      creadoEnWoo: false,
+      wooOrderId: null,
+      wooOrderKey: null,
+      urlPagoCheckoutWoo: linksCarro.urlCarroPrincipal,
+      urlAgregarAlCarroWoo: linksCarro.urlCarroPrincipal,
+      enlacesPorItem: linksCarro.enlacesPorItem,
+    };
+  }
+}

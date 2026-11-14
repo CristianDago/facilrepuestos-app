@@ -652,13 +652,23 @@ export async function conducirFlujoCompraDeterministico({
         ? 'Retiro en Sucursal FácilRepuestos (Enrique Olivares 224, La Florida, Santiago)'
         : `Despacho por pagar a: ${comunaFinal}`;
 
+    const linkCarroWoo =
+      pedidoCreado?.urlPagoCheckoutWoo ||
+      pedidoCreado?.urlCarroWooCommerce ||
+      carritoActual.find((it) => it.urlAgregarAlCarroWoo)?.urlAgregarAlCarroWoo ||
+      'https://facilrepuestos.cl/finalizar-compra/';
+
     const respuestaFinal =
-      `¡Listo ${combinados.nombre.split(' ')[0]}! Tu pedido **\`${pedidoCreado.codigoPedido}\`** quedó creado:\n\n` +
+      `¡Listo ${combinados.nombre.split(' ')[0]}! Tu pedido **\`${pedidoCreado.codigoPedido}\`**${
+        pedidoCreado?.wooOrderId ? ` (Orden Web **#${pedidoCreado.wooOrderId}**)` : ''
+      } quedó creado:\n\n` +
       `${lineasResumen}\n` +
       `- **Documento:** ${estado.documento || 'BOLETA'} (RUT \`${combinados.rut}\`)\n` +
       `- **Entrega:** ${entregaTxt}\n` +
       `- **Total a pagar:** **$${Number(pedidoCreado.totalConIva).toLocaleString('es-CL')} IVA inc.**\n\n` +
-      `Recuerda que el stock queda reservado una vez confirmado el pago. Puedes completar el pago desde el botón de tu pantalla o enviarnos el comprobante por aquí.`;
+      `🛒 **Paga seguro en tu Carro de Compra Oficial (Webpay / MercadoPago / Toku / Transferencia):**\n` +
+      `👉 ${linkCarroWoo}\n\n` +
+      `Recuerda que el stock queda reservado al confirmar tu pago en el carro o enviándonos el comprobante por aquí.`;
 
     return {
       interceptado: true,
@@ -689,8 +699,53 @@ export function verificarSkusEnRespuesta(textoRespuesta = '', skusPermitidos = [
 }
 
 /**
+ * Determina si vale la pena invocar Gemini Flash o si la respuesta determinística ya resuelve el turno con $0 tokens.
+ * Solo llamamos a Gemini Flash cuando el cliente hace preguntas abiertas complejas, comparaciones técnicas o manda un mensaje largo con dudas.
+ */
+export function requiereRedaccionConGemini({
+  textoCliente = '',
+  intencion = '',
+  forzarGemini = false,
+  tieneNotaTecnica = false,
+}) {
+  if (forzarGemini || tieneNotaTecnica) return true;
+  const intencionesCeroTokens = new Set([
+    'CANCELAR_PEDIDO',
+    'ESTADO_PEDIDO',
+    'ATENCION_HUMANA',
+    'CONSULTA_GARANTIAS',
+    'CONSULTA_HORARIO',
+    'CONSULTA_SUCURSAL',
+    'SOLO_VEHICULO_SIN_REPUESTO',
+    'SOLO_REPUESTO_SIN_VEHICULO',
+  ]);
+  if (intencionesCeroTokens.has(intencion)) return false;
+
+  const limpio = String(textoCliente || '').trim();
+  const palabras = limpio.split(/\s+/).filter(Boolean);
+
+  // Saludos cortos o consultas directas estándar ("hola", "pastillas changan cs15 PDSS87") -> 0 tokens
+  if (intencion === 'SALUDO_O_CONVERSACION_INICIAL' && palabras.length <= 8 && !limpio.includes('?')) {
+    return false;
+  }
+
+  // Si es una búsqueda de catálogo directa y el cliente no hizo una pregunta abierta compleja (ej. "¿cuál es la diferencia?", "¿me sirve para...?") -> 0 tokens
+  if (
+    intencion === 'BUSQUEDA_CATALOGO' &&
+    !/\b(DIFERENCIA|CUAL\s+ME\s+CONVIENE|ORIGINAL\s+O\s+ALTERNATIVO|GARANTIA|COMO\s+SE\s+SI|POR\s+QUE|EXPLICA|RECOMIENDAS)\b/i.test(
+      limpio
+    )
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Llama a Gemini (`gemini-3.8-flash` en Vertex AI `facilrepuestos-prod`, location `global`)
  * con las instrucciones reales de Luna adaptadas a FácilRepuestos.
+ * Optimizado con filtro de ahorro de tokens (0 tokens en turnos determinísticos).
  * Si Vertex AI no responde o el modelo inventa un SKU, cae de forma transparente al redactor determinístico.
  */
 export async function redactarRespuestaConGeminiLuna({
@@ -699,7 +754,21 @@ export async function redactarRespuestaConGeminiLuna({
   contextoSituacion = '',
   skusPermitidos = [],
   respuestaFallback = '',
+  intencion = '',
+  forzarGemini = false,
+  tieneNotaTecnica = false,
 }) {
+  if (
+    !requiereRedaccionConGemini({
+      textoCliente,
+      intencion,
+      forzarGemini,
+      tieneNotaTecnica,
+    })
+  ) {
+    return respuestaFallback;
+  }
+
   try {
     const client = await googleAuth.getClient();
     const tokenRes = await client.getAccessToken();
@@ -707,7 +776,7 @@ export async function redactarRespuestaConGeminiLuna({
     if (!accessToken) return respuestaFallback;
 
     const horaCtx = obtenerContextoHoraChile();
-    const instruccionSistema = `Te llamas Repuestín y eres el asistente de ventas de mostrador de FácilRepuestos.cl en Chile. Atiendes directamente a clientes finales que buscan repuestos para su vehículo por chat web o WhatsApp.
+    const instruccionSistema = `Te llamas Repuestín y eres el asistente de ventas de mostrador de FácilRepuestos.cl en Chile. Atiendes directamente a clientes finales que buscan repuestos para su vehículo por WhatsApp o web.
 Hablas como un vendedor experto de mostrador en Chile: directo, breve, amable y claro (máximo 3 a 5 líneas por respuesta). Tratas al cliente de "tú". Usas "tenemos", "te puedo ofrecer", "revisemos".
 
 REGLAS INQUEBRANTABLES (HEREDADAS DE LUNA SOLUPARTS):
@@ -716,13 +785,13 @@ REGLAS INQUEBRANTABLES (HEREDADAS DE LUNA SOLUPARTS):
 3. Si el cliente pide un repuesto pero falta saber para qué vehículo es, NO inventes opciones: pregúntale para qué vehículo lo necesita y ofrécele darte la patente ("si tienes la patente a mano me la das y lo veo al tiro").
 4. Si el cliente dio la patente o el vehículo pero aún no dice qué repuesto necesita, confírmale el vehículo identificado y pregúntale qué pieza anda buscando.
 5. Cuando ofrezcas productos con stock confirmado en [DATOS VERIFICADOS DEL SISTEMA]:
-   - Muestra siempre el nombre del producto, su código SKU exacto entre backticks (ej. \`FRP-...\`) y su precio CON IVA incluido en pesos chilenos.
+   - Muestra siempre el nombre del producto, su código SKU exacto entre backticks (ej. \`FRP-...\`) y su precio final CON IVA incluido en pesos chilenos.
+   - Si en los datos verificados viene un link de carro de compras (\`https://facilrepuestos.cl/?add-to-cart=...\`), mantenlo intacto para que el cliente pueda comprar con 1 clic en el carro de FácilRepuestos.cl o escribir **COMPRAR** por WhatsApp.
    - Si quedan 5 unidades o menos, menciona la cantidad como dato sin presionar.
    - Recomienda el Retiro sin costo en nuestra sucursal ubicada en **Enrique Olivares 224, La Florida, Santiago** o **Despacho por pagar** a domicilio en Santiago y todo Chile.
-   - Invita al cliente a escribir la palabra **COMPRAR** si quiere confirmar el pedido.
 6. NUNCA menciones nombres de proveedores mayoristas internos (jamás nombres a Soluparts, Global Repuestos ni bodegas externas). Todo el stock y la gestión son de FácilRepuestos.cl.
 7. Horario de nuestra sucursal (Enrique Olivares 224, La Florida): lunes a jueves de 9:30 a 18:00, viernes de 9:30 a 17:00 y sábados de 9:30 a 14:00. Domingos y festivos cerrado.
-8. Usa negritas (**texto**) solo para destacar el vehículo, el precio con IVA o la palabra **COMPRAR**. No uses títulos largos ni lenguaje robótico.`;
+8. Usa negritas (**texto**) solo para destacar el vehículo, el precio o la palabra **COMPRAR**. No uses títulos largos ni lenguaje robótico.`;
 
     const ultimosTurnos = (historialMensajes || []).slice(-6).map((m) => ({
       role: m.autor === 'cliente' ? 'user' : 'model',

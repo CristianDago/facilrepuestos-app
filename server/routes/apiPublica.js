@@ -5,8 +5,8 @@ import { construirLinksCarroWooCommerce, obtenerUrlBaseTiendaWoo } from '../serv
 
 const router = Router();
 
-// Número oficial de WhatsApp de FácilRepuestos para el embudo Click-to-WhatsApp
-const WHATSAPP_PUBLIC_NUMBER = (process.env.WHATSAPP_PUBLIC_NUMBER || '56947881612').replace(/\D/g, '');
+// Número oficial de WhatsApp de FácilRepuestos en facilrepuestos.cl (+56 9 2740 1059)
+const WHATSAPP_PUBLIC_NUMBER = (process.env.WHATSAPP_PUBLIC_NUMBER || '56927401059').replace(/\D/g, '');
 
 // Caché en memoria (TTL 3 minutos) para responder al buscador de WordPress en < 15 ms
 // sin golpear MySQL ni hacer 8.600 lecturas de Firestore por cada búsqueda.

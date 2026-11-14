@@ -38,7 +38,6 @@ import ProveedorPOS         from './pages/Proveedor/POS/ProveedorPOS';
 import EscalamientosIA      from './pages/Escalamientos/EscalamientosIA';
 import MesaCotizacionWsp    from './pages/MesaWsp/MesaCotizacionWsp';
 import AgenteOmnicanal      from './pages/AgenteOmnicanal/AgenteOmnicanal';
-import ChatClienteWeb       from './pages/ChatClienteWeb/ChatClienteWeb';
 import ChatbotWidgetFlotante from './components/ChatbotWidget/ChatbotWidgetFlotante';
 import Mantenimiento     from './pages/Mantenimiento/Mantenimiento';
 
@@ -60,13 +59,12 @@ export default function App() {
           <Route path="/login"        element={<LoginPage />} />
           <Route path="/cliente"      element={<ClientePortal />} />
           <Route path="/taller"       element={<PanelTaller />} />
-          {/* Chatbot limpio de Repuestín para compartir con clientes */}
+          {/* Puente 100% WhatsApp-First de Repuestín (Chat Web desactivado) */}
           <Route path="/repuestin"    element={<ChatbotWidgetFlotante modoPaginaLimpia={true} />} />
           <Route path="/asistente"    element={<ChatbotWidgetFlotante modoPaginaLimpia={true} />} />
           <Route path="/agente"       element={<ChatbotWidgetFlotante modoPaginaLimpia={true} />} />
           <Route path="/widget-chat"  element={<ChatbotWidgetFlotante modoIframeEmbebido={true} />} />
-          {/* Laboratorio completo con traza y escenarios de prueba */}
-          <Route path="/chat-cliente" element={<ChatClienteWeb />} />
+          <Route path="/chat-cliente" element={<Navigate to="/repuestin" replace />} />
 
           {/* Mecánico (y Administrativo, misma interfaz) */}
           <Route path="/mecanico" element={
@@ -114,7 +112,7 @@ export default function App() {
               <Route path="inventario"               element={<Inventario />} />
               <Route path="proveedores"              element={<Proveedores />} />
               <Route path="agente-omnicanal"         element={<AgenteOmnicanal />} />
-              <Route path="chat-cliente"             element={<ChatClienteWeb />} />
+              <Route path="chat-cliente"             element={<Navigate to="/agente-omnicanal" replace />} />
               <Route path="escalamientos-ia"         element={<EscalamientosIA modo="admin" />} />
               <Route path="mesa-wsp"                 element={<MesaCotizacionWsp />} />
               <Route path="costos-fijos"             element={<CostosFijos />} />

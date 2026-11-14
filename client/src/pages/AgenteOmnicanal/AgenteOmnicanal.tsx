@@ -185,23 +185,24 @@ export default function AgenteOmnicanal() {
             </h1>
           </div>
           <p className={styles.subtitle}>
-            Atiende clientes finales por <strong>WhatsApp Meta</strong> y <strong>Web FácilRepuestos.cl</strong>.
-            Resuelve la <strong>Patente</strong> automáticamente, busca en <strong>Conocimiento Aprendido IA</strong> y en el{' '}
-            <strong>Catálogo Multi-Proveedor (Soluparts + Global + Locales)</strong>, y si detecta duda técnica o falta de stock,
+            Atiende clientes finales exclusivamente por <strong>WhatsApp Oficial (+56 9 2740 1059)</strong> conectado al buscador inteligente de{' '}
+            <strong>FácilRepuestos.cl</strong>. Resuelve la <strong>Patente</strong> automáticamente, guarda el{' '}
+            <strong>CRM (Teléfono + Patente + Vehículo)</strong>, arma el <strong>Carro de Compra en WordPress</strong>, y si detecta duda técnica o falta de stock,
             dispara en automático el <strong>Escalamiento Experto (Etapa 1)</strong> o la{' '}
             <strong>Mesa de Cotización WhatsApp (Etapa 3)</strong>.
           </p>
         </div>
 
         <div className={styles.headerActions}>
-          <button
-            type="button"
+          <a
+            href="https://wa.me/56927401059?text=Hola%20Repuest%C3%ADn!%20Quiero%20cotizar%20un%20repuesto%20en%20F%C3%A1cilRepuestos.cl"
+            target="_blank"
+            rel="noopener noreferrer"
             className="btn btn-primary btn-sm"
-            style={{ background: '#10b981', color: '#052e16', fontWeight: 800, border: 'none' }}
-            onClick={() => navigate('/chat-cliente')}
+            style={{ background: '#25D366', color: '#052e16', fontWeight: 800, border: 'none', textDecoration: 'none' }}
           >
-            🛍️ Abrir Vista Web Cliente (/chat-cliente)
-          </button>
+            📲 Abrir WhatsApp Oficial (+56 9 2740 1059)
+          </a>
           <button
             type="button"
             className="btn btn-outline btn-sm"

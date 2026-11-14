@@ -2461,13 +2461,13 @@ router.get('/sesiones', async (req, res, next) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/agente-omnicanal/sesiones
-// Crea una nueva sesión de cliente (Web o WhatsApp)
+// Crea una nueva sesión de cliente (100% WhatsApp-First)
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/sesiones', async (req, res, next) => {
   try {
     const {
-      canal = 'web_cliente',
-      clienteNombre = 'Cliente FácilRepuestos',
+      canal = 'whatsapp_cliente',
+      clienteNombre = 'Cliente WhatsApp FácilRepuestos',
       clienteTelefono = '+56987654321',
       patenteInicial = '',
     } = req.body;

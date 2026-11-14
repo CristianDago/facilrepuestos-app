@@ -2971,7 +2971,7 @@ export async function obtenerConfigMetaWhatsapp({ forceRefresh = false } = {}) {
       docData.verifyToken || process.env.META_WA_VERIFY_TOKEN || 'facilrepuestos_wsp_verify'
     ).trim(),
     numeroPublico: String(
-      docData.numeroPublico || process.env.WHATSAPP_PUBLIC_NUMBER || '56927401059'
+      docData.numeroPublico || process.env.WHATSAPP_PUBLIC_NUMBER || '56921109851'
     ).replace(/\D/g, ''),
     nombreAgente: String(docData.nombreAgente || 'Repuestín · FácilRepuestos.cl').trim(),
     graphVersion: String(docData.graphVersion || 'v21.0').trim(),
@@ -3346,7 +3346,7 @@ router.post('/config-meta', async (req, res, next) => {
       numeroPublico:
         numeroPublico !== undefined
           ? String(numeroPublico).replace(/\D/g, '')
-          : prev.numeroPublico || '56927401059',
+          : prev.numeroPublico || '56921109851',
       nombreAgente:
         nombreAgente !== undefined
           ? String(nombreAgente).trim()

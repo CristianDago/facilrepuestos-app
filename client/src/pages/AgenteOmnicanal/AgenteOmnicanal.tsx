@@ -185,7 +185,7 @@ export default function AgenteOmnicanal() {
             </h1>
           </div>
           <p className={styles.subtitle}>
-            Atiende clientes finales exclusivamente por <strong>WhatsApp Oficial (+56 9 2740 1059)</strong> conectado al buscador inteligente de{' '}
+            Atiende clientes finales exclusivamente por <strong>WhatsApp Oficial (+56 9 2110 9851)</strong> conectado al buscador inteligente de{' '}
             <strong>FácilRepuestos.cl</strong>. Resuelve la <strong>Patente</strong> automáticamente, guarda el{' '}
             <strong>CRM (Teléfono + Patente + Vehículo)</strong>, arma el <strong>Carro de Compra en WordPress</strong>, y si detecta duda técnica o falta de stock,
             dispara en automático el <strong>Escalamiento Experto (Etapa 1)</strong> o la{' '}
@@ -195,13 +195,13 @@ export default function AgenteOmnicanal() {
 
         <div className={styles.headerActions}>
           <a
-            href="https://wa.me/56927401059?text=Hola%20Repuest%C3%ADn!%20Quiero%20cotizar%20un%20repuesto%20en%20F%C3%A1cilRepuestos.cl"
+            href="https://wa.me/56921109851?text=Hola%20Repuest%C3%ADn!%20Quiero%20cotizar%20un%20repuesto%20en%20F%C3%A1cilRepuestos.cl"
             target="_blank"
             rel="noopener noreferrer"
             className="btn btn-primary btn-sm"
             style={{ background: '#25D366', color: '#052e16', fontWeight: 800, border: 'none', textDecoration: 'none' }}
           >
-            📲 Abrir WhatsApp Oficial (+56 9 2740 1059)
+            📲 Abrir WhatsApp Oficial (+56 9 2110 9851)
           </a>
           <button
             type="button"

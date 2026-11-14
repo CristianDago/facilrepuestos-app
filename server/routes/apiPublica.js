@@ -6,8 +6,8 @@ import { resolverImagenEfectivaProducto } from '../services/catalogoImagenesServ
 
 const router = Router();
 
-// Número oficial de WhatsApp de FácilRepuestos en facilrepuestos.cl (+56 9 2740 1059)
-const WHATSAPP_PUBLIC_NUMBER = (process.env.WHATSAPP_PUBLIC_NUMBER || '56927401059').replace(/\D/g, '');
+// Número oficial de WhatsApp de FácilRepuestos / Repuestín en facilrepuestos.cl (+56 9 2110 9851)
+const WHATSAPP_PUBLIC_NUMBER = (process.env.WHATSAPP_PUBLIC_NUMBER || '56921109851').replace(/\D/g, '');
 
 // Caché en memoria (TTL 3 minutos) para responder al buscador de WordPress en < 15 ms
 // sin golpear MySQL ni hacer 8.600 lecturas de Firestore por cada búsqueda.

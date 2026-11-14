@@ -53,12 +53,12 @@ interface RespuestaBuscadorInteligente {
   data: ItemBuscadorPublico[];
 }
 
-const WHATSAPP_OFICIAL_FRP = '56927401059';
+const WHATSAPP_OFICIAL_FRP = '56921109851';
 
 /**
  * Widget 100% WhatsApp-First + Buscador Automotriz Inteligente ($0 Tokens Gemini).
  * Se desactivó por completo el antiguo Chat Web: toda conversación con Repuestín
- * ocurre exclusivamente por WhatsApp (+56 9 2740 1059), capturando el teléfono del
+ * ocurre exclusivamente por WhatsApp (+56 9 2110 9851), capturando el teléfono del
  * cliente + su patente sin cobro de apertura de conversación en Meta.
  */
 export default function ChatbotWidgetFlotante({
@@ -143,7 +143,7 @@ export default function ChatbotWidgetFlotante({
               <span className={styles.onlineDot} title="Atención en línea por WhatsApp" />
             </div>
             <div className={styles.headerSubtitle}>
-              FácilRepuestos.cl · Atención 100% por WhatsApp (+56 9 2740 1059)
+              FácilRepuestos.cl · Atención 100% por WhatsApp (+56 9 2110 9851)
             </div>
           </div>
         </div>
@@ -332,7 +332,7 @@ export default function ChatbotWidgetFlotante({
           <span>📲</span>
           <span>
             {resultado?.puenteWhatsapp?.textoBoton ||
-              'Hablar con Repuestín por WhatsApp (+56 9 2740 1059)'}
+              'Hablar con Repuestín por WhatsApp (+56 9 2110 9851)'}
           </span>
         </a>
       </div>

@@ -2,6 +2,11 @@ import { Router } from 'express';
 import { db } from '../config/firebase.js';
 import { requireAuth } from '../middleware/auth.js';
 import { calcularHashCatalogoItem } from '../services/ailooCatalogSync.js';
+import {
+  obtenerConfigMetaWhatsapp,
+  manejarWebhookGetMeta,
+  manejarWebhookPostMeta,
+} from './agenteOmnicanal.js';
 
 const router = Router();
 
@@ -216,8 +221,9 @@ function construirMensajeSalidaWsp({
  * Si no están configurados en `.env`, opera en modo simulación local conservando la trazabilidad completa.
  */
 async function enviarMensajeMetaWhatsApp({ telefono, textoMensaje, codigoSolicitud }) {
-  const token = process.env.META_WA_TOKEN;
-  const phoneId = process.env.META_WA_PHONE_ID;
+  const cfg = await obtenerConfigMetaWhatsapp();
+  const token = cfg.accessToken || process.env.META_WA_TOKEN;
+  const phoneId = cfg.phoneNumberId || process.env.META_WA_PHONE_ID;
   const telLimpio = String(telefono || '').replace(/[^\d]/g, '');
 
   if (token && phoneId && telLimpio.length >= 8) {
@@ -1070,17 +1076,7 @@ router.post('/solicitudes/:id/adjudicar', requireAuth, async (req, res, next) =>
 // ─────────────────────────────────────────────────────────────────────────────
 // WEBHOOK OFICIAL META WHATSAPP CLOUD API (GET verificación + POST mensajes entrantes)
 // ─────────────────────────────────────────────────────────────────────────────
-router.get('/webhook', (req, res) => {
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
-  const challenge = req.query['hub.challenge'];
-  const expectedToken = process.env.META_WA_VERIFY_TOKEN || 'facilrepuestos_wsp_verify';
-
-  if (mode === 'subscribe' && token === expectedToken) {
-    return res.status(200).send(challenge);
-  }
-  return res.status(403).json({ success: false, error: 'Token de verificación Meta inválido' });
-});
+router.get('/webhook', manejarWebhookGetMeta);
 
 router.post('/webhook', async (req, res, next) => {
   try {
@@ -1095,22 +1091,26 @@ router.post('/webhook', async (req, res, next) => {
     const textoEntrante =
       msg.text?.body || msg.image?.caption || msg.document?.caption || '';
 
-    // Buscar la solicitud abierta más reciente donde participe este teléfono de proveedor
+    // Buscar si el remitente es un proveedor contactado en una solicitud abierta de Mesa WSP
     const snap = await db.collection(COLECCION_SOLICITUDES_WSP).get();
     const abiertas = snap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
       .filter((s) => s.estado !== 'adjudicada' && s.estado !== 'cerrada')
       .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
 
-    const solicitudMatch =
-      abiertas.find((s) =>
-        (s.proveedoresContactados || []).some((p) =>
-          String(p.telefono || '').replace(/[^\d]/g, '').endsWith(remitenteTel.slice(-8))
-        )
-      ) || abiertas[0];
+    const solicitudMatch = abiertas.find((s) =>
+      (s.proveedoresContactados || []).some(
+        (p) =>
+          remitenteTel.length >= 8 &&
+          String(p.telefono || '')
+            .replace(/[^\d]/g, '')
+            .endsWith(remitenteTel.slice(-8))
+      )
+    );
 
+    // Si NO es un proveedor respondiendo una solicitud abierta, es un CLIENTE escribiéndole a Repuestín
     if (!solicitudMatch) {
-      return res.status(200).json({ received: true, matched: false });
+      return manejarWebhookPostMeta(req, res);
     }
 
     const provMatch =

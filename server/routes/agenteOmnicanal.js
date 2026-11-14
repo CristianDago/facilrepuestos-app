@@ -2934,4 +2934,467 @@ router.get('/crm-clientes', async (req, res, next) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CONECTOR OFICIAL META WHATSAPP CLOUD API PARA REPUESTÍN (CLIENTES + MESA WSP)
+// ─────────────────────────────────────────────────────────────────────────────
+const COLECCION_CONFIG_SISTEMA = 'configuracion_sistema';
+const DOC_CONFIG_META_WSP = 'whatsapp_meta';
+const CACHE_WAMIDS_PROCESADOS = new Set();
+let cacheConfigMeta = { data: null, loadedAt: 0 };
+
+/**
+ * Obtiene la configuración activa de Meta WhatsApp Cloud API para Repuestín,
+ * combinando variables de entorno (Secret Manager / Cloud Run) y configuración
+ * en caliente desde Firestore (`configuracion_sistema/whatsapp_meta`).
+ */
+export async function obtenerConfigMetaWhatsapp({ forceRefresh = false } = {}) {
+  const ahora = Date.now();
+  if (!forceRefresh && cacheConfigMeta.data && ahora - cacheConfigMeta.loadedAt < 20000) {
+    return cacheConfigMeta.data;
+  }
+
+  let docData = {};
+  try {
+    const snap = await db.collection(COLECCION_CONFIG_SISTEMA).doc(DOC_CONFIG_META_WSP).get();
+    if (snap.exists) {
+      docData = snap.data() || {};
+    }
+  } catch (err) {
+    console.warn('[Meta-WSP] No se pudo leer configuracion_sistema/whatsapp_meta:', err.message);
+  }
+
+  const config = {
+    accessToken: String(docData.accessToken || process.env.META_WA_TOKEN || '').trim(),
+    phoneNumberId: String(docData.phoneNumberId || process.env.META_WA_PHONE_ID || '').trim(),
+    wabaId: String(docData.wabaId || process.env.META_WA_WABA_ID || '').trim(),
+    verifyToken: String(
+      docData.verifyToken || process.env.META_WA_VERIFY_TOKEN || 'facilrepuestos_wsp_verify'
+    ).trim(),
+    numeroPublico: String(
+      docData.numeroPublico || process.env.WHATSAPP_PUBLIC_NUMBER || '56927401059'
+    ).replace(/\D/g, ''),
+    nombreAgente: String(docData.nombreAgente || 'Repuestín · FácilRepuestos.cl').trim(),
+    graphVersion: String(docData.graphVersion || 'v21.0').trim(),
+    activo: docData.activo !== undefined ? Boolean(docData.activo) : true,
+    updatedAt: docData.updatedAt || null,
+  };
+
+  cacheConfigMeta = { data: config, loadedAt: ahora };
+  return config;
+}
+
+/**
+ * Convierte el formato Markdown de Repuestín (`**negrita**`) al formato nativo de WhatsApp (`*negrita*`).
+ */
+function formatearTextoParaWhatsapp(texto = '') {
+  return String(texto || '')
+    .replace(/\*\*([^*]+)\*\*/g, '*$1*')
+    .replace(/`([^`]+)`/g, '$1')
+    .trim();
+}
+
+/**
+ * Envía un mensaje saliente (texto e imagen opcional de repuesto) al cliente por Meta WhatsApp Cloud API.
+ */
+export async function enviarRespuestaClienteMetaWhatsapp({
+  telefonoDestino,
+  texto,
+  imagenUrl = '',
+  captionImagen = '',
+  phoneNumberIdOverride = '',
+  replyToMessageId = '',
+}) {
+  const cfg = await obtenerConfigMetaWhatsapp();
+  const token = cfg.accessToken;
+  const phoneId = String(phoneNumberIdOverride || cfg.phoneNumberId || '').trim();
+  const to = String(telefonoDestino || '').replace(/\D/g, '');
+
+  if (!token || !phoneId || to.length < 8) {
+    return {
+      enviado: false,
+      modo: 'simulacion_sin_credenciales_meta',
+      motivo: !token ? 'Falta META_WA_TOKEN' : !phoneId ? 'Falta META_WA_PHONE_ID' : 'Teléfono inválido',
+    };
+  }
+
+  const textoWsp = formatearTextoParaWhatsapp(texto);
+  const urlEndpoint = `https://graph.facebook.com/${cfg.graphVersion}/${phoneId}/messages`;
+
+  // Marcar mensaje entrante como leído (doble check azul en WhatsApp)
+  if (replyToMessageId) {
+    fetch(urlEndpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        status: 'read',
+        message_id: replyToMessageId,
+      }),
+    }).catch(() => {});
+  }
+
+  // 1. Enviar mensaje principal de texto de Repuestín
+  const payloadTexto = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'text',
+    text: {
+      preview_url: true,
+      body: textoWsp.slice(0, 4090),
+    },
+  };
+
+  const resp = await fetch(urlEndpoint, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payloadTexto),
+  });
+  const data = await resp.json();
+
+  // 2. Si hay una foto real de estudio del repuesto cotizado, enviarla como apoyo visual
+  if (resp.ok && imagenUrl && /^https:\/\//i.test(imagenUrl)) {
+    fetch(urlEndpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to,
+        type: 'image',
+        image: {
+          link: imagenUrl,
+          ...(captionImagen ? { caption: formatearTextoParaWhatsapp(captionImagen).slice(0, 1000) } : {}),
+        },
+      }),
+    }).catch(() => {});
+  }
+
+  return {
+    enviado: resp.ok,
+    statusHttp: resp.status,
+    metaMessageId: data?.messages?.[0]?.id || null,
+    errorMeta: resp.ok ? null : data?.error?.message || JSON.stringify(data),
+  };
+}
+
+/**
+ * Handler GET unificado para la verificación del Webhook en Meta Developers (`hub.challenge`).
+ */
+export async function manejarWebhookGetMeta(req, res) {
+  const mode = req.query['hub.mode'];
+  const token = String(req.query['hub.verify_token'] || '').trim();
+  const challenge = req.query['hub.challenge'];
+
+  const cfg = await obtenerConfigMetaWhatsapp();
+  const tokensValidos = new Set([
+    cfg.verifyToken,
+    process.env.META_WA_VERIFY_TOKEN || '',
+    'facilrepuestos_wsp_verify',
+    'repuestin_verify',
+  ]);
+
+  if (mode === 'subscribe' && token && tokensValidos.has(token)) {
+    console.log(`[Meta-WSP] Webhook verificado exitosamente con token "${token}".`);
+    return res.status(200).send(challenge);
+  }
+  return res.status(403).json({
+    success: false,
+    error: 'Token de verificación Meta inválido',
+    expectedVerifyToken: cfg.verifyToken,
+  });
+}
+
+/**
+ * Handler POST unificado para mensajes entrantes desde Meta WhatsApp Cloud API.
+ * Soporta tanto clientes finales conversando con Repuestín como proveedores respondiendo a Mesa WSP.
+ */
+export async function manejarWebhookPostMeta(req, res) {
+  try {
+    const entries = Array.isArray(req.body?.entry) ? req.body.entry : [];
+    if (entries.length === 0) {
+      return res.status(200).json({ received: true, ignored: true });
+    }
+
+    const change = entries[0]?.changes?.[0]?.value;
+    const msg = change?.messages?.[0];
+    if (!msg) {
+      // Eventos de estado (delivered, read, sent) -> responder 200 OK de inmediato
+      return res.status(200).json({ received: true, statusEvent: true });
+    }
+
+    const wamid = String(msg.id || '').trim();
+    if (wamid) {
+      if (CACHE_WAMIDS_PROCESADOS.has(wamid)) {
+        return res.status(200).json({ received: true, duplicate: true, wamid });
+      }
+      CACHE_WAMIDS_PROCESADOS.add(wamid);
+      if (CACHE_WAMIDS_PROCESADOS.size > 2000) {
+        const first = CACHE_WAMIDS_PROCESADOS.values().next().value;
+        CACHE_WAMIDS_PROCESADOS.delete(first);
+      }
+    }
+
+    const phoneNumberIdReceptor = String(change?.metadata?.phone_number_id || '').trim();
+    const remitenteTel = String(msg.from || '').replace(/\D/g, '');
+    const perfilNombre =
+      change?.contacts?.[0]?.profile?.name || `Cliente WhatsApp (+${remitenteTel})`;
+
+    // Extraer texto desde texto normal, botones interactivos, listas o pie de foto
+    const textoEntrante = String(
+      msg.text?.body ||
+        msg.interactive?.button_reply?.title ||
+        msg.interactive?.list_reply?.title ||
+        msg.image?.caption ||
+        msg.document?.caption ||
+        msg.button?.text ||
+        ''
+    ).trim();
+
+    if (!textoEntrante && msg.type !== 'image' && msg.type !== 'audio') {
+      return res.status(200).json({ received: true, unsupportedType: msg.type });
+    }
+
+    // Crear o reanudar la sesión determinística de WhatsApp del cliente (`wsp_<telefono>`)
+    const sesionDocId = `wsp_${remitenteTel}`;
+    const docRef = db.collection(COLECCION_SESIONES_AGENTE).doc(sesionDocId);
+    const snap = await docRef.get();
+    const now = new Date().toISOString();
+
+    let sesion;
+    if (snap.exists) {
+      sesion = { id: snap.id, ...snap.data() };
+    } else {
+      sesion = {
+        id: sesionDocId,
+        canal: 'whatsapp_meta_cloud',
+        clienteNombre: perfilNombre,
+        clienteTelefono: `+${remitenteTel}`,
+        phoneNumberIdMeta: phoneNumberIdReceptor || null,
+        estado: 'activa',
+        vehiculoContexto: null,
+        carritoCotizado: [],
+        comunaCliente: null,
+        modalidadEntrega: null,
+        flujoCompra: null,
+        repuestoPendienteContexto: null,
+        escalamientosAbiertos: [],
+        solicitudesWspAbiertas: [],
+        pedidoActivo: null,
+        mensajes: [],
+        createdAt: now,
+        updatedAt: now,
+      };
+      await docRef.set(sesion);
+    }
+
+    const msgCliente = {
+      id: wamid || `msg-cli-${Date.now()}`,
+      autor: 'cliente',
+      texto: textoEntrante || '[Adjunto enviado por WhatsApp]',
+      transcripcionAudio: '',
+      fotoUrl: '',
+      creadoEn: now,
+    };
+
+    const resultadoCascada = await ejecutarCascadaAgenteOmnicanal({
+      sesion,
+      textoCliente: msgCliente.texto,
+      transcripcionAudio: '',
+      fotoUrl: '',
+    });
+
+    const msgAgente = {
+      id: `msg-ia-${Date.now() + 1}`,
+      autor: 'agente_ia',
+      texto: resultadoCascada.respuestaTexto,
+      creadoEn: new Date().toISOString(),
+      trazaCascada: resultadoCascada.trazaCascada,
+    };
+
+    const mensajesActualizados = [...(sesion.mensajes || []), msgCliente, msgAgente];
+    const vehiculoContexto = resultadoCascada.vehiculoDetectado || sesion.vehiculoContexto || null;
+    const camposActualizados = {
+      clienteNombre: perfilNombre || sesion.clienteNombre,
+      clienteTelefono: `+${remitenteTel}`,
+      phoneNumberIdMeta: phoneNumberIdReceptor || sesion.phoneNumberIdMeta || null,
+      vehiculoContexto,
+      carritoCotizado: resultadoCascada.carritoCotizado ?? sesion.carritoCotizado ?? [],
+      comunaCliente: resultadoCascada.comunaCliente ?? sesion.comunaCliente ?? null,
+      modalidadEntrega: resultadoCascada.modalidadEntrega ?? sesion.modalidadEntrega ?? null,
+      pedidoActivo: resultadoCascada.pedidoActivo ?? sesion.pedidoActivo ?? null,
+      flujoCompra:
+        resultadoCascada.flujoCompra !== undefined
+          ? resultadoCascada.flujoCompra
+          : sesion.flujoCompra ?? null,
+      repuestoPendienteContexto:
+        resultadoCascada.repuestoPendienteContexto !== undefined
+          ? resultadoCascada.repuestoPendienteContexto
+          : sesion.repuestoPendienteContexto ?? null,
+      escalamientosAbiertos:
+        resultadoCascada.escalamientosAbiertos ?? sesion.escalamientosAbiertos ?? [],
+      solicitudesWspAbiertas:
+        resultadoCascada.solicitudesWspAbiertas ?? sesion.solicitudesWspAbiertas ?? [],
+      mensajes: mensajesActualizados,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await docRef.set(camposActualizados, { merge: true });
+
+    // Si hay un candidato único o principal con foto real de estudio, adjuntarla
+    const candidatoConFoto = (resultadoCascada.trazaCascada?.candidatosInventario || []).find(
+      (c) => c.imagenUrl && /^https:\/\//i.test(c.imagenUrl)
+    );
+
+    const envioMeta = await enviarRespuestaClienteMetaWhatsapp({
+      telefonoDestino: remitenteTel,
+      texto: resultadoCascada.respuestaTexto,
+      imagenUrl: candidatoConFoto?.imagenUrl || '',
+      captionImagen: candidatoConFoto
+        ? `${candidatoConFoto.nombre} (${candidatoConFoto.skuPublicoFrp}) — $${Number(
+            candidatoConFoto.precioVentaConIva || 0
+          ).toLocaleString('es-CL')} IVA inc.`
+        : '',
+      phoneNumberIdOverride: phoneNumberIdReceptor,
+      replyToMessageId: wamid,
+    });
+
+    return res.status(200).json({
+      received: true,
+      handledBy: 'repuestin_agente_omnicanal',
+      sesionId: sesionDocId,
+      envioMeta,
+    });
+  } catch (err) {
+    console.error('[Meta-WSP Webhook Error]:', err);
+    return res.status(200).json({ received: true, error: err.message });
+  }
+}
+
+router.get('/webhook', manejarWebhookGetMeta);
+router.post('/webhook', manejarWebhookPostMeta);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET y POST /api/agente-omnicanal/config-meta
+// Permite consultar y actualizar en caliente las credenciales de Meta Cloud API
+// (Phone Number ID, WABA ID, Access Token y Verify Token) para Repuestín
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/config-meta', async (req, res, next) => {
+  try {
+    const cfg = await obtenerConfigMetaWhatsapp({ forceRefresh: true });
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    res.json({
+      success: true,
+      data: {
+        phoneNumberId: cfg.phoneNumberId || '',
+        wabaId: cfg.wabaId || '',
+        verifyToken: cfg.verifyToken,
+        numeroPublico: cfg.numeroPublico,
+        nombreAgente: cfg.nombreAgente,
+        graphVersion: cfg.graphVersion,
+        activo: cfg.activo,
+        tieneAccessToken: Boolean(cfg.accessToken),
+        accessTokenPreview: cfg.accessToken
+          ? `${cfg.accessToken.slice(0, 8)}...${cfg.accessToken.slice(-6)}`
+          : '',
+        webhookUrls: {
+          principal: 'https://facilrepuestos-api-pr2w3ogrsq-tl.a.run.app/api/agente-omnicanal/webhook',
+          alternativaAgenteWeb:
+            'https://facilrepuestos-agente-web-pr2w3ogrsq-tl.a.run.app/api/agente-omnicanal/webhook',
+          actualHost: `${baseUrl}/api/agente-omnicanal/webhook`,
+        },
+        updatedAt: cfg.updatedAt,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/config-meta', async (req, res, next) => {
+  try {
+    const prev = await obtenerConfigMetaWhatsapp({ forceRefresh: true });
+    const {
+      accessToken,
+      phoneNumberId,
+      wabaId,
+      verifyToken,
+      numeroPublico,
+      nombreAgente,
+      activo,
+    } = req.body || {};
+
+    const nuevoDoc = {
+      accessToken:
+        accessToken !== undefined ? String(accessToken).trim() : prev.accessToken,
+      phoneNumberId:
+        phoneNumberId !== undefined ? String(phoneNumberId).trim() : prev.phoneNumberId,
+      wabaId: wabaId !== undefined ? String(wabaId).trim() : prev.wabaId,
+      verifyToken:
+        verifyToken !== undefined && String(verifyToken).trim()
+          ? String(verifyToken).trim()
+          : prev.verifyToken || 'facilrepuestos_wsp_verify',
+      numeroPublico:
+        numeroPublico !== undefined
+          ? String(numeroPublico).replace(/\D/g, '')
+          : prev.numeroPublico || '56927401059',
+      nombreAgente:
+        nombreAgente !== undefined
+          ? String(nombreAgente).trim()
+          : prev.nombreAgente || 'Repuestín · FácilRepuestos.cl',
+      graphVersion: 'v21.0',
+      activo: activo !== undefined ? Boolean(activo) : true,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await db.collection(COLECCION_CONFIG_SISTEMA).doc(DOC_CONFIG_META_WSP).set(nuevoDoc, { merge: true });
+    cacheConfigMeta = { data: null, loadedAt: 0 };
+
+    // Si hay token y phoneNumberId, verificar conectividad real contra Meta Graph API
+    let verificacionGraph = null;
+    if (nuevoDoc.accessToken && nuevoDoc.phoneNumberId) {
+      try {
+        const rGraph = await fetch(
+          `https://graph.facebook.com/v21.0/${nuevoDoc.phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,code_verification_status`,
+          {
+            headers: { Authorization: `Bearer ${nuevoDoc.accessToken}` },
+          }
+        );
+        verificacionGraph = {
+          ok: rGraph.ok,
+          status: rGraph.status,
+          detalle: await rGraph.json(),
+        };
+      } catch (e) {
+        verificacionGraph = { ok: false, error: e.message };
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        phoneNumberId: nuevoDoc.phoneNumberId,
+        wabaId: nuevoDoc.wabaId,
+        verifyToken: nuevoDoc.verifyToken,
+        numeroPublico: nuevoDoc.numeroPublico,
+        nombreAgente: nuevoDoc.nombreAgente,
+        tieneAccessToken: Boolean(nuevoDoc.accessToken),
+        verificacionGraph,
+        updatedAt: nuevoDoc.updatedAt,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

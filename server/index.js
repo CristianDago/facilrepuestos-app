@@ -144,6 +144,7 @@ app.use('/api/pos',           posRouter);
 app.use('/api/escalamientos', escalamientosRouter);
 app.use('/api/mesa-wsp',      mesaWspRouter);
 app.use('/api/agente-omnicanal', agenteOmnicanalRouter);
+app.use('/api/whatsapp',         agenteOmnicanalRouter);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok', timestamp: new Date().toISOString() }));
 

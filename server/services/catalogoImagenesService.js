@@ -23,93 +23,115 @@ import { db } from '../config/firebase.js';
 import { normCat, resolverRutaCategoriasTienda } from './categoriasTaxonomia.js';
 import { decodificarEstructuraCodigoProducto } from './partLookup.js';
 
-// Fotografías automotrices limpias de alta resolución por familia técnica (Nivel 3 / Nivel 2 / Nivel 1)
-// Alojadas en CDN global de alta velocidad (Unsplash Automotive Parts CDN optimizado en formato WebP 800x800)
+// Fotografías oficiales alojadas nativamente en WordPress (https://facilrepuestos.cl/wp-content/uploads/*.webp)
+// con su `media_id` permanente de WordPress para reutilización instantánea sin descargas HTTP ni duplicar disco.
+export const MAPA_MEDIA_ID_NATIVO_WOO = {
+  'https://facilrepuestos.cl/wp-content/uploads/04221a07-frenos_auto.webp': 2405,
+  'https://facilrepuestos.cl/wp-content/uploads/5091b75a-mantencion_frenos_.webp': 2083,
+  'https://facilrepuestos.cl/wp-content/uploads/386fa8f5-filtro-hk-aceite.webp': 2634,
+  'https://facilrepuestos.cl/wp-content/uploads/e7c6cf58-filtros.webp': 2420,
+  'https://facilrepuestos.cl/wp-content/uploads/7f849475-bujias_auto.webp': 2092,
+  'https://facilrepuestos.cl/wp-content/uploads/c97047ea-fluidos.webp': 2091,
+  'https://facilrepuestos.cl/wp-content/uploads/7b9e9cbe-aceite.webp': 2090,
+  'https://facilrepuestos.cl/wp-content/uploads/b45d3a76-motor-piezas.webp': 2435,
+  'https://facilrepuestos.cl/wp-content/uploads/f487d00c-motor.webp': 2419,
+  'https://facilrepuestos.cl/wp-content/uploads/1cb8e220-radiador.webp': 2425,
+  'https://facilrepuestos.cl/wp-content/uploads/433e50b2-amortiguadores.webp': 2406,
+  'https://facilrepuestos.cl/wp-content/uploads/84b5fcfb-embrague.webp': 2415,
+  'https://facilrepuestos.cl/wp-content/uploads/f99207b3-electrico_auto.webp': 2412,
+  'https://facilrepuestos.cl/wp-content/uploads/bdcb89df-bateria_auto.webp': 2413,
+  'https://facilrepuestos.cl/wp-content/uploads/c2a11a74-auto_.webp': 2414,
+  'https://facilrepuestos.cl/wp-content/uploads/a2d0ea7b-correas-.webp': 2430,
+  'https://facilrepuestos.cl/wp-content/uploads/2fb61952-composition-different-car-accessories-1.webp': 2084,
+  'https://facilrepuestos.cl/wp-content/uploads/f7dcf9e5-repuestos-auto-3-1.webp': 2082,
+};
+
 const IMAGENES_MAESTRAS_POR_SUBCATEGORIA = {
   // 1. FRENOS
-  'PASTILLAS DE FRENO': 'https://images.unsplash.com/photo-1580273916550-e323be2ae537?auto=format&fit=crop&w=800&q=80',
-  'DISCOS DE FRENO': 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=800&q=80',
-  'BALATAS Y ZAPATAS': 'https://images.unsplash.com/photo-1580273916550-e323be2ae537?auto=format&fit=crop&w=800&q=80',
-  'TAMBORES DE FRENO': 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=800&q=80',
-  'CALIPERS Y KITS DE REPARACION': 'https://images.unsplash.com/photo-1619642751034-765dfdf7c58e?auto=format&fit=crop&w=800&q=80',
-  'BOMBAS Y CILINDROS DE FRENO': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
-  'SENSORES ABS': 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80',
+  'PASTILLAS DE FRENO': 'https://facilrepuestos.cl/wp-content/uploads/04221a07-frenos_auto.webp',
+  'DISCOS DE FRENO': 'https://facilrepuestos.cl/wp-content/uploads/04221a07-frenos_auto.webp',
+  'BALATAS Y ZAPATAS': 'https://facilrepuestos.cl/wp-content/uploads/04221a07-frenos_auto.webp',
+  'TAMBORES DE FRENO': 'https://facilrepuestos.cl/wp-content/uploads/04221a07-frenos_auto.webp',
+  'CALIPERS Y KITS DE REPARACION': 'https://facilrepuestos.cl/wp-content/uploads/5091b75a-mantencion_frenos_.webp',
+  'BOMBAS Y CILINDROS DE FRENO': 'https://facilrepuestos.cl/wp-content/uploads/5091b75a-mantencion_frenos_.webp',
+  'SENSORES ABS': 'https://facilrepuestos.cl/wp-content/uploads/f99207b3-electrico_auto.webp',
 
   // 2. MANTENIMIENTO RÁPIDO (FILTROS Y ENCENDIDO)
-  'FILTROS DE ACEITE': 'https://images.unsplash.com/photo-1635784063388-1ff609e12d7c?auto=format&fit=crop&w=800&q=80',
-  'FILTROS DE AIRE': 'https://images.unsplash.com/photo-1635784063388-1ff609e12d7c?auto=format&fit=crop&w=800&q=80',
-  'FILTROS DE COMBUSTIBLE Y DECANTADORES': 'https://images.unsplash.com/photo-1635784063388-1ff609e12d7c?auto=format&fit=crop&w=800&q=80',
-  'FILTROS DE CABINA Y POLEN': 'https://images.unsplash.com/photo-1635784063388-1ff609e12d7c?auto=format&fit=crop&w=800&q=80',
-  'KITS DE FILTROS Y MANTENCION': 'https://images.unsplash.com/photo-1635784063388-1ff609e12d7c?auto=format&fit=crop&w=800&q=80',
-  'BUJIAS DE ENCENDIDO E INCANDESCENCIA': 'https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?auto=format&fit=crop&w=800&q=80',
-  'BOBINAS Y CABLES DE BUJIA': 'https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?auto=format&fit=crop&w=800&q=80',
-  'PLUMILLAS LIMPIAPARABRISAS': 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80',
+  'FILTROS DE ACEITE': 'https://facilrepuestos.cl/wp-content/uploads/386fa8f5-filtro-hk-aceite.webp',
+  'FILTROS DE AIRE': 'https://facilrepuestos.cl/wp-content/uploads/e7c6cf58-filtros.webp',
+  'FILTROS DE COMBUSTIBLE Y DECANTADORES': 'https://facilrepuestos.cl/wp-content/uploads/e7c6cf58-filtros.webp',
+  'FILTROS DE CABINA Y POLEN': 'https://facilrepuestos.cl/wp-content/uploads/e7c6cf58-filtros.webp',
+  'KITS DE FILTROS Y MANTENCION': 'https://facilrepuestos.cl/wp-content/uploads/e7c6cf58-filtros.webp',
+  'BUJIAS DE ENCENDIDO E INCANDESCENCIA': 'https://facilrepuestos.cl/wp-content/uploads/7f849475-bujias_auto.webp',
+  'BOBINAS Y CABLES DE BUJIA': 'https://facilrepuestos.cl/wp-content/uploads/7f849475-bujias_auto.webp',
+  'PLUMILLAS LIMPIAPARABRISAS': 'https://facilrepuestos.cl/wp-content/uploads/c97047ea-fluidos.webp',
 
   // 3. MOTOR
-  'EMPAQUETADURAS DE CULATA': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
-  'JUEGOS Y KITS DE EMPAQUETADURAS': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
-  'RETENES DE MOTOR': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
-  'CULATAS Y VALVULAS': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
-  'PISTONES Y ANILLOS': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
-  'METALES DE BIELA Y BANCADA': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
-  'CIGUENALES, BIELAS Y EJES DE LEVAS': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
-  'KITS Y CADENAS DE DISTRIBUCION': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
-  'BOMBAS DE ACEITE Y CARTER': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
-  'SOPORTES DE MOTOR Y CAJA': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
-  'TURBOS, INYECTORES Y CUERPOS DE ACELERACION': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
+  'EMPAQUETADURAS DE CULATA': 'https://facilrepuestos.cl/wp-content/uploads/b45d3a76-motor-piezas.webp',
+  'JUEGOS Y KITS DE EMPAQUETADURAS': 'https://facilrepuestos.cl/wp-content/uploads/b45d3a76-motor-piezas.webp',
+  'RETENES DE MOTOR': 'https://facilrepuestos.cl/wp-content/uploads/b45d3a76-motor-piezas.webp',
+  'CULATAS Y VALVULAS': 'https://facilrepuestos.cl/wp-content/uploads/b45d3a76-motor-piezas.webp',
+  'VALVULAS': 'https://facilrepuestos.cl/wp-content/uploads/b45d3a76-motor-piezas.webp',
+  'PISTONES Y ANILLOS': 'https://facilrepuestos.cl/wp-content/uploads/b45d3a76-motor-piezas.webp',
+  'METALES DE BIELA Y BANCADA': 'https://facilrepuestos.cl/wp-content/uploads/b45d3a76-motor-piezas.webp',
+  'CIGUENALES, BIELAS Y EJES DE LEVAS': 'https://facilrepuestos.cl/wp-content/uploads/b45d3a76-motor-piezas.webp',
+  'KITS Y CADENAS DE DISTRIBUCION': 'https://facilrepuestos.cl/wp-content/uploads/a2d0ea7b-correas-.webp',
+  'BOMBAS DE ACEITE Y CARTER': 'https://facilrepuestos.cl/wp-content/uploads/f487d00c-motor.webp',
+  'SOPORTES DE MOTOR Y CAJA': 'https://facilrepuestos.cl/wp-content/uploads/f487d00c-motor.webp',
+  'TURBOS, INYECTORES Y CUERPOS DE ACELERACION': 'https://facilrepuestos.cl/wp-content/uploads/f487d00c-motor.webp',
 
   // 4. REFRIGERACIÓN Y CLIMATIZACIÓN
-  'BOMBAS DE AGUA': 'https://images.unsplash.com/photo-1615906655593-ad0386982a0f?auto=format&fit=crop&w=800&q=80',
-  'TERMOSTATOS Y CARCASAS': 'https://images.unsplash.com/photo-1615906655593-ad0386982a0f?auto=format&fit=crop&w=800&q=80',
-  'RADIADORES Y ELECTROVENTILADORES': 'https://images.unsplash.com/photo-1615906655593-ad0386982a0f?auto=format&fit=crop&w=800&q=80',
-  'MANGUERAS Y DEPOSITOS DE AGUA': 'https://images.unsplash.com/photo-1615906655593-ad0386982a0f?auto=format&fit=crop&w=800&q=80',
-  'COMPRESORES, CONDENSADORES Y CALEFACCION': 'https://images.unsplash.com/photo-1615906655593-ad0386982a0f?auto=format&fit=crop&w=800&q=80',
+  'BOMBAS DE AGUA': 'https://facilrepuestos.cl/wp-content/uploads/1cb8e220-radiador.webp',
+  'TERMOSTATOS Y CARCASAS': 'https://facilrepuestos.cl/wp-content/uploads/1cb8e220-radiador.webp',
+  'RADIADORES Y ELECTROVENTILADORES': 'https://facilrepuestos.cl/wp-content/uploads/1cb8e220-radiador.webp',
+  'MANGUERAS Y DEPOSITOS DE AGUA': 'https://facilrepuestos.cl/wp-content/uploads/1cb8e220-radiador.webp',
+  'COMPRESORES, CONDENSADORES Y CALEFACCION': 'https://facilrepuestos.cl/wp-content/uploads/1cb8e220-radiador.webp',
 
   // 5. SUSPENSIÓN Y DIRECCIÓN
-  'AMORTIGUADORES Y CAZOLETAS': 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=800&q=80',
-  'BANDEJAS DE SUSPENSION': 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=800&q=80',
-  'ROTULAS, BIELETAS Y BUJES': 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=800&q=80',
-  'TERMINALES Y AXIALES DE DIRECCION': 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=800&q=80',
-  'CREMALLERAS Y BOMBAS DE DIRECCION': 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=800&q=80',
-  'MAZAS Y RODAMIENTOS DE RUEDA': 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=800&q=80',
+  'AMORTIGUADORES Y CAZOLETAS': 'https://facilrepuestos.cl/wp-content/uploads/433e50b2-amortiguadores.webp',
+  'BANDEJAS DE SUSPENSION': 'https://facilrepuestos.cl/wp-content/uploads/433e50b2-amortiguadores.webp',
+  'ROTULAS, BIELETAS Y BUJES': 'https://facilrepuestos.cl/wp-content/uploads/433e50b2-amortiguadores.webp',
+  'TERMINALES Y AXIALES DE DIRECCION': 'https://facilrepuestos.cl/wp-content/uploads/433e50b2-amortiguadores.webp',
+  'CREMALLERAS Y BOMBAS DE DIRECCION': 'https://facilrepuestos.cl/wp-content/uploads/433e50b2-amortiguadores.webp',
+  'MAZAS Y RODAMIENTOS DE RUEDA': 'https://facilrepuestos.cl/wp-content/uploads/433e50b2-amortiguadores.webp',
 
   // 6. TRANSMISIÓN Y MANDO
-  'KITS DE EMBRAGUE, DISCOS Y PRENSAS': 'https://images.unsplash.com/photo-1530046339160-ce3e530c7d2f?auto=format&fit=crop&w=800&q=80',
-  'VOLANTES Y RODAMIENTOS DE EMPUJE': 'https://images.unsplash.com/photo-1530046339160-ce3e530c7d2f?auto=format&fit=crop&w=800&q=80',
-  'BOMBAS Y BOMBINES DE EMBRAGUE': 'https://images.unsplash.com/photo-1530046339160-ce3e530c7d2f?auto=format&fit=crop&w=800&q=80',
-  'HOMOCINETICAS, EJES Y GUARDAPOLVOS': 'https://images.unsplash.com/photo-1530046339160-ce3e530c7d2f?auto=format&fit=crop&w=800&q=80',
+  'KITS DE EMBRAGUE, DISCOS Y PRENSAS': 'https://facilrepuestos.cl/wp-content/uploads/84b5fcfb-embrague.webp',
+  'VOLANTES Y RODAMIENTOS DE EMPUJE': 'https://facilrepuestos.cl/wp-content/uploads/84b5fcfb-embrague.webp',
+  'BOMBAS Y BOMBINES DE EMBRAGUE': 'https://facilrepuestos.cl/wp-content/uploads/84b5fcfb-embrague.webp',
+  'HOMOCINETICAS, EJES Y GUARDAPOLVOS': 'https://facilrepuestos.cl/wp-content/uploads/84b5fcfb-embrague.webp',
 
   // 7. SISTEMA ELÉCTRICO E ILUMINACIÓN
-  'SENSORES Y VALVULAS ELECTRONICAS': 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80',
-  'ALTERNADORES Y MOTORES DE PARTIDA': 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80',
-  'TELECOMANDOS, SWITCHES Y ALZAVIDRIOS': 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80',
-  'OPTICOS, FOCOS Y NEBLINEROS': 'https://images.unsplash.com/photo-1544829099-b9a0c07fad1a?auto=format&fit=crop&w=800&q=80',
+  'SENSORES Y VALVULAS ELECTRONICAS': 'https://facilrepuestos.cl/wp-content/uploads/f99207b3-electrico_auto.webp',
+  'ALTERNADORES Y MOTORES DE PARTIDA': 'https://facilrepuestos.cl/wp-content/uploads/bdcb89df-bateria_auto.webp',
+  'TELECOMANDOS, SWITCHES Y ALZAVIDRIOS': 'https://facilrepuestos.cl/wp-content/uploads/f99207b3-electrico_auto.webp',
+  'OPTICOS, FOCOS Y NEBLINEROS': 'https://facilrepuestos.cl/wp-content/uploads/f99207b3-electrico_auto.webp',
 
   // 8. CARROCERÍA Y ESPEJOS
-  'PARACHOQUES, MASCARAS Y GUARDABARROS': 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80',
-  'ESPEJOS RETROVISORES': 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80',
-  'MANILLAS, CHAPAS Y AMORTIGUADORES DE PORTALON': 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80',
+  'PARACHOQUES, MASCARAS Y GUARDABARROS': 'https://facilrepuestos.cl/wp-content/uploads/c2a11a74-auto_.webp',
+  'ESPEJOS RETROVISORES': 'https://facilrepuestos.cl/wp-content/uploads/c2a11a74-auto_.webp',
+  'MANILLAS, CHAPAS Y AMORTIGUADORES DE PORTALON': 'https://facilrepuestos.cl/wp-content/uploads/c2a11a74-auto_.webp',
 
   // 9. CORREAS Y PIOLAS
-  'CORREAS DE DISTRIBUCION Y ACCESORIOS': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
-  'TENSORES Y POLEAS': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
-  'PIOLAS DE EMBRAGUE, FRENO, CAMBIO Y ACELERADOR': 'https://images.unsplash.com/photo-1530046339160-ce3e530c7d2f?auto=format&fit=crop&w=800&q=80',
+  'CORREAS DE DISTRIBUCION Y ACCESORIOS': 'https://facilrepuestos.cl/wp-content/uploads/a2d0ea7b-correas-.webp',
+  'TENSORES Y POLEAS': 'https://facilrepuestos.cl/wp-content/uploads/a2d0ea7b-correas-.webp',
+  'PIOLAS DE EMBRAGUE, FRENO, CAMBIO Y ACELERADOR': 'https://facilrepuestos.cl/wp-content/uploads/a2d0ea7b-correas-.webp',
 };
 
 const IMAGENES_MAESTRAS_POR_CATEGORIA_RAIZ = {
-  MOTOR: 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
-  'REFRIGERACION Y CLIMATIZACION': 'https://images.unsplash.com/photo-1615906655593-ad0386982a0f?auto=format&fit=crop&w=800&q=80',
-  'MANTENIMIENTO RAPIDO': 'https://images.unsplash.com/photo-1635784063388-1ff609e12d7c?auto=format&fit=crop&w=800&q=80',
-  FRENOS: 'https://images.unsplash.com/photo-1580273916550-e323be2ae537?auto=format&fit=crop&w=800&q=80',
-  'SUSPENSION Y DIRECCION': 'https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=800&q=80',
-  'TRANSMISION Y MANDO': 'https://images.unsplash.com/photo-1530046339160-ce3e530c7d2f?auto=format&fit=crop&w=800&q=80',
-  'SISTEMA ELECTRICO E ILUMINACION': 'https://images.unsplash.com/photo-1558981806-ec527fa84c39?auto=format&fit=crop&w=800&q=80',
-  'CARROCERIA Y ESPEJOS': 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80',
-  'CORREAS Y PIOLAS': 'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80',
+  MOTOR: 'https://facilrepuestos.cl/wp-content/uploads/f487d00c-motor.webp',
+  'REFRIGERACION Y CLIMATIZACION': 'https://facilrepuestos.cl/wp-content/uploads/1cb8e220-radiador.webp',
+  'MANTENIMIENTO RAPIDO': 'https://facilrepuestos.cl/wp-content/uploads/e7c6cf58-filtros.webp',
+  FRENOS: 'https://facilrepuestos.cl/wp-content/uploads/04221a07-frenos_auto.webp',
+  'SUSPENSION Y DIRECCION': 'https://facilrepuestos.cl/wp-content/uploads/433e50b2-amortiguadores.webp',
+  'TRANSMISION Y MANDO': 'https://facilrepuestos.cl/wp-content/uploads/84b5fcfb-embrague.webp',
+  'SISTEMA ELECTRICO E ILUMINACION': 'https://facilrepuestos.cl/wp-content/uploads/f99207b3-electrico_auto.webp',
+  'CARROCERIA Y ESPEJOS': 'https://facilrepuestos.cl/wp-content/uploads/c2a11a74-auto_.webp',
+  'CORREAS Y PIOLAS': 'https://facilrepuestos.cl/wp-content/uploads/a2d0ea7b-correas-.webp',
 };
 
 const IMAGEN_DEFAULT_AUTOMOTRIZ =
-  'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=800&q=80';
+  'https://facilrepuestos.cl/wp-content/uploads/f7dcf9e5-repuestos-auto-3-1.webp';
 
 /**
  * Extrae el código OEM limpio desde un ítem de inventario (quitando prefijos `FRP-SOL-` o sufijos `-TW`/`-CN`).
@@ -153,10 +175,14 @@ export function extraerCodigoOemDeProducto(item = {}) {
  *  2) Si no tiene `imagenUrl`, resuelve la fotografía maestra según su Subcategoría Nivel 3 / Categoría Nivel 1.
  */
 export function resolverImagenEfectivaProducto(item = {}) {
-  if (item.imagenUrl && String(item.imagenUrl).trim()) {
+  const urlActual = String(item.imagenUrl || '').trim();
+  const esFallbackUnsplashAntiguo = urlActual.includes('images.unsplash.com');
+
+  if (urlActual && !esFallbackUnsplashAntiguo && item.origenImagen !== 'fallback_subcategoria') {
     return {
-      url: String(item.imagenUrl).trim(),
-      esFotoPropiaOem: item.origenImagen !== 'fallback_subcategoria',
+      url: urlActual,
+      wooMediaId: MAPA_MEDIA_ID_NATIVO_WOO[urlActual] || null,
+      esFotoPropiaOem: true,
       origenImagen: item.origenImagen || 'foto_propia_o_oem',
     };
   }
@@ -174,6 +200,7 @@ export function resolverImagenEfectivaProducto(item = {}) {
 
   return {
     url: urlPorDetalle,
+    wooMediaId: MAPA_MEDIA_ID_NATIVO_WOO[urlPorDetalle] || 2082,
     esFotoPropiaOem: false,
     origenImagen: 'fallback_subcategoria',
     subcategoriaUsada: ruta[2] || ruta[1] || ruta[0] || 'General',
@@ -277,7 +304,13 @@ export async function ejecutarEnriquecimientoImagenesCatalogo({
   const candidatos = invSnap.docs
     .map((d) => ({ id: d.id, ...d.data() }))
     .filter((it) => !it.ocultarEnTienda && Number(it.stock || 0) > 0)
-    .filter((it) => (soloSinImagen ? !it.imagenUrl || !String(it.imagenUrl).trim() : true))
+    .filter((it) =>
+      soloSinImagen
+        ? !it.imagenUrl ||
+          !String(it.imagenUrl).trim() ||
+          String(it.imagenUrl).includes('images.unsplash.com')
+        : true
+    )
     .slice(0, Math.max(1, Number(limite) || 500));
 
   let enriquecidosOem = 0;
@@ -293,15 +326,18 @@ export async function ejecutarEnriquecimientoImagenesCatalogo({
     for (const item of chunk) {
       const codigoOem = extraerCodigoOemDeProducto(item);
       let urlElegida = '';
+      let wooMediaId = null;
       let origenImagen = '';
 
       if (codigoOem && mapaBancoOem.has(codigoOem)) {
         urlElegida = mapaBancoOem.get(codigoOem);
+        wooMediaId = MAPA_MEDIA_ID_NATIVO_WOO[urlElegida] || null;
         origenImagen = 'banco_colaborativo_erp';
         enriquecidosOem++;
       } else if (incluirFallbackSubcategoria) {
         const fb = resolverImagenEfectivaProducto({ ...item, imagenUrl: '' });
         urlElegida = fb.url;
+        wooMediaId = fb.wooMediaId || null;
         origenImagen = 'fallback_subcategoria';
         asignadosSubcategoria++;
       }
@@ -309,6 +345,7 @@ export async function ejecutarEnriquecimientoImagenesCatalogo({
       if (urlElegida) {
         batch.update(db.collection('inventario').doc(item.id), {
           imagenUrl: urlElegida,
+          ...(wooMediaId ? { wooMediaId } : {}),
           origenImagen,
           ...(codigoOem ? { codigoOemRaiz: codigoOem } : {}),
           needsWooSync: true,

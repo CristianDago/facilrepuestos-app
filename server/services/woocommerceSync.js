@@ -401,7 +401,9 @@ function construirPayload(id, item, obtenerCategoriasItem, esNuevo, puedeAgregar
   if (puedeAgregarImagen || forzarActualizacionFoto) {
     const imgEfectiva = resolverImagenEfectivaProducto(item);
     if (imgEfectiva?.url) {
-      const mediaIdExistente = mapaMediaWoo ? Number(mapaMediaWoo.get(imgEfectiva.url)) : 0;
+      const mediaIdExistente =
+        Number(imgEfectiva.wooMediaId) ||
+        (mapaMediaWoo ? Number(mapaMediaWoo.get(imgEfectiva.url)) : 0);
       if (mediaIdExistente > 0) {
         // Reutiliza el attachment ID existente en la galería de WordPress (0 bytes extra en disco)
         payload.images = [{ id: mediaIdExistente }];
@@ -434,7 +436,7 @@ export async function obtenerEstadoColaWooCommerce() {
   };
 
   for (const item of items) {
-    const isPendiente = item.needsWooSync === true || !i.lastWooSyncAt;
+    const isPendiente = item.needsWooSync === true || !item.lastWooSyncAt;
     const bucket =
       item.nodoAilooId === 'soluparts' || item.proveedorId === 'soluparts'
         ? 'soluparts'

@@ -518,3 +518,32 @@ export async function registrarFotoEnBancoColaborativo({
   );
   return { docId, codigoOemRaiz: oem, imagenUrl: url };
 }
+
+/**
+ * Obtiene directamente por `id_ailoo` las fotografías reales de estudio en alta resolución (`900x900 px` sin marca de agua)
+ * desde el catálogo público `/2503/producto/<id_ailoo>-x` de Soluparts.
+ */
+export async function obtenerFotosEstudioSolupartsPorIdAiloo(idAiloo) {
+  const cleanId = String(idAiloo || '').replace(/\D/g, '');
+  if (!cleanId) return [];
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4500);
+    const res = await fetch(`https://soluparts.cl/2503/producto/${cleanId}-x`, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return [];
+    const html = await res.text();
+    const matches = [
+      ...html.matchAll(/(\/Content\/products\/2503\/[^"'\s>]+?_\d+\.(?:jpg|jpeg|png|webp))/gi),
+    ].map((m) => `https://soluparts.cl${m[1].replace(/_\d+\.(jpg|jpeg|png|webp)$/i, '_900.$1')}`);
+    return [...new Set(matches)];
+  } catch {
+    return [];
+  }
+}

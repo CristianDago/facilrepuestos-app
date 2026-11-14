@@ -396,19 +396,24 @@ function construirPayload(id, item, obtenerCategoriasItem, esNuevo, puedeAgregar
   const forzarActualizacionFoto =
     item.wooSyncMotivo === 'nueva_foto_banco_proveedor' ||
     item.wooSyncMotivo === 'foto_principal_actualizada' ||
-    item.wooSyncMotivo === 'enriquecimiento_imagen_catalogo';
+    item.wooSyncMotivo === 'enriquecimiento_imagen_catalogo' ||
+    item.wooSyncMotivo === 'foto_estudio_soluparts';
 
   if (puedeAgregarImagen || forzarActualizacionFoto) {
     const imgEfectiva = resolverImagenEfectivaProducto(item);
     if (imgEfectiva?.url) {
       const mediaIdExistente =
+        Number(item.wooMediaId) ||
         Number(imgEfectiva.wooMediaId) ||
         (mapaMediaWoo ? Number(mapaMediaWoo.get(imgEfectiva.url)) : 0);
       if (mediaIdExistente > 0) {
         // Reutiliza el attachment ID existente en la galería de WordPress (0 bytes extra en disco)
         payload.images = [{ id: mediaIdExistente }];
       } else {
-        payload.images = [{ src: imgEfectiva.url }];
+        const urlOptimaWoo = imgEfectiva.url.includes('soluparts.cl/Content/products/')
+          ? imgEfectiva.url.replace('_900.', '_600.')
+          : imgEfectiva.url;
+        payload.images = [{ src: urlOptimaWoo }];
         payload._imagenUrlPendienteCache = imgEfectiva.url;
       }
     }

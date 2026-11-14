@@ -787,6 +787,10 @@ function normalizarItemAilooAInventario(raw, nodo, docExistente = null) {
     anioHasta: Number(raw.anio_hasta || docExistente?.anioHasta) || null,
     equivalencias,
     imagenUrl: docExistente?.imagenUrl || '',
+    ...(Array.isArray(docExistente?.imagenesGaleria) ? { imagenesGaleria: docExistente.imagenesGaleria } : {}),
+    ...(docExistente?.origenImagen ? { origenImagen: docExistente.origenImagen } : {}),
+    ...(docExistente?.wooMediaId ? { wooMediaId: docExistente.wooMediaId } : {}),
+    ...(docExistente?.codigoOemRaiz ? { codigoOemRaiz: docExistente.codigoOemRaiz } : {}),
     ocultarEnTienda: Boolean(docExistente?.ocultarEnTienda ?? false),
   };
 

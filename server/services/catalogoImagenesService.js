@@ -134,9 +134,96 @@ const IMAGEN_DEFAULT_AUTOMOTRIZ =
   'https://facilrepuestos.cl/wp-content/uploads/f7dcf9e5-repuestos-auto-3-1.webp';
 
 /**
+ * Analiza un producto y detecta si posee un Código OEM de fábrica explícito (en el SKU o en el nombre)
+ * o un Código Técnico de Motor (`4G15`, `4G16`, `4Y 491Q`, `4JB1`, `4D56`, etc.), diferenciándolo
+ * de los correlativos internos de estantería de Soluparts (`OPT-147`, `DIS-FRE-002`, etc.).
+ */
+export function extraerMetadataOemDeProducto(item = {}) {
+  const nom = String(item.nombre || '').trim();
+  const codRaw = String(item.codigo || item.codigoProducto || '')
+    .trim()
+    .replace(/^FRP-[A-Z]{3}-/i, '');
+  const codBase = codRaw.replace(/^([A-Z]{2,4}-[A-Z0-9]{2,4}-\d{2,4}[A-Z]?)-\d{3,6}$/i, '$1');
+
+  const esCorrelativoSoluparts =
+    /^[A-Z]{2,4}-[A-Z0-9]{2,4}-\d{2,4}[A-Z]?$/i.test(codBase) ||
+    /^[A-Z]{3}-\d{2,4}[A-Z]?$/i.test(codBase) ||
+    /^SOL-\d+$/i.test(codBase);
+
+  // 1) Código OEM explícito dentro del nombre: ej. "(CODIGO 01652264)", "COD 1010320FD060", "F01R00Y113"
+  const mOemExplicito =
+    nom.match(/(?:CODIGO|COD\.?|OEM)\s*[:#]?\s*([A-Z0-9/-]{4,22})/i) ||
+    nom.match(/\b([A-Z0-9]{4,8}-[0-9]{5,8}[A-Z0-9]*|F01R[A-Z0-9]+|0261[0-9]{6}|0280[0-9]{6}|[0-9]{7,12})\b/i);
+
+  // 2) Código de Motor explícito dentro del nombre: ej. "4G15", "4G16", "4Y", "491Q", "4JB1", "4D56"
+  const mMotor = nom.match(
+    /\b(4G\d{2}[A-Z0-9]*|4Y|491Q|4JB1|4D56|GW4D20|GW4G15|JL47\d\w*|SQR\d+\w*|LJ4\d+\w*|DK12|DK15|DAM15\w*)\b/i
+  );
+
+  // Limpiar tipo de pieza base (antes de "para ...")
+  const piezaLimpia = nom
+    .split(/\bpara\b/i)[0]
+    .replace(/\(BODEGAZO\)/gi, '')
+    .replace(/\((?:CODIGO|COD\.?|OEM)[^)]*\)/gi, '')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\b(STANDARD|STD|COMPLETO|COMPLETA|POR PAR|UNIDAD|DELANTERO|DELANTERA|TRASERO|TRASERA|IZQUIERDO|IZQUIERDA|DERECHO|DERECHA|LH|RH)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const palabrasPieza = piezaLimpia.split(' ').filter(Boolean).slice(0, 3).join(' ').toUpperCase();
+
+  if (mOemExplicito) {
+    const oem = String(mOemExplicito[1] || mOemExplicito[0])
+      .replace(/^[-/]+|[-/]+$/g, '')
+      .toUpperCase();
+    return {
+      tieneOemReal: true,
+      tipoCodigo: 'oem_explicito_en_nombre',
+      codigoOemRaiz: oem,
+      claveGrupo: oem.length >= 6 ? `OEM::${oem}` : `PIEZA_OEM::${palabrasPieza}::${oem}`,
+      queryBusquedaWeb: `${palabrasPieza} ${oem} auto part`,
+    };
+  }
+
+  if (!esCorrelativoSoluparts && codBase.length >= 4) {
+    const { codigoOemRaiz } = decodificarEstructuraCodigoProducto(codBase);
+    const oem = (codigoOemRaiz || codBase).toUpperCase();
+    return {
+      tieneOemReal: true,
+      tipoCodigo: 'sku_fabrica_directo',
+      codigoOemRaiz: oem,
+      claveGrupo: `OEM::${oem}`,
+      queryBusquedaWeb: `${palabrasPieza} ${oem} auto part`,
+    };
+  }
+
+  if (mMotor) {
+    const motor = String(mMotor[1] || mMotor[0]).toUpperCase();
+    const piezaSinMotor = palabrasPieza.replace(new RegExp(`\\b${motor}\\b`, 'gi'), '').replace(/\s+/g, ' ').trim();
+    return {
+      tieneOemReal: true,
+      tipoCodigo: 'codigo_motor_explicito',
+      codigoOemRaiz: `${piezaSinMotor.replace(/\s+/g, '-')}-${motor}`,
+      claveGrupo: `MOTOR::${piezaSinMotor}::${motor}`,
+      queryBusquedaWeb: `${piezaSinMotor} ${motor} engine part`,
+    };
+  }
+
+  return {
+    tieneOemReal: false,
+    tipoCodigo: 'correlativo_interno_soluparts',
+    codigoOemRaiz: codBase.toUpperCase(),
+    claveGrupo: null,
+    queryBusquedaWeb: null,
+  };
+}
+
+/**
  * Extrae el código OEM limpio desde un ítem de inventario (quitando prefijos `FRP-SOL-` o sufijos `-TW`/`-CN`).
  */
 export function extraerCodigoOemDeProducto(item = {}) {
+  const meta = extraerMetadataOemDeProducto(item);
+  if (meta.codigoOemRaiz) return meta.codigoOemRaiz;
+
   const candidatos = [
     item.oem,
     item.codigoProducto,
@@ -149,7 +236,6 @@ export function extraerCodigoOemDeProducto(item = {}) {
     .filter(Boolean);
 
   for (const raw of candidatos) {
-    // Limpiar prefijo FRP-SOL- o sufijo de desambiguación -123456 si aplica
     const sinPrefijo = raw.replace(/^FRP-[A-Z]{3}-/i, '');
     const { codigoOemRaiz } = decodificarEstructuraCodigoProducto(sinPrefijo);
     if (codigoOemRaiz && codigoOemRaiz.length >= 5 && !/^\d{1,4}$/.test(codigoOemRaiz)) {
@@ -157,16 +243,64 @@ export function extraerCodigoOemDeProducto(item = {}) {
     }
   }
 
-  // También buscar patrón OEM dentro del nombre (ej. "PASTILLA FRENO S11-3501080 CHERY")
-  const matchNombre = String(item.nombre || '')
-    .toUpperCase()
-    .match(/\b([A-Z0-9]{3,6}[-][A-Z0-9]{4,9}|[0-9]{5}[A-Z0-9]{5})\b/);
-  if (matchNombre) {
-    const { codigoOemRaiz } = decodificarEstructuraCodigoProducto(matchNombre[1]);
-    return codigoOemRaiz || matchNombre[1];
-  }
-
   return '';
+}
+
+/**
+ * Busca en la web pública una fotografía limpia (`.jpg` / `.png` / `.webp`) para un código OEM o pieza+motor,
+ * verificando que responda HTTP 200 y sea compatible con la subida de medios de WordPress/WooCommerce.
+ */
+export async function buscarImagenOemWebPorConsulta(queryTexto) {
+  if (!queryTexto) return null;
+  try {
+    const q = encodeURIComponent(queryTexto);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(`https://www.bing.com/images/search?q=${q}&form=HDRSC2&first=1`, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept-Language': 'es-CL,es;q=0.9,en;q=0.8',
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+
+    const html = await res.text();
+    const candidatos = [
+      ...html.matchAll(/murl&quot;:&quot;(https?:\/\/[^&?]+?\.(?:jpg|jpeg|png|webp))&quot;/gi),
+    ]
+      .map((m) => m[1])
+      .filter(
+        (u) =>
+          !/logo|banner|icon|avatar|placeholder|diagram|schema|manual/i.test(u) &&
+          u.length < 220
+      );
+
+    // Verificar los primeros 5 candidatos con una petición rápida para asegurar que el servidor origen no bloquee descarga
+    for (const url of candidatos.slice(0, 6)) {
+      try {
+        const c2 = new AbortController();
+        const t2 = setTimeout(() => c2.abort(), 3000);
+        const check = await fetch(url, {
+          method: 'HEAD',
+          headers: { 'User-Agent': 'WordPress/6.6; https://facilrepuestos.cl' },
+          signal: c2.signal,
+        });
+        clearTimeout(t2);
+        const ct = String(check.headers.get('content-type') || '').toLowerCase();
+        if (check.ok && ct.startsWith('image/')) {
+          return url;
+        }
+      } catch {
+        // Probar siguiente candidato
+      }
+    }
+  } catch {
+    // Ignorar error de red puntual
+  }
+  return null;
 }
 
 /**
@@ -213,7 +347,8 @@ export function resolverImagenEfectivaProducto(item = {}) {
  * Banco Colaborativo de Fotos OEM en Firestore (`banco_fotos_repuestos`).
  */
 export async function buscarImagenOemParaItem(item = {}, mapaBancoOem = null) {
-  const codigoOem = extraerCodigoOemDeProducto(item);
+  const meta = extraerMetadataOemDeProducto(item);
+  const codigoOem = meta.codigoOemRaiz || extraerCodigoOemDeProducto(item);
 
   // 1. Revisar si ya existe en el Banco Colaborativo de Fotos OEM (`banco_fotos_repuestos`)
   if (codigoOem && mapaBancoOem && mapaBancoOem.has(codigoOem)) {
@@ -225,34 +360,16 @@ export async function buscarImagenOemParaItem(item = {}, mapaBancoOem = null) {
     };
   }
 
-  // 2. Si no está en el banco local, intentar búsqueda técnica pública por código OEM / tipo de pieza
-  if (codigoOem) {
-    try {
-      const query = encodeURIComponent(`${codigoOem} ${item.tipoPieza || item.subcategoriaDetalle || 'auto part'}`);
-      const urlApi = `https://api.openverse.org/v1/images/?q=${query}&page_size=3`;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3500);
-      const res = await fetch(urlApi, {
-        headers: { 'User-Agent': 'FacilRepuestosCatalogEnricher/2.0' },
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-      if (res.ok) {
-        const data = await res.json();
-        const primera = (data?.results || []).find(
-          (r) => r?.url && /^https:\/\//i.test(r.url) && !/logo|banner/i.test(r.title || '')
-        );
-        if (primera?.url) {
-          return {
-            encontrada: true,
-            url: primera.url,
-            codigoOem,
-            fuente: 'openverse_oem_search',
-          };
-        }
-      }
-    } catch {
-      // Continuar al fallback de Etapa 1
+  // 2. Si tiene OEM explícito o código técnico de motor, buscar su fotografía técnica en catálogos web públicos
+  if (meta.tieneOemReal && meta.queryBusquedaWeb) {
+    const urlWeb = await buscarImagenOemWebPorConsulta(meta.queryBusquedaWeb);
+    if (urlWeb) {
+      return {
+        encontrada: true,
+        url: urlWeb,
+        codigoOem,
+        fuente: 'busqueda_web_oem_automatica',
+      };
     }
   }
 

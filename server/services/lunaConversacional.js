@@ -21,6 +21,11 @@
  */
 
 import { google } from 'googleapis';
+import {
+  cotizarDespachoAnticipado,
+  NODOS_DESPACHO_DEFAULT,
+} from './logisticaTarifarioService.js';
+
 
 const GCP_PROJECT = process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'facilrepuestos-prod';
 const GEMINI_MODEL = process.env.GEMINI_AGENT_MODEL || 'gemini-3.8-flash';
@@ -343,6 +348,7 @@ export async function conducirFlujoCompraDeterministico({
   carritoActual = [],
   esComandoComprar = false,
   crearPedidoRealFn,
+  nodosDespachoActivos = NODOS_DESPACHO_DEFAULT,
 }) {
   const texto = String(textoCliente || '').trim();
   const upper = texto.toUpperCase();
@@ -388,6 +394,7 @@ export async function conducirFlujoCompraDeterministico({
         modalidad: null,
         comuna: comunaInicial,
         datosDespacho: null,
+        cotizacionDespacho: null,
         documento: null,
         datosCliente: {},
         actualizadoEn: new Date().toISOString(),
@@ -396,8 +403,8 @@ export async function conducirFlujoCompraDeterministico({
         interceptado: true,
         flujoCompra: nuevoEstado,
         respuestaTexto:
-          `Perfecto, armemos tu pedido:\n${lineasResumen}\nTotal: **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
-          `¿Prefieres **Retiro en sucursal** (Enrique Olivares 224, La Florida, sin costo) o **Despacho por pagar** a domicilio?`,
+          `Perfecto, armemos tu pedido:\n${lineasResumen}\nSubtotal repuestos: **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
+          `¿Prefieres **Retiro sin costo en nuestro taller** (**Enrique Olivares 224, La Florida**) o **Despacho a domicilio** (calculado al tiro según tu comuna o región)?`,
         accionTomada: 'flujo_compra_paso_modalidad',
       };
     }
@@ -408,6 +415,14 @@ export async function conducirFlujoCompraDeterministico({
       modalidad: esDespacho ? 'DESPACHO' : 'RETIRO',
       comuna: comunaInicial || 'La Florida, Santiago (RM)',
       datosDespacho: null,
+      cotizacionDespacho: esDespacho
+        ? null
+        : cotizarDespachoAnticipado({
+            direccionOComuna: 'La Florida',
+            itemsCarrito: carritoActual,
+            nodosActivos: nodosDespachoActivos,
+            modalidad: 'Retiro en tienda',
+          }),
       documento: null,
       datosCliente: {},
       actualizadoEn: new Date().toISOString(),
@@ -418,8 +433,8 @@ export async function conducirFlujoCompraDeterministico({
         interceptado: true,
         flujoCompra: nuevoEstado,
         respuestaTexto:
-          `Perfecto, anoto tu pedido con despacho por pagar:\n${lineasResumen}\nTotal productos: **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
-          `El envío se paga al recibir vía courier (Starken, Chilexpress o Blue Express). Mándame tu **dirección de entrega** (calle, número y comuna).`,
+          `Perfecto, anoto tu pedido con **Despacho a domicilio**:\n${lineasResumen}\nSubtotal repuestos: **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
+          `Mándame tu **dirección de entrega** (calle, número y comuna/ciudad) para calcularte al tiro el valor exacto del despacho saliendo desde nuestro taller en **Enrique Olivares 224, La Florida**.`,
         accionTomada: 'flujo_compra_paso_direccion',
       };
     }
@@ -428,7 +443,7 @@ export async function conducirFlujoCompraDeterministico({
       interceptado: true,
       flujoCompra: nuevoEstado,
       respuestaTexto:
-        `Perfecto, anoto para retiro en nuestra sucursal (**Enrique Olivares 224, La Florida**):\n${lineasResumen}\nTotal: **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
+        `Perfecto, anoto para retiro sin costo en nuestra sucursal (**Enrique Olivares 224, La Florida**):\n${lineasResumen}\nTotal: **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
         `¿Necesitas **boleta** o **factura**?`,
       accionTomada: 'flujo_compra_paso_documento',
     };
@@ -460,13 +475,14 @@ export async function conducirFlujoCompraDeterministico({
       estado = {
         ...estado,
         modalidad: 'DESPACHO',
+        cotizacionDespacho: null,
         paso: 'ESPERA_DIRECCION',
       };
       return {
         interceptado: true,
         flujoCompra: estado,
         respuestaTexto:
-          'Perfecto, lo cambiamos a **Despacho por pagar**. Mándame la **dirección completa** (calle, número y comuna) donde enviamos el pedido.',
+          'Perfecto, lo cambiamos a **Despacho a domicilio**. Mándame la **dirección completa** (calle, número y comuna/ciudad) para calcularte el valor exacto del envío.',
         accionTomada: 'flujo_compra_cambio_entrega',
       };
     }
@@ -474,13 +490,19 @@ export async function conducirFlujoCompraDeterministico({
       estado = {
         ...estado,
         modalidad: 'RETIRO',
+        cotizacionDespacho: cotizarDespachoAnticipado({
+          direccionOComuna: 'La Florida',
+          itemsCarrito: carritoActual,
+          nodosActivos: nodosDespachoActivos,
+          modalidad: 'Retiro en tienda',
+        }),
         paso: estado.documento ? 'ESPERA_DATOS' : 'ESPERA_DOCUMENTO',
       };
       return {
         interceptado: true,
         flujoCompra: estado,
         respuestaTexto:
-          'Perfecto, lo cambiamos a **Retiro en sucursal** (Enrique Olivares 224, La Florida). ' +
+          'Perfecto, lo cambiamos a **Retiro sin costo en sucursal** (**Enrique Olivares 224, La Florida**). ' +
           (estado.documento
             ? 'Mándame tu **nombre completo, RUT y correo** para generar el pedido.'
             : '¿Necesitas **boleta** o **factura**?'),
@@ -499,7 +521,7 @@ export async function conducirFlujoCompraDeterministico({
         interceptado: true,
         flujoCompra: estado,
         respuestaTexto:
-          'Cuéntame si prefieres **Retiro en sucursal** (Enrique Olivares 224, La Florida) o **Despacho por pagar** a domicilio.',
+          'Cuéntame si prefieres **Retiro sin costo en sucursal** (Enrique Olivares 224, La Florida) o **Despacho a domicilio** (con valor calculado según tu comuna o región).',
         accionTomada: 'flujo_compra_paso_modalidad',
       };
     }
@@ -510,44 +532,90 @@ export async function conducirFlujoCompraDeterministico({
         interceptado: true,
         flujoCompra: estado,
         respuestaTexto:
-          'Perfecto, lo anotamos con **Despacho por pagar**. Mándame la **dirección de entrega** (calle, número y comuna).',
+          'Perfecto, lo anotamos con **Despacho a domicilio**. Mándame tu **dirección de entrega** (calle, número y comuna o ciudad) para calcularte al tiro el valor del despacho desde **Enrique Olivares 224, La Florida**.',
         accionTomada: 'flujo_compra_paso_direccion',
       };
     }
 
-    estado = { ...estado, modalidad: 'RETIRO', paso: 'ESPERA_DOCUMENTO' };
-    return {
-      interceptado: true,
-      flujoCompra: estado,
-      respuestaTexto:
-        'Perfecto, queda con **Retiro en sucursal** (Enrique Olivares 224, La Florida).\n\n¿Necesitas **boleta** o **factura**?',
-      accionTomada: 'flujo_compra_paso_documento',
-    };
-  }
-
-  // PASO 2: ESPERA_DIRECCION (cuando eligió despacho)
-  if (estado.paso === 'ESPERA_DIRECCION') {
-    if (texto.length < 5) {
-      return {
-        interceptado: true,
-        flujoCompra: estado,
-        respuestaTexto: 'Por favor indícame la calle, número y comuna para el despacho.',
-        accionTomada: 'flujo_compra_paso_direccion',
-      };
-    }
     estado = {
       ...estado,
-      datosDespacho: texto,
-      comuna: texto,
+      modalidad: 'RETIRO',
+      cotizacionDespacho: cotizarDespachoAnticipado({
+        direccionOComuna: 'La Florida',
+        itemsCarrito: carritoActual,
+        nodosActivos: nodosDespachoActivos,
+        modalidad: 'Retiro en tienda',
+      }),
       paso: 'ESPERA_DOCUMENTO',
     };
     return {
       interceptado: true,
       flujoCompra: estado,
-      respuestaTexto: `Anotada la dirección: **${texto}**.\n\n¿Necesitas **boleta** o **factura**?`,
+      respuestaTexto:
+        'Perfecto, queda con **Retiro sin costo en sucursal** (**Enrique Olivares 224, La Florida**).\n\n¿Necesitas **boleta** o **factura**?',
       accionTomada: 'flujo_compra_paso_documento',
     };
   }
+
+  // PASO 2: ESPERA_DIRECCION (cuando eligió despacho -> calcula tarifa anticipada según comuna/región y talla de la pieza)
+  if (estado.paso === 'ESPERA_DIRECCION') {
+    if (texto.length < 5) {
+      return {
+        interceptado: true,
+        flujoCompra: estado,
+        respuestaTexto: 'Por favor indícame la calle, número y comuna (o ciudad) para cotizar tu despacho.',
+        accionTomada: 'flujo_compra_paso_direccion',
+      };
+    }
+
+    const cotizacionDespacho = cotizarDespachoAnticipado({
+      direccionOComuna: texto,
+      itemsCarrito: carritoActual,
+      nodosActivos: nodosDespachoActivos,
+      modalidad: 'Despacho a domicilio',
+    });
+
+    const costoEnvio = Number(cotizacionDespacho.costoDespachoConIva || 0);
+    const totalConDespacho = totalIva + costoEnvio;
+    const dim = cotizacionDespacho.volumetria?.dimensionesReferencialesCm || { largo: 32, ancho: 25, alto: 18 };
+    const tallaCod = cotizacionDespacho.volumetria?.tallaConsolidada || 'S';
+    const pesoVol = cotizacionDespacho.volumetria?.pesoTarifableConsolidadoKg || 3.6;
+    const origenDireccion = cotizacionDespacho.nodoOrigen?.direccion || 'Enrique Olivares 224, La Florida, Santiago';
+
+    estado = {
+      ...estado,
+      datosDespacho: texto,
+      comuna: cotizacionDespacho.comunaDetectada || texto,
+      cotizacionDespacho,
+      paso: 'ESPERA_DOCUMENTO',
+    };
+
+    const detalleRuta = cotizacionDespacho.esRegionMetropolitana
+      ? `🚐 **Despacho directo en Furgón (${cotizacionDespacho.medioTransporte || 'Peugeot Partner'})**\n` +
+        `- **Salida desde taller:** ${origenDireccion}\n` +
+        `- **Destino:** ${texto} (${cotizacionDespacho.comunaDetectada} — Anillo ${cotizacionDespacho.anillo} RM)\n` +
+        `- **Caja estimada:** Talla ${tallaCod} (${dim.largo}×${dim.ancho}×${dim.alto} cm, ~${pesoVol} kg)\n` +
+        `- **Tiempo estimado:** ${cotizacionDespacho.tiempoEstimado}`
+      : `📦 **Envío Pre-Pagado a Regiones (${cotizacionDespacho.medioTransporte || 'Starken / Courier'})**\n` +
+        `- **Salida desde taller:** ${origenDireccion}\n` +
+        `- **Destino:** ${texto} (${cotizacionDespacho.nombreZona})\n` +
+        `- **Volumetría referencial:** Caja Talla ${tallaCod} (${dim.largo}×${dim.ancho}×${dim.alto} cm, ~${pesoVol} kg)\n` +
+        `- **Tiempo estimado:** ${cotizacionDespacho.tiempoEstimado}`;
+
+    return {
+      interceptado: true,
+      flujoCompra: estado,
+      respuestaTexto:
+        `¡Perfecto! Anotada tu dirección y calculado tu despacho **pre-pagado** (sin cobros sorpresa al recibir):\n\n` +
+        `${detalleRuta}\n\n` +
+        `- **Subtotal repuestos:** $${totalIva.toLocaleString('es-CL')} IVA inc.\n` +
+        `- **Despacho pre-pagado:** **$${costoEnvio.toLocaleString('es-CL')} IVA inc.**\n` +
+        `- **Total final con despacho:** **$${totalConDespacho.toLocaleString('es-CL')} IVA inc.**\n\n` +
+        `¿Necesitas **boleta** o **factura**?`,
+      accionTomada: 'flujo_compra_paso_documento',
+    };
+  }
+
 
   // PASO 3: ESPERA_DOCUMENTO
   if (estado.paso === 'ESPERA_DOCUMENTO') {
@@ -631,9 +699,17 @@ export async function conducirFlujoCompraDeterministico({
       };
     }
 
-    // ¡Tenemos todos los datos! Crear el pedido real `FRP-PED-*`
+    // ¡Tenemos todos los datos! Crear el pedido real `FRP-PED-*` con despacho pre-pagado si corresponde
     const modalidadFinal = estado.modalidad === 'DESPACHO' ? 'despacho_domicilio' : 'retiro_bodega';
     const comunaFinal = estado.datosDespacho || estado.comuna || 'La Florida, Santiago (RM)';
+    const cotizacionDespachoFinal =
+      estado.cotizacionDespacho ||
+      cotizarDespachoAnticipado({
+        direccionOComuna: comunaFinal,
+        itemsCarrito: carritoActual,
+        nodosActivos: nodosDespachoActivos,
+        modalidad: modalidadFinal === 'retiro_bodega' ? 'Retiro en tienda' : 'Despacho a domicilio',
+      });
 
     const pedidoCreado = await crearPedidoRealFn({
       sesion: {
@@ -645,12 +721,14 @@ export async function conducirFlujoCompraDeterministico({
       comunaEntrega: comunaFinal,
       documentoTributario: estado.documento || 'BOLETA',
       datosCliente: combinados,
+      cotizacionDespacho: cotizacionDespachoFinal,
     });
 
+    const costoEnvioFinal = Number(cotizacionDespachoFinal?.costoDespachoConIva || 0);
     const entregaTxt =
       modalidadFinal === 'retiro_bodega'
-        ? 'Retiro en Sucursal FácilRepuestos (Enrique Olivares 224, La Florida, Santiago)'
-        : `Despacho por pagar a: ${comunaFinal}`;
+        ? `Retiro sin costo en Sucursal FácilRepuestos (${cotizacionDespachoFinal?.nodoOrigen?.direccion || 'Enrique Olivares 224, La Florida, Santiago'})`
+        : `${cotizacionDespachoFinal?.tituloTarifa || 'Despacho Pre-Pagado'} hacia ${comunaFinal} (Salida: ${cotizacionDespachoFinal?.nodoOrigen?.direccion || 'Enrique Olivares 224, La Florida'}) — $${costoEnvioFinal.toLocaleString('es-CL')} IVA inc.`;
 
     const linkCarroWoo =
       pedidoCreado?.urlPagoCheckoutWoo ||
@@ -663,12 +741,17 @@ export async function conducirFlujoCompraDeterministico({
         pedidoCreado?.wooOrderId ? ` (Orden Web **#${pedidoCreado.wooOrderId}**)` : ''
       } quedó creado:\n\n` +
       `${lineasResumen}\n` +
+      `- **Subtotal repuestos:** $${totalIva.toLocaleString('es-CL')} IVA inc.\n` +
+      (costoEnvioFinal > 0
+        ? `- **Despacho pre-pagado:** $${costoEnvioFinal.toLocaleString('es-CL')} IVA inc. (${cotizacionDespachoFinal?.tiempoEstimado || '24 a 48 hrs'})\n`
+        : `- **Despacho / Retiro:** $0 (Retiro en taller Enrique Olivares 224, La Florida)\n`) +
       `- **Documento:** ${estado.documento || 'BOLETA'} (RUT \`${combinados.rut}\`)\n` +
       `- **Entrega:** ${entregaTxt}\n` +
-      `- **Total a pagar:** **$${Number(pedidoCreado.totalConIva).toLocaleString('es-CL')} IVA inc.**\n\n` +
+      `- **Total final a pagar:** **$${Number(pedidoCreado.totalConIva).toLocaleString('es-CL')} IVA inc.**\n\n` +
       `🛒 **Paga seguro en tu Carro de Compra Oficial (Webpay / MercadoPago / Toku / Transferencia):**\n` +
       `👉 ${linkCarroWoo}\n\n` +
       `Recuerda que el stock queda reservado al confirmar tu pago en el carro o enviándonos el comprobante por aquí.`;
+
 
     return {
       interceptado: true,
@@ -788,7 +871,7 @@ REGLAS INQUEBRANTABLES (HEREDADAS DE LUNA SOLUPARTS):
    - Muestra siempre el nombre del producto, su código SKU exacto entre backticks (ej. \`FRP-...\`) y su precio final CON IVA incluido en pesos chilenos.
    - Si en los datos verificados viene un link de carro de compras (\`https://facilrepuestos.cl/?add-to-cart=...\`), mantenlo intacto para que el cliente pueda comprar con 1 clic en el carro de FácilRepuestos.cl o escribir **COMPRAR** por WhatsApp.
    - Si quedan 5 unidades o menos, menciona la cantidad como dato sin presionar.
-   - Recomienda el Retiro sin costo en nuestra sucursal ubicada en **Enrique Olivares 224, La Florida, Santiago** o **Despacho por pagar** a domicilio en Santiago y todo Chile.
+   - Recomienda el Retiro sin costo en nuestra sucursal ubicada en **Enrique Olivares 224, La Florida, Santiago** o **Despacho a domicilio pre-calculado** en Santiago (en nuestro furgón) y a todo Chile (con tarifa conocida antes de pagar según la talla del repuesto).
 6. NUNCA menciones nombres de proveedores mayoristas internos (jamás nombres a Soluparts, Global Repuestos ni bodegas externas). Todo el stock y la gestión son de FácilRepuestos.cl.
 7. Horario de nuestra sucursal (Enrique Olivares 224, La Florida): lunes a jueves de 9:30 a 18:00, viernes de 9:30 a 17:00 y sábados de 9:30 a 14:00. Domingos y festivos cerrado.
 8. Usa negritas (**texto**) solo para destacar el vehículo, el precio o la palabra **COMPRAR**. No uses títulos largos ni lenguaje robótico.`;

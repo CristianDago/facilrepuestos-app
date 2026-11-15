@@ -50,6 +50,18 @@ import {
   crearPedidoPendienteWooCommerce,
   obtenerUrlBaseTiendaWoo,
 } from '../services/woocommerceSync.js';
+import { sincronizarZonasDespachoWooCommerce } from '../services/woocommerceShippingConfig.js';
+
+import {
+  TALLAS_LOGISTICAS,
+  NODOS_DESPACHO_DEFAULT,
+  TARIFAS_RM_ANILLOS,
+  MACROZONAS_REGIONES,
+  clasificarTallaLogisticaRepuesto,
+  cotizarDespachoAnticipado,
+  obtenerNodosDespachoActivos,
+} from '../services/logisticaTarifarioService.js';
+
 
 const router = Router();
 
@@ -1211,6 +1223,7 @@ async function crearPedidoSimuladoAgente({
   datosCliente = null,
   metodoPagoSimulado = 'sandbox_webpay_sin_tarjeta',
   itemsForzados = null,
+  cotizacionDespacho = null,
 }) {
   const itemsCarrito =
     Array.isArray(itemsForzados) && itemsForzados.length > 0
@@ -1223,9 +1236,24 @@ async function crearPedidoSimuladoAgente({
     return null;
   }
 
+  const nodosActivos = await obtenerNodosDespachoActivos(db);
+  const cotizacionDespachoEfectiva =
+    cotizacionDespacho ||
+    cotizarDespachoAnticipado({
+      direccionOComuna: comunaEntrega,
+      itemsCarrito,
+      nodosActivos,
+      modalidad: modalidadEntrega === 'retiro_bodega' ? 'Retiro en tienda' : 'Despacho a domicilio',
+    });
+
   const codigoPedido = `FRP-PED-${Math.floor(100000 + Math.random() * 900000)}`;
   const subtotalNeto = itemsCarrito.reduce((acc, it) => acc + Number(it.precioVentaNeto || 0) * Number(it.cantidad || 1), 0);
-  const totalConIva = itemsCarrito.reduce((acc, it) => acc + Number(it.precioVentaConIva || 0) * Number(it.cantidad || 1), 0);
+  const subtotalRepuestosConIva = itemsCarrito.reduce((acc, it) => acc + Number(it.precioVentaConIva || 0) * Number(it.cantidad || 1), 0);
+  const costoDespachoConIva =
+    modalidadEntrega === 'retiro_bodega'
+      ? 0
+      : Number(cotizacionDespachoEfectiva?.costoDespachoConIva || 0);
+  const totalConIva = subtotalRepuestosConIva + costoDespachoConIva;
   const now = new Date().toISOString();
 
   // Crear orden real en WooCommerce (pending) o generar el link directo de Carro de Compra en facilrepuestos.cl
@@ -1238,6 +1266,7 @@ async function crearPedidoSimuladoAgente({
     vehiculo: sesion.vehiculoContexto || null,
     codigoPedidoFrp: codigoPedido,
     clienteTelefono: sesion.clienteTelefono || '',
+    cotizacionDespacho: cotizacionDespachoEfectiva,
   });
 
   const nuevoPedido = {
@@ -1250,24 +1279,32 @@ async function crearPedidoSimuladoAgente({
     clienteTelefono: sesion.clienteTelefono || 'Vista Web Sandbox',
     documentoTributario: documentoTributario || 'BOLETA',
     vehiculo: sesion.vehiculoContexto || null,
-    items: itemsCarrito.map((it) => ({
-      skuPublicoFrp: it.skuPublicoFrp,
-      nombre: it.nombre,
-      fabricante: it.fabricante || 'OEM',
-      origen: it.origen || 'soluparts_ailoo',
-      proveedorNombre: 'FácilRepuestos SpA',
-      cantidad: Number(it.cantidad || 1),
-      precioVentaNeto: Number(it.precioVentaNeto || 0),
-      precioVentaConIva: Number(it.precioVentaConIva || 0),
-      wooProductId: Number(it.wooProductId) || null,
-      urlAgregarAlCarroWoo: it.urlAgregarAlCarroWoo || carroWoo.urlAgregarAlCarroWoo,
-    })),
+    items: itemsCarrito.map((it) => {
+      const tallaItem = clasificarTallaLogisticaRepuesto(it);
+      return {
+        skuPublicoFrp: it.skuPublicoFrp,
+        nombre: it.nombre,
+        fabricante: it.fabricante || 'OEM',
+        origen: it.origen || 'soluparts_ailoo',
+        proveedorNombre: 'FácilRepuestos SpA',
+        cantidad: Number(it.cantidad || 1),
+        precioVentaNeto: Number(it.precioVentaNeto || 0),
+        precioVentaConIva: Number(it.precioVentaConIva || 0),
+        tallaLogistica: it.tallaLogistica || tallaItem.tallaLogistica,
+        pesoTarifableKg: it.pesoTarifableKg || tallaItem.pesoTarifableKg,
+        wooProductId: Number(it.wooProductId) || null,
+        urlAgregarAlCarroWoo: it.urlAgregarAlCarroWoo || carroWoo.urlAgregarAlCarroWoo,
+      };
+    }),
     modalidadEntrega,
     comunaEntrega,
     sucursalRetiro:
       modalidadEntrega === 'retiro_bodega'
-        ? 'Sucursal FácilRepuestos: Enrique Olivares 224, La Florida, Santiago de Chile'
-        : 'Despacho a Domicilio FácilRepuestos (Santiago y todo Chile)',
+        ? `Sucursal FácilRepuestos: ${cotizacionDespachoEfectiva?.nodoOrigen?.direccion || 'Enrique Olivares 224, La Florida, Santiago de Chile'}`
+        : `${cotizacionDespachoEfectiva?.tituloTarifa || 'Despacho Pre-Pagado FácilRepuestos'} (Salida: ${cotizacionDespachoEfectiva?.nodoOrigen?.direccion || 'Enrique Olivares 224, La Florida'})`,
+    cotizacionDespacho: cotizacionDespachoEfectiva,
+    costoDespachoConIva,
+    subtotalRepuestosConIva,
     metodoPagoSimulado,
     estadoPago: 'pendiente_simulacion',
     estadoLogistico: 'reservado_en_bodega',
@@ -1281,6 +1318,7 @@ async function crearPedidoSimuladoAgente({
     createdAt: now,
     updatedAt: now,
   };
+
 
   const pedRef = await db.collection(COLECCION_PEDIDOS_AGENTE).add(nuevoPedido);
   const pedidoFinal = { id: pedRef.id, ...nuevoPedido };
@@ -1450,6 +1488,7 @@ async function ejecutarCascadaAgenteOmnicanal({
   let compraFuePausada = false;
   let estadoFlujoCompra = sesion.flujoCompra || null;
   const pidioComprarAhora = esIntencionComprar(textoBruto);
+  const nodosDespachoActivos = await obtenerNodosDespachoActivos(db);
   if (
     modoForzado === 'auto' &&
     (Boolean(estadoFlujoCompra?.paso) || pidioComprarAhora)
@@ -1460,7 +1499,9 @@ async function ejecutarCascadaAgenteOmnicanal({
       carritoActual,
       esComandoComprar: pidioComprarAhora,
       crearPedidoRealFn: crearPedidoSimuladoAgente,
+      nodosDespachoActivos,
     });
+
 
     if (resFlujo.interceptado) {
       return {
@@ -1633,17 +1674,31 @@ async function ejecutarCascadaAgenteOmnicanal({
         `• 1x **${it.nombre}** (\`${it.skuPublicoFrp}\`) — **$${Number(it.precioVentaConIva).toLocaleString('es-CL')} IVA inc.**`
     );
 
+    const cotizacionRef = cotizarDespachoAnticipado({
+      direccionOComuna: nombreComuna,
+      itemsCarrito: carritoActual,
+      nodosActivos: nodosDespachoActivos,
+      modalidad: 'Despacho a domicilio',
+    });
+    const costoEnvioRef = Number(cotizacionRef.costoDespachoConIva || 0);
+    const dimRef = cotizacionRef.volumetria?.dimensionesReferencialesCm || { largo: 32, ancho: 25, alto: 18 };
+    const tallaRef = cotizacionRef.volumetria?.tallaConsolidada || 'S';
+
     const textoLogistica = esRM
-      ? `📍 Para **${nombreComuna}** gestionamos directamente tu entrega con dos opciones:\n` +
-        `1️⃣ **Retiro Gratis en Tienda FácilRepuestos:** **Enrique Olivares 224, La Florida, Santiago de Chile**.\n` +
-        `2️⃣ **Despacho a domicilio en todo Santiago (RM) y todo Chile.**`
-      : `🚚 Para **${nombreComuna}** despachamos directamente desde FácilRepuestos a todo Chile vía **Starken, Chilexpress o Blue Express** (o puedes retirar en nuestra sucursal en **Enrique Olivares 224, La Florida, Santiago de Chile**).`;
+      ? `📍 Para **${nombreComuna}** gestionamos directamente tu entrega desde nuestro taller en **${cotizacionRef.nodoOrigen?.direccion || 'Enrique Olivares 224, La Florida'}** con dos opciones:\n` +
+        `1️⃣ **Retiro Gratis en Taller FácilRepuestos:** **Enrique Olivares 224, La Florida, Santiago** ($0).\n` +
+        `2️⃣ **Delivery Propio en Furgón (${cotizacionRef.medioTransporte || 'Peugeot Partner'}):** **$${costoEnvioRef.toLocaleString('es-CL')} IVA inc.** (Anillo ${cotizacionRef.anillo || 2} RM · Caja Talla ${tallaRef} ${dimRef.largo}×${dimRef.ancho}×${dimRef.alto} cm · ${cotizacionRef.tiempoEstimado}).`
+      : `🚚 Para **${nombreComuna}** despachamos **100% pre-pagado** saliendo desde **${cotizacionRef.nodoOrigen?.direccion || 'Enrique Olivares 224, La Florida'}** vía **${cotizacionRef.medioTransporte || 'Starken / Courier'}**:\n` +
+        `• **Valor Despacho Pre-Pagado (${cotizacionRef.nombreZona || 'Regiones'} — Talla ${tallaRef}):** **$${costoEnvioRef.toLocaleString('es-CL')} IVA inc.** (${cotizacionRef.tiempoEstimado}, sin cobros sorpresa al recibir).\n` +
+        `• O **Retiro Gratis ($0)** en nuestra sucursal en **Enrique Olivares 224, La Florida, Santiago**.`;
 
     const respuestaTexto =
       `¡Excelente! ${textoLogistica}\n\n` +
-      `🧾 **Perfecto, entonces tu pedido sería:**\n${lineas.join('\n')}\n` +
-      `• **Total Repuestos:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
-      `👉 Escribe **COMPRAR** o presiona el botón **"🛒 Confirmar Pedido (Sandbox)"** para reservar tu stock ahora mismo (sin necesidad de tarjeta de crédito real).`;
+      `🧾 **Resumen de tu cotización:**\n${lineas.join('\n')}\n` +
+      `• **Subtotal Repuestos:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n` +
+      `• **Total con Despacho a ${nombreComuna}:** **$${(totalIva + costoEnvioRef).toLocaleString('es-CL')} IVA inc.**\n\n` +
+      `👉 Escribe **COMPRAR** para confirmar tu pedido ahora mismo.`;
+
 
     return {
       vehiculoDetectado: sesion.vehiculoContexto || null,
@@ -3397,4 +3452,129 @@ router.post('/config-meta', async (req, res, next) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GET y POST /api/agente-omnicanal/nodos-despacho
+// Administración de Talleres / Nodos de Despacho (Multi-Hub: Enrique Olivares 224 + futuros talleres)
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/nodos-despacho', async (_req, res, next) => {
+  try {
+    const nodos = await obtenerNodosDespachoActivos(db);
+    res.json({
+      success: true,
+      data: {
+        nodos,
+        tallasLogisticas: TALLAS_LOGISTICAS,
+        tarifasRmAnillos: TARIFAS_RM_ANILLOS,
+        macrozonasRegiones: MACROZONAS_REGIONES,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/nodos-despacho', async (req, res, next) => {
+  try {
+    const {
+      id,
+      nombre,
+      direccion,
+      comuna,
+      region = 'Región Metropolitana',
+      vehiculoFlota = 'Peugeot Partner / Furgón Utilitario',
+      activo = true,
+      esPrincipal = false,
+      coberturaAnillos = null,
+    } = req.body || {};
+
+    if (!nombre || !direccion || !comuna) {
+      return res.status(400).json({
+        success: false,
+        error: 'Se requieren nombre, direccion y comuna del taller/nodo de despacho.',
+      });
+    }
+
+    const docId =
+      id ||
+      `hub-${String(comuna)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')}-${Date.now().toString().slice(-4)}`;
+
+    const payload = {
+      id: docId,
+      nombre: String(nombre).trim(),
+      direccion: String(direccion).trim(),
+      comuna: String(comuna).trim(),
+      region: String(region).trim(),
+      vehiculoFlota: String(vehiculoFlota).trim(),
+      activo: Boolean(activo),
+      esPrincipal: Boolean(esPrincipal),
+      permiteRetiroTienda: true,
+      permiteDeliveryExpress: true,
+      coberturaAnillos: coberturaAnillos || NODOS_DESPACHO_DEFAULT[0].coberturaAnillos,
+      actualizadoEn: new Date().toISOString(),
+    };
+
+    await db.collection('nodos_despacho').doc(docId).set(payload, { merge: true });
+    const nodos = await obtenerNodosDespachoActivos(db);
+
+    res.json({
+      success: true,
+      data: {
+        nodoGuardado: payload,
+        nodosActivos: nodos,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/agente-omnicanal/cotizar-despacho
+// Cotiza en tiempo real el valor de despacho pre-pagado según dirección/comuna y carrito
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/cotizar-despacho', async (req, res, next) => {
+  try {
+    const {
+      direccionOComuna = '',
+      items = [],
+      modalidad = 'Despacho a domicilio',
+    } = req.body || {};
+    const nodosActivos = await obtenerNodosDespachoActivos(db);
+    const cotizacion = cotizarDespachoAnticipado({
+      direccionOComuna,
+      itemsCarrito: Array.isArray(items) && items.length > 0 ? items : [{ nombre: 'Repuesto Estándar' }],
+      nodosActivos,
+      modalidad,
+    });
+    res.json({
+      success: true,
+      data: cotizacion,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/agente-omnicanal/sincronizar-zonas-woo
+// Configura las Zonas de Despacho en WooCommerce (RM Furgón desde Enrique Olivares 224 + Regiones Prepagado)
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/sincronizar-zonas-woo', async (_req, res, next) => {
+  try {
+    const resultado = await sincronizarZonasDespachoWooCommerce();
+    res.json({
+      success: true,
+      data: resultado,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;
+
+

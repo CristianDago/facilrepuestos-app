@@ -6,6 +6,11 @@ import {
   resolverRutaCategoriasTienda,
 } from './categoriasTaxonomia.js';
 import { resolverImagenEfectivaProducto } from './catalogoImagenesService.js';
+import {
+  clasificarTallaLogisticaRepuesto,
+  cotizarDespachoAnticipado,
+} from './logisticaTarifarioService.js';
+
 
 export { ARBOL_CATEGORIAS_TIENDA, resolverRutaCategoriasTienda };
 
@@ -369,6 +374,7 @@ function construirPayload(id, item, obtenerCategoriasItem, esNuevo, puedeAgregar
   const rutaCategorias = resolverRutaCategoriasTienda(item);
   const rutaTexto = rutaCategorias.join(' > ');
   const categories = typeof obtenerCategoriasItem === 'function' ? obtenerCategoriasItem(item) : [];
+  const tallaInfo = clasificarTallaLogisticaRepuesto(item);
 
   const payload = {
     name: item.nombre,
@@ -377,6 +383,12 @@ function construirPayload(id, item, obtenerCategoriasItem, esNuevo, puedeAgregar
     manage_stock: true,
     stock_quantity: disponible,
     stock_status: disponible > 0 ? 'instock' : 'outofstock',
+    weight: String(item.pesoTarifableKg || tallaInfo.pesoTarifableKg || 2.5),
+    dimensions: {
+      length: String(item.dimensionesCm?.largo || tallaInfo.dimensionesCm.largo || 32),
+      width: String(item.dimensionesCm?.ancho || tallaInfo.dimensionesCm.ancho || 25),
+      height: String(item.dimensionesCm?.alto || tallaInfo.dimensionesCm.alto || 18),
+    },
     categories,
     meta_data: [
       { key: '_drmotors_inventario_id', value: id },
@@ -384,8 +396,10 @@ function construirPayload(id, item, obtenerCategoriasItem, esNuevo, puedeAgregar
       { key: '_frp_proveedor_id', value: String(item.proveedorId || 'local') },
       { key: '_frp_categoria_jerarquia', value: rutaTexto },
       { key: '_frp_categoria_ruta', value: rutaTexto },
+      { key: '_frp_talla_logistica', value: String(item.tallaLogistica || tallaInfo.tallaLogistica || 'S') },
     ],
   };
+
 
   if (esNuevo || item.wooSyncMotivo === 'enriquecimiento_compatibilidad_ia') {
     payload.description = descripcionDeItem(item);
@@ -944,9 +958,17 @@ export async function crearPedidoPendienteWooCommerce({
   vehiculo = null,
   codigoPedidoFrp = '',
   clienteTelefono = '',
+  cotizacionDespacho = null,
 }) {
   const linksCarro = construirLinksCarroWooCommerce(items);
   const conWooId = (Array.isArray(items) ? items : []).filter((it) => Number(it?.wooProductId) > 0);
+  const cotizacionEfectiva =
+    cotizacionDespacho ||
+    cotizarDespachoAnticipado({
+      direccionOComuna: comunaEntrega,
+      itemsCarrito: items,
+      modalidad: modalidadEntrega === 'retiro_bodega' ? 'Retiro en tienda' : 'Despacho a domicilio',
+    });
 
   if (!isWooConfigured() || conWooId.length === 0) {
     return {
@@ -956,6 +978,7 @@ export async function crearPedidoPendienteWooCommerce({
       urlPagoCheckoutWoo: linksCarro.urlCarroPrincipal,
       urlAgregarAlCarroWoo: linksCarro.urlCarroPrincipal,
       enlacesPorItem: linksCarro.enlacesPorItem,
+      cotizacionDespacho: cotizacionEfectiva,
     };
   }
 
@@ -966,8 +989,9 @@ export async function crearPedidoPendienteWooCommerce({
     const lastName = partesNombre.slice(1).join(' ') || 'FácilRepuestos';
     const direccion =
       modalidadEntrega === 'retiro_bodega'
-        ? 'Retiro en Sucursal FácilRepuestos (Enrique Olivares 224, La Florida)'
+        ? `Retiro en Sucursal FácilRepuestos (${cotizacionEfectiva?.nodoOrigen?.direccion || 'Enrique Olivares 224, La Florida'})`
         : String(comunaEntrega || 'Santiago');
+    const costoEnvioIva = Number(cotizacionEfectiva?.costoDespachoConIva || 0);
 
     const payload = {
       status: 'pending',
@@ -976,6 +1000,8 @@ export async function crearPedidoPendienteWooCommerce({
         documentoTributario ? `Documento: ${documentoTributario}` : '',
         datosCliente?.rut ? `RUT: ${datosCliente.rut}` : '',
         vehiculo?.patente ? `Patente: ${vehiculo.patente} (${vehiculo.marca || ''} ${vehiculo.modelo || ''})` : '',
+        cotizacionEfectiva?.nodoOrigen?.direccion ? `Origen Despacho: ${cotizacionEfectiva.nodoOrigen.direccion}` : '',
+        cotizacionEfectiva?.volumetria?.tallaConsolidada ? `Talla Caja: ${cotizacionEfectiva.volumetria.tallaConsolidada} (~${cotizacionEfectiva.volumetria.pesoTarifableConsolidadoKg} kg)` : '',
       ]
         .filter(Boolean)
         .join(' | '),
@@ -983,8 +1009,8 @@ export async function crearPedidoPendienteWooCommerce({
         first_name: firstName,
         last_name: lastName,
         address_1: direccion,
-        city: comunaEntrega || 'Santiago',
-        state: 'RM',
+        city: cotizacionEfectiva?.comunaDetectada || comunaEntrega || 'Santiago',
+        state: cotizacionEfectiva?.esRegionMetropolitana === false ? 'Regiones' : 'RM',
         country: 'CL',
         email: datosCliente?.email || 'ventas@facilrepuestos.cl',
         phone: String(clienteTelefono || '').replace(/[^\d+]/g, '') || '+56900000000',
@@ -993,22 +1019,37 @@ export async function crearPedidoPendienteWooCommerce({
         first_name: firstName,
         last_name: lastName,
         address_1: direccion,
-        city: comunaEntrega || 'Santiago',
-        state: 'RM',
+        city: cotizacionEfectiva?.comunaDetectada || comunaEntrega || 'Santiago',
+        state: cotizacionEfectiva?.esRegionMetropolitana === false ? 'Regiones' : 'RM',
         country: 'CL',
       },
       line_items: conWooId.map((it) => ({
         product_id: Number(it.wooProductId),
         quantity: Math.max(1, Number(it.cantidad || 1)),
       })),
+      shipping_lines: [
+        {
+          method_id: modalidadEntrega === 'retiro_bodega' ? 'local_pickup' : 'flat_rate',
+          method_title:
+            cotizacionEfectiva?.tituloTarifa ||
+            (modalidadEntrega === 'retiro_bodega'
+              ? 'Retiro Gratis en Enrique Olivares 224, La Florida'
+              : 'Despacho Pre-Pagado FácilRepuestos'),
+          total: String(costoEnvioIva),
+        },
+      ],
       meta_data: [
         { key: '_frp_codigo_pedido', value: String(codigoPedidoFrp || '') },
         { key: '_frp_rut_cliente', value: String(datosCliente?.rut || '') },
         { key: '_frp_documento_tributario', value: String(documentoTributario || 'BOLETA') },
         { key: '_frp_modalidad_entrega', value: String(modalidadEntrega || 'retiro_bodega') },
         { key: '_frp_patente_vehiculo', value: String(vehiculo?.patente || '') },
+        { key: '_frp_nodo_origen_despacho', value: String(cotizacionEfectiva?.nodoOrigen?.direccion || 'Enrique Olivares 224, La Florida, Santiago') },
+        { key: '_frp_talla_logistica', value: String(cotizacionEfectiva?.volumetria?.tallaConsolidada || 'S') },
+        { key: '_frp_costo_despacho_iva', value: String(costoEnvioIva) },
       ],
     };
+
 
     const ordenWoo = await wcFetch('/orders', {
       method: 'POST',

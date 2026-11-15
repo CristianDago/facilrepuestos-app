@@ -3,6 +3,15 @@ import { db } from '../config/firebase.js';
 import { ARBOL_CATEGORIAS_TIENDA, normCat } from '../services/categoriasTaxonomia.js';
 import { construirLinksCarroWooCommerce, obtenerUrlBaseTiendaWoo } from '../services/woocommerceSync.js';
 import { resolverImagenEfectivaProducto } from '../services/catalogoImagenesService.js';
+import {
+  TALLAS_LOGISTICAS,
+  TARIFAS_RM_ANILLOS,
+  MACROZONAS_REGIONES,
+  clasificarTallaLogisticaRepuesto,
+  cotizarDespachoAnticipado,
+  obtenerNodosDespachoActivos,
+} from '../services/logisticaTarifarioService.js';
+
 
 const router = Router();
 
@@ -108,6 +117,7 @@ function sanitizarItem(doc) {
   const baseUrl = obtenerUrlBaseTiendaWoo();
   const skuPublicoFrp = d.skuPublicoFrp || d.codigo || '';
   const imgEfectiva = resolverImagenEfectivaProducto(d);
+  const infoTalla = clasificarTallaLogisticaRepuesto(d);
 
   return {
     id,
@@ -132,8 +142,12 @@ function sanitizarItem(doc) {
     disponible,
     enStock: disponible > 0,
     ocultarEnTienda: Boolean(d.ocultarEnTienda),
+    tallaLogistica: d.tallaLogistica || infoTalla.tallaLogistica,
+    pesoTarifableKg: d.pesoTarifableKg || infoTalla.pesoTarifableKg,
+    dimensionesCm: d.dimensionesCm || infoTalla.dimensionesCm,
     imagenUrl: imgEfectiva.url,
     esFotoPropiaOem: imgEfectiva.esFotoPropiaOem,
+
     wooProductId,
     urlProductoWoo: wooProductId
       ? `${baseUrl}/?p=${wooProductId}`
@@ -400,4 +414,47 @@ router.get('/inventario/:id', requireApiKey, async (req, res, next) => {
   }
 });
 
+// GET /api/public/tarifario-logistica — devuelve los nodos/talleres activos y la matriz de tarifas RM + Regiones
+router.get('/tarifario-logistica', async (_req, res, next) => {
+  try {
+    const nodos = await obtenerNodosDespachoActivos(db);
+    res.json({
+      success: true,
+      data: {
+        nodosDespacho: nodos,
+        tallasLogisticas: TALLAS_LOGISTICAS,
+        tarifasRmAnillos: TARIFAS_RM_ANILLOS,
+        macrozonasRegiones: MACROZONAS_REGIONES,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/public/cotizar-despacho — cotizador público para WordPress / WooCommerce y widgets
+router.post('/cotizar-despacho', async (req, res, next) => {
+  try {
+    const {
+      direccionOComuna = '',
+      items = [],
+      modalidad = 'Despacho a domicilio',
+    } = req.body || {};
+    const nodosActivos = await obtenerNodosDespachoActivos(db);
+    const cotizacion = cotizarDespachoAnticipado({
+      direccionOComuna,
+      itemsCarrito: Array.isArray(items) && items.length > 0 ? items : [{ nombre: 'Repuesto Estándar' }],
+      nodosActivos,
+      modalidad,
+    });
+    res.json({
+      success: true,
+      data: cotizacion,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;
+

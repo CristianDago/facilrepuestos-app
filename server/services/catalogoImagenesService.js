@@ -250,58 +250,15 @@ export function extraerCodigoOemDeProducto(item = {}) {
  * Busca en la web pública una fotografía limpia (`.jpg` / `.png` / `.webp`) para un código OEM o pieza+motor,
  * verificando que responda HTTP 200 y sea compatible con la subida de medios de WordPress/WooCommerce.
  */
-export async function buscarImagenOemWebPorConsulta(queryTexto) {
-  if (!queryTexto) return null;
-  try {
-    const q = encodeURIComponent(queryTexto);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(`https://www.bing.com/images/search?q=${q}&form=HDRSC2&first=1`, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'Accept-Language': 'es-CL,es;q=0.9,en;q=0.8',
-      },
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!res.ok) return null;
-
-    const html = await res.text();
-    const candidatos = [
-      ...html.matchAll(/murl&quot;:&quot;(https?:\/\/[^&?]+?\.(?:jpg|jpeg|png|webp))&quot;/gi),
-    ]
-      .map((m) => m[1])
-      .filter(
-        (u) =>
-          !/logo|banner|icon|avatar|placeholder|diagram|schema|manual/i.test(u) &&
-          u.length < 220
-      );
-
-    // Verificar los primeros 5 candidatos con una petición rápida para asegurar que el servidor origen no bloquee descarga
-    for (const url of candidatos.slice(0, 6)) {
-      try {
-        const c2 = new AbortController();
-        const t2 = setTimeout(() => c2.abort(), 3000);
-        const check = await fetch(url, {
-          method: 'HEAD',
-          headers: { 'User-Agent': 'WordPress/6.6; https://facilrepuestos.cl' },
-          signal: c2.signal,
-        });
-        clearTimeout(t2);
-        const ct = String(check.headers.get('content-type') || '').toLowerCase();
-        if (check.ok && ct.startsWith('image/')) {
-          return url;
-        }
-      } catch {
-        // Probar siguiente candidato
-      }
-    }
-  } catch {
-    // Ignorar error de red puntual
-  }
+/**
+ * Deshabilitado por política de calidad visual: nunca usar fotos externas de buscadores web (Bing)
+ * que puedan contener marcas de agua de terceros (ej. desarmadurías externas).
+ * Todo producto sin foto de proveedor debe usar la foto homóloga de estudio #FFFFFF de nuestro propio catálogo.
+ */
+export async function buscarImagenOemWebPorConsulta(_queryTexto) {
   return null;
 }
+
 
 /**
  * ETAPA 1: Devuelve la imagen efectiva para un producto:

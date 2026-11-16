@@ -735,7 +735,22 @@ function normalizarTextoAutomotriz(texto = '') {
     [/\b(SOPORTE\s+DE\s+HUESO|HUESITO)\b/gi, 'SOPORTE MOTOR TRASERO'],
     [/\b(BULBO|VULVO)\s+(DE\s+)?TEMPERATURA\b/gi, 'SENSOR TEMPERATURA'],
     [/\bESTREMOS\b/gi, 'EXTREMO TERMINAL'],
-    [/\bPARACHOQUES\b/gi, 'PARACHOQUE'],
+    [/\b(ARACHOQUES?|PARACHOQUES?|PARACHOQ|PARACHOQE)\b/gi, 'PARACHOQUE'],
+    [/\bPARACHOQUE\s+FRONTAL\b/gi, 'PARACHOQUE DELANTERO'],
+    [/\b(LADO\s+)?(PILOTO|CHOFER|CONDUCTOR)\b/gi, 'IZQUIERDO LH'],
+    [/\b(LADO\s+)?(COPILOTO|ACOMPAÑANTE|ACOMPANANTE|PASAJERO)\b/gi, 'DERECHO RH'],
+    [/\bMENSULAS\b/gi, 'MENSULA'],
+    [/\bNEBLINEROS\b/gi, 'NEBLINERO'],
+    [/\bOPTICOS\b/gi, 'OPTICO'],
+    [/\bFOCOS\b/gi, 'FOCO'],
+    [/\bESPEJOS\b/gi, 'ESPEJO'],
+    [/\bTAPABARROS\b/gi, 'TAPABARRO'],
+    [/\bBANDEJAS\b/gi, 'BANDEJA'],
+    [/\bROTULAS\b/gi, 'ROTULA'],
+    [/\bBIELETAS\b/gi, 'BIELETA'],
+    [/\bCAZOLETAS\b/gi, 'CAZOLETA'],
+    [/\bTERMINALES\b/gi, 'TERMINAL'],
+    [/\bAXIALES\b/gi, 'AXIAL'],
     [/\bAMORTIGUADORES\b/gi, 'AMORTIGUADOR'],
     [/\bPASTILLA\s+DE\s+FRENOS?\b/gi, 'PASTILLAS DE FRENO'],
   ];
@@ -962,7 +977,7 @@ function extraerRepuestoYCategoria(texto = '', vehiculo = null) {
     categoria = 'Eléctrico';
   else if (/\b(HOMOCINETICA|TRIPOIDE|EJE|CAJA|TRANSMISION|PIOLA\s+CAMBIO|SELECTORA)\b/.test(upper))
     categoria = 'Transmisión';
-  else if (/\b(OPTICO|PARACHOQUE|CAPOT|TAPABARRO|ESPEJO|FOCO|MASCARA|MANILLA|PORTALON|NEBLINERO)\b/.test(upper))
+  else if (/\b(OPTICO|PARACHOQUE|CAPOT|TAPABARRO|ESPEJO|FOCO|MASCARA|MANILLA|PORTALON|NEBLINERO|MENSULA|FRONTAL|GRILLA|REJILLA)\b/.test(upper))
     categoria = 'Carrocería';
 
   const ignorar = new Set([
@@ -979,9 +994,13 @@ function extraerRepuestoYCategoria(texto = '', vehiculo = null) {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^A-Z0-9.\s-]/g, ' ')
     .split(/\s+/)
+    .map((tok) => tok.replace(/^[.-]+|[.-]+$/g, ''))
     .filter(Boolean);
   const tokensRepuesto = tokensTodo.filter(
-    (tok) => !ignorar.has(tok) && !/^\d{4}$/.test(tok) && tok.length >= 3
+    (tok) =>
+      !ignorar.has(tok) &&
+      !/^\d{4}$/.test(tok) &&
+      (tok.length >= 3 || tok === 'LH' || tok === 'RH')
   );
 
   const resumenRepuesto =
@@ -1005,7 +1024,7 @@ function extraerMultiplesRepuestos(texto = '', vehiculo = null) {
 
   // Separar por saltos de línea, viñetas, comas o conjunción " y " / " + " cuando separan piezas distintas
   const fragmentosBrutos = textoNorm
-    .split(/(?:\r?\n|[,;•*-]+|\s+\+\s+|\s+y\s+(?=(?:juego|kit|filtro|pastilla|disco|bujia|bobina|amortiguador|bandeja|correa|bomba|termostato|empaquetadura|homocinetica|cinta|optico|parachoque|espejo|radiador|sensor|soporte|maza|rodamiento|bieleta|terminal|axial|cremallera|piola|embrague|foco|neblinero|cazoleta|reten)\b))/i)
+    .split(/(?:\r?\n|[,;•*-]+|\s+\+\s+|\s+y\s+(?=(?:\d+\s+|par\s+de\s+)?(?:juego|kit|filtro|pastilla|disco|bujia|bobina|amortiguador|bandeja|correa|bomba|termostato|empaquetadura|homocinetica|cinta|optico|parachoque|espejo|radiador|sensor|soporte|maza|rodamiento|bieleta|terminal|axial|cremallera|piola|embrague|foco|neblinero|cazoleta|reten|mensula|capot|tapabarro|mascara|manilla|portalon|condensador|electroventilador|culata|valvula|piston|anillo|alternador|tambor|caliper|balata)\b))/i)
     .map((s) => s.trim())
     .filter((s) => s.length >= 3);
 
@@ -1104,7 +1123,7 @@ function esIntencionComprar(texto = '') {
   const limpio = String(texto || '').trim().toUpperCase();
   return (
     limpio === 'COMPRAR' ||
-    /\b(QUIERO\s+COMPRAR|CONFIRMAR\s+COMPRA|CONFIRMAR\s+PEDIDO|LO\s+COMPRO|GENERA\s+EL\s+LINK|ENVIAME\s+EL\s+LINK|MANDAME\s+EL\s+LINK)\b/.test(
+    /\b(QUIERO\s+COMPRAR|COMPRAR\s+TODO|COMPRAR\s+LO\s+QUE\s+HAY|CONFIRMAR\s+COMPRA|CONFIRMAR\s+PEDIDO|LO\s+COMPRO|LO\s+LLEVO|ME\s+LLEVO|ARMAME\s+EL\s+CARRO|GENERA\s+EL\s+CARRO|GENERA\s+EL\s+LINK|ENVIAME\s+EL\s+LINK|MANDAME\s+EL\s+LINK)\b/.test(
       limpio
     )
   );
@@ -1843,7 +1862,7 @@ async function ejecutarCascadaAgenteOmnicanal({
         ? `¡Hola! 👋 Tengo en pantalla tu **${vehiculo.marca} ${vehiculo.modelo || ''} ${
             vehiculo.anio || ''
           }**. Cuéntame, ¿qué repuesto andas buscando hoy?`
-        : '¡Hola! 👋 Bienvenido a **FácilRepuestos.cl**. Cuéntame, ¿qué repuesto andas buscando y para qué vehículo? Si tienes la **patente** a mano me la das y lo reviso al tiro.';
+        : '¡Hola! 👋 Bienvenido a **facilrepuestos.cl**. Cuéntame, ¿qué repuesto andas buscando y para qué vehículo? Si tienes la **patente** a mano me la das y lo reviso al tiro.';
     }
 
     // Registrar en CRM WhatsApp incluso si solo dio vehículo o repuesto parcial
@@ -1853,14 +1872,14 @@ async function ejecutarCascadaAgenteOmnicanal({
       subConsultas: repuestoPendienteNuevo ? [repuestoPendienteNuevo] : [],
     });
 
-    const respuestaNatural = await redactarRespuestaConGeminiLuna({
+    const respuestaNatural = (await redactarRespuestaConGeminiLuna({
       textoCliente: textoBruto,
       historialMensajes: sesion.mensajes || [],
       contextoSituacion: `INTENCIÓN DETECTADA: ${clasificacion.tipo}\nRESPUESTA BASE OBLIGATORIA A TRANSMITIR:\n${hechoBase}`,
       skusPermitidos: carritoActual.map((c) => c.skuPublicoFrp),
       respuestaFallback: hechoBase,
       intencion: clasificacion.tipo,
-    });
+    })).replace(/f[áa]cilrepuestos\.cl/gi, 'facilrepuestos.cl');
 
     return {
       vehiculoDetectado: vehiculo,
@@ -1950,10 +1969,114 @@ async function ejecutarCascadaAgenteOmnicanal({
     }
 
     // 3.A) Buscar en Catálogo Unificado Multi-Proveedor (`inventario`)
+    const PIEZAS_CLAVE_NOMBRE = [
+      'PARACHOQUE',
+      'NEBLINERO',
+      'MENSULA',
+      'OPTICO',
+      'AMORTIGUADOR',
+      'PASTILLAS',
+      'DISCO',
+      'BANDEJA',
+      'RADIADOR',
+      'EMBRAGUE',
+      'ESPEJO',
+      'CAPOT',
+      'TAPABARRO',
+      'MASCARA',
+      'FRONTAL',
+      'CULATA',
+      'ALTERNADOR',
+      'CREMALLERA',
+      'HOMOCINETICA',
+      'MAZA',
+      'ROTULA',
+      'BIELETA',
+      'TERMINAL',
+      'AXIAL',
+      'CAZOLETA',
+      'BUJIA',
+      'BOBINA',
+      'BOMBA',
+      'TERMOSTATO',
+      'FILTRO',
+      'SOPORTE',
+      'RETEN',
+      'EMPAQUETADURA',
+      'PISTON',
+      'ANILLO',
+      'VALVULA',
+      'CORREA',
+      'CADENA',
+      'TENSOR',
+      'CALIPER',
+      'TAMBOR',
+      'BALATA',
+      'MANILLA',
+      'PORTALON',
+    ];
+    const piezasClaveEnSub = sub.tokensRepuesto.filter((t) => PIEZAS_CLAVE_NOMBRE.includes(t));
+    const pideIzquierdo = sub.tokensRepuesto.includes('IZQUIERDO') || sub.tokensRepuesto.includes('LH');
+    const pideDerecho = sub.tokensRepuesto.includes('DERECHO') || sub.tokensRepuesto.includes('RH');
+    const pideDelantero = sub.tokensRepuesto.includes('DELANTERO') || sub.tokensRepuesto.includes('DELANTERA');
+    const pideTrasero = sub.tokensRepuesto.includes('TRASERO') || sub.tokensRepuesto.includes('TRASERA');
+    const pideParODos =
+      !pideIzquierdo &&
+      !pideDerecho &&
+      (/\b(2|DOS|PAR|AMBOS|AMBAS)\b/i.test(sub.fragmentoOriginal || '') ||
+        sub.tokensRepuesto.includes('MENSULA'));
+
+    const modeloVehRaw = String(vehiculo?.modelo || '').toUpperCase().trim();
+    const modeloBaseToken = modeloVehRaw.split(/[\s-]+/).filter(Boolean)[0] || '';
+    const equivalenciasModeloFamilia = {
+      JS2: ['JS2', 'S2'],
+      S2: ['S2', 'JS2'],
+      JS3: ['JS3', 'S3'],
+      S3: ['S3', 'JS3'],
+      JS4: ['JS4', 'S4'],
+      S4: ['S4', 'JS4'],
+    };
+    const tokensModeloAceptados = modeloBaseToken
+      ? equivalenciasModeloFamilia[modeloBaseToken] || [modeloBaseToken]
+      : [];
+
     const candidatosSub = itemsInventario
       .map((item) => {
         let scoreRepuesto = 0;
         let scoreVehiculo = 0;
+
+        const nombreItemNorm = String(item.nombre || '')
+          .toUpperCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
+
+        // Si la consulta menciona una pieza específica (ej. PARACHOQUE, NEBLINERO, MENSULA),
+        // exigir que el nombre del producto corresponda a esa pieza y no solo a su categoría.
+        if (piezasClaveEnSub.length > 0) {
+          const coincidePiezaEnNombre = piezasClaveEnSub.some((pieza) =>
+            nombreItemNorm.includes(pieza)
+          );
+          if (!coincidePiezaEnNombre) {
+            return { item, scoreRepuesto: -20, scoreVehiculo: 0, scoreTotal: -20 };
+          }
+          // Evitar que al pedir "PARACHOQUE" devuelva un "CROMADO PARACHOQUE" o "MARCO BISEL NEBLINERO"
+          if (
+            piezasClaveEnSub.includes('PARACHOQUE') &&
+            !sub.tokensRepuesto.includes('CROMADO') &&
+            !sub.tokensRepuesto.includes('MOLDURA') &&
+            /^(CROMADO|MOLDURA|SOPORTE|MENSULA|REJILLA)\b/.test(nombreItemNorm)
+          ) {
+            scoreRepuesto -= 12;
+          }
+          if (
+            piezasClaveEnSub.includes('NEBLINERO') &&
+            !sub.tokensRepuesto.includes('MARCO') &&
+            !sub.tokensRepuesto.includes('BISEL') &&
+            /^(MARCO|BISEL|TAPA)\b/.test(nombreItemNorm)
+          ) {
+            scoreRepuesto -= 12;
+          }
+        }
 
         const codigosEquivalentesStr = Array.isArray(item.equivalencias)
           ? item.equivalencias.map((e) => `${e.fabricante || ''} ${e.codigo || ''}`).join(' ')
@@ -1981,12 +2104,42 @@ async function ejecutarCascadaAgenteOmnicanal({
           item.fabricante,
         ]
           .join(' ')
-          .toUpperCase();
+          .toUpperCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '');
 
         for (const tok of sub.tokensRepuesto) {
-          if (textoItem.includes(tok)) {
-            scoreRepuesto += 4;
+          if (nombreItemNorm.includes(tok)) {
+            scoreRepuesto += 5;
+          } else if (textoItem.includes(tok)) {
+            scoreRepuesto += 3;
           }
+        }
+
+        // Filtro direccional Izquierdo (Piloto / LH) vs Derecho (Copiloto / RH)
+        const itemEsIzq = /\b(IZQUIERDO|IZQUIERDA|LH)\b/.test(nombreItemNorm);
+        const itemEsDer = /\b(DERECHO|DERECHA|RH)\b/.test(nombreItemNorm);
+        if (pideIzquierdo && !pideDerecho) {
+          if (itemEsDer && !itemEsIzq) scoreRepuesto -= 20;
+          if (itemEsIzq) scoreRepuesto += 6;
+        } else if (pideDerecho && !pideIzquierdo) {
+          if (itemEsIzq && !itemEsDer) scoreRepuesto -= 20;
+          if (itemEsDer) scoreRepuesto += 6;
+        }
+
+        // Filtro direccional Delantero (Frontal) vs Trasero
+        const itemEsDel = /\b(DELANTERO|DELANTERA)\b/.test(nombreItemNorm);
+        const itemEsTras = /\b(TRASERO|TRASERA)\b/.test(nombreItemNorm);
+        if (pideDelantero && !pideTrasero) {
+          if (itemEsTras && !itemEsDel) scoreRepuesto -= 20;
+          if (itemEsDel) scoreRepuesto += 5;
+        } else if (pideTrasero && !pideDelantero) {
+          if (itemEsDel && !itemEsTras) scoreRepuesto -= 20;
+          if (itemEsTras) scoreRepuesto += 5;
+        }
+
+        if (/\bCOMPLETO\b/.test(nombreItemNorm)) {
+          scoreRepuesto += 2;
         }
 
         const marcasItem = Array.isArray(item.marcasCompatibles)
@@ -2012,16 +2165,30 @@ async function ejecutarCascadaAgenteOmnicanal({
           if (marcasItem.includes(vehiculo.marca) || textoItem.includes(vehiculo.marca)) {
             scoreVehiculo += 4;
           } else if (marcasItem.length > 0) {
-            scoreVehiculo -= 6;
+            scoreVehiculo -= 10;
           }
         }
 
         if (vehiculo?.modelo) {
-          if (
+          const matchExactoBase =
+            modeloBaseToken &&
+            (modelosItem.includes(modeloBaseToken) ||
+              new RegExp(`\\b${modeloBaseToken}\\b`).test(nombreItemNorm));
+          const matchFamilia =
+            tokensModeloAceptados.some(
+              (tokMod) =>
+                modelosItem.includes(tokMod) ||
+                new RegExp(`\\b${tokMod}\\b`).test(nombreItemNorm)
+            ) ||
             modelosItem.some((m) => m.includes(vehiculo.modelo) || vehiculo.modelo.includes(m)) ||
-            textoItem.includes(vehiculo.modelo)
-          ) {
+            textoItem.includes(vehiculo.modelo);
+
+          if (matchExactoBase) {
+            scoreVehiculo += 8;
+          } else if (matchFamilia) {
             scoreVehiculo += 5;
+          } else if (modelosItem.length > 0) {
+            scoreVehiculo -= 8;
           }
         }
 
@@ -2036,11 +2203,11 @@ async function ejecutarCascadaAgenteOmnicanal({
         (c) =>
           c.scoreRepuesto >= 4 &&
           c.scoreVehiculo >= 0 &&
-          c.scoreTotal >= 5 &&
+          c.scoreTotal >= 8 &&
           Number(c.item.stock || 0) > 0
       )
       .sort((a, b) => b.scoreTotal - a.scoreTotal)
-      .slice(0, 2);
+      .slice(0, pideParODos ? 2 : 1);
 
     if (candidatosSub.length > 0) {
       for (const { item } of candidatosSub) {
@@ -2168,7 +2335,7 @@ async function ejecutarCascadaAgenteOmnicanal({
       (c) =>
         `• **${c.nombre}** (\`${c.skuPublicoFrp}\`) — Marca **${c.fabricante}** · Stock: **${c.stock} un.** · **$${c.precioVentaConIva.toLocaleString(
           'es-CL'
-        )} IVA inc.**\n  🛒 Carro directo en FácilRepuestos.cl: ${c.urlAgregarAlCarroWoo}`
+        )} IVA inc.**\n  🔎 Ver producto en web: ${c.urlProductoWoo}`
     );
 
     const notaAprendida =
@@ -2180,7 +2347,7 @@ async function ejecutarCascadaAgenteOmnicanal({
       respuestaTexto =
         `${notaRespuestasPrevias}¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** tenemos disponibilidad confirmada en FácilRepuestos:\n\n` +
         `${lineasOpciones.join('\n')}${notaAprendida}\n\n` +
-        `📍 Puedes comprar al instante haciendo clic en el **Carro de FácilRepuestos.cl** (Webpay / MercadoPago / Toku) o escribir **COMPRAR** aquí mismo para coordinar **Retiro sin costo en Enrique Olivares 224, La Florida** o **Despacho a todo Chile**.`;
+        `📍 Puedes revisar cada producto en el link web de arriba y, cuando confirmes lo que quieres llevar, escribe **COMPRAR** aquí mismo para armarte **un solo carro con todos tus productos** (con **Retiro sin costo en Enrique Olivares 224, La Florida** o **Despacho pre-pagado a todo Chile**).`;
     } else if (reglasAplicadasGlobal.length > 0) {
       const r = reglasAplicadasGlobal[0];
       const conIva = Math.round(r.precioVentaFrp || 0);
@@ -2413,13 +2580,13 @@ async function ejecutarCascadaAgenteOmnicanal({
         (c) =>
           `• ✅ **${c.nombre}** (\`${c.skuPublicoFrp}\`) — Stock: **${c.stock} un.** · **$${c.precioVentaConIva.toLocaleString(
             'es-CL'
-          )} IVA inc.**\n  🛒 Carro directo en FácilRepuestos.cl: ${c.urlAgregarAlCarroWoo}`
+          )} IVA inc.**\n  🔎 Ver producto en web: ${c.urlProductoWoo}`
       );
       respuestaTexto =
         `¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** revisé los ${subConsultas.length} repuestos de tu lista en FácilRepuestos:\n\n` +
         `📦 **Disponibles para entrega inmediata:**\n${lineasDisponibles.join('\n')}\n\n` +
-        `📲 **En gestión directa de abastecimiento (${resumenFaltantes}):** Ya activé nuestra **Mesa de Abastecimiento FácilRepuestos (\`#${solicitudWspCreada.codigoSolicitud}\`)** con nuestras bodegas asociadas para confirmarte precio en minutos.\n\n` +
-        `💡 Nosotros gestionamos y compramos todo directamente para entregarte con **Despacho en Santiago y todo Chile** o **Retiro en nuestra tienda en Enrique Olivares 224, La Florida, Santiago de Chile**. Puedes comprar los ítems en stock desde el carro de FácilRepuestos.cl o escribir **COMPRAR** aquí mismo.`;
+        `📲 **En búsqueda activa (${resumenFaltantes}):** Ya activé nuestra **Mesa de Abastecimiento FácilRepuestos (\`#${solicitudWspCreada.codigoSolicitud}\`)** con nuestras bodegas asociadas y te avisaremos por este mismo WhatsApp apenas sea encontrado.\n\n` +
+        `🛒 **No detenemos tu compra de lo que ya está en stock:** Puedes revisar cada producto en su link web y escribir **COMPRAR** aquí mismo para armarte **un solo carro con todos los productos disponibles** (con **Despacho a todo Chile** o **Retiro en Enrique Olivares 224, La Florida**), mientras seguimos buscando el repuesto pendiente.`;
     } else {
       respuestaTexto =
         `🚗 Identifiqué tu **${etiquetaVehiculo}**. Estamos verificando disponibilidad inmediata para **${resumenFaltantes}** en nuestra red de bodegas asociadas.\n\n` +
@@ -2453,6 +2620,9 @@ async function ejecutarCascadaAgenteOmnicanal({
   if (sufijoCompraPausada) {
     respuestaTexto = `${respuestaTexto}${sufijoCompraPausada}`;
   }
+
+  // Nunca usar tilde en facilrepuestos.cl para evitar error DNS (xn--fcilrepuestos-edb.cl) al hacer clic
+  respuestaTexto = String(respuestaTexto || '').replace(/f[áa]cilrepuestos\.cl/gi, 'facilrepuestos.cl');
 
   const escalamientosAbiertos = [...(sesion.escalamientosAbiertos || [])];
   if (escalamientoCreado && !escalamientosAbiertos.some((e) => e.id === escalamientoCreado.id)) {
@@ -2552,7 +2722,7 @@ router.post('/sesiones', async (req, res, next) => {
           autor: 'agente_ia',
           texto: vehiculoContexto
             ? `¡Hola! 👋 Ya identifiqué tu **${vehiculoContexto.marca} ${vehiculoContexto.modelo} ${vehiculoContexto.anio || ''}** (Patente \`${vehiculoContexto.patente}\`). ¿Qué repuesto necesitas cotizar hoy?`
-            : `¡Hola! 👋 Soy Repuestín, especialista de **FácilRepuestos.cl**. Cuéntame qué repuesto buscas y la **patente** de tu vehículo (o marca, modelo y año) para revisarlo al tiro.`,
+            : `¡Hola! 👋 Soy Repuestín, especialista de **facilrepuestos.cl**. Cuéntame qué repuesto buscas y la **patente** de tu vehículo (o marca, modelo y año) para revisarlo al tiro.`,
           creadoEn: now,
         },
       ],
@@ -3043,6 +3213,7 @@ export async function obtenerConfigMetaWhatsapp({ forceRefresh = false } = {}) {
  */
 function formatearTextoParaWhatsapp(texto = '') {
   return String(texto || '')
+    .replace(/f[áa]cilrepuestos\.cl/gi, 'facilrepuestos.cl')
     .replace(/\*\*([^*]+)\*\*/g, '*$1*')
     .replace(/`([^`]+)`/g, '$1')
     .trim();
@@ -3098,7 +3269,7 @@ export async function enviarRespuestaClienteMetaWhatsapp({
     to,
     type: 'text',
     text: {
-      preview_url: true,
+      preview_url: false,
       body: textoWsp.slice(0, 4090),
     },
   };

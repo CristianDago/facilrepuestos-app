@@ -383,10 +383,50 @@ export async function conducirFlujoCompraDeterministico({
     )
     .join('\n');
 
-  // Inicio del flujo COMPRAR
+  const faltantesPendientes = [
+    ...(Array.isArray(sesion.solicitudesWspAbiertas) ? sesion.solicitudesWspAbiertas : []).map(
+      (w) => `${w.resumenRepuesto || 'Repuesto'} (\`#${w.codigoSolicitud}\`)`
+    ),
+    ...(Array.isArray(sesion.escalamientosAbiertos) ? sesion.escalamientosAbiertos : []).map(
+      (e) => `${e.resumenRepuesto || 'Repuesto'} (Ticket \`${e.ticketRef}\`)`
+    ),
+  ];
+  const notaFaltanteEnBusqueda =
+    faltantesPendientes.length > 0
+      ? `\n\n🔎 **Repuesto pendiente en búsqueda (${faltantesPendientes.join(', ')}):** No detenemos la venta de los productos disponibles. El repuesto que falta sigue en búsqueda activa en nuestra Mesa de Abastecimiento y te avisaremos por este mismo WhatsApp apenas sea encontrado.`
+      : '';
+
+  // Inicio del flujo COMPRAR: arma de inmediato el carro consolidado en WooCommerce con todos los productos disponibles
   if (esComandoComprar) {
     const modalidadInicial = sesion.modalidadEntrega || null;
     const comunaInicial = sesion.comunaCliente || null;
+
+    let pedidoPreCreado = null;
+    if (typeof crearPedidoRealFn === 'function') {
+      try {
+        pedidoPreCreado = await crearPedidoRealFn({
+          sesion: {
+            ...sesion,
+            carritoCotizado: carritoActual,
+          },
+          modalidadEntrega: modalidadInicial || 'retiro_bodega',
+          comunaEntrega: comunaInicial || 'La Florida, Santiago (RM)',
+          documentoTributario: 'BOLETA',
+          datosCliente: {
+            nombre: sesion.clienteNombre || 'Cliente FácilRepuestos',
+            email: 'ventas@facilrepuestos.cl',
+          },
+        });
+      } catch {
+        // Ignorar si falla pre-creación
+      }
+    }
+
+    const linkCarroConsolidado =
+      pedidoPreCreado?.urlPagoCheckoutWoo ||
+      pedidoPreCreado?.urlCarroWooCommerce ||
+      carritoActual.find((it) => it.urlAgregarAlCarroWoo)?.urlAgregarAlCarroWoo ||
+      'https://facilrepuestos.cl/finalizar-compra/';
 
     if (!modalidadInicial) {
       const nuevoEstado = {
@@ -402,9 +442,12 @@ export async function conducirFlujoCompraDeterministico({
       return {
         interceptado: true,
         flujoCompra: nuevoEstado,
+        pedidoCreado: pedidoPreCreado || null,
         respuestaTexto:
-          `Perfecto, armemos tu pedido:\n${lineasResumen}\nSubtotal repuestos: **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
-          `¿Prefieres **Retiro sin costo en nuestro taller** (**Enrique Olivares 224, La Florida**) o **Despacho a domicilio** (calculado al tiro según tu comuna o región)?`,
+          `¡Perfecto! 🛒 Ya armé **un único carro consolidado** con todos tus repuestos disponibles:\n${lineasResumen}\n• **Subtotal repuestos en stock:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
+          `👉 **Ir a comprar todos tus productos juntos en facilrepuestos.cl:**\n${linkCarroConsolidado}` +
+          `${notaFaltanteEnBusqueda}\n\n` +
+          `📍 O si prefieres dejar listo el envío por aquí: ¿prefieres **Retiro sin costo en nuestro taller** (**Enrique Olivares 224, La Florida**) o **Despacho a domicilio** (calculado al tiro según tu comuna o región)?`,
         accionTomada: 'flujo_compra_paso_modalidad',
       };
     }
@@ -432,9 +475,12 @@ export async function conducirFlujoCompraDeterministico({
       return {
         interceptado: true,
         flujoCompra: nuevoEstado,
+        pedidoCreado: pedidoPreCreado || null,
         respuestaTexto:
-          `Perfecto, anoto tu pedido con **Despacho a domicilio**:\n${lineasResumen}\nSubtotal repuestos: **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
-          `Mándame tu **dirección de entrega** (calle, número y comuna/ciudad) para calcularte al tiro el valor exacto del despacho saliendo desde nuestro taller en **Enrique Olivares 224, La Florida**.`,
+          `¡Perfecto! 🛒 Ya armé **tu carro consolidado** con **Despacho a domicilio**:\n${lineasResumen}\n• **Subtotal repuestos en stock:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
+          `👉 **Ir a comprar todos tus productos juntos en facilrepuestos.cl:**\n${linkCarroConsolidado}` +
+          `${notaFaltanteEnBusqueda}\n\n` +
+          `📍 Mándame tu **dirección de entrega** (calle, número y comuna/ciudad) si quieres que te deje calculado el despacho exacto saliendo desde **Enrique Olivares 224, La Florida**.`,
         accionTomada: 'flujo_compra_paso_direccion',
       };
     }
@@ -442,8 +488,11 @@ export async function conducirFlujoCompraDeterministico({
     return {
       interceptado: true,
       flujoCompra: nuevoEstado,
+      pedidoCreado: pedidoPreCreado || null,
       respuestaTexto:
-        `Perfecto, anoto para retiro sin costo en nuestra sucursal (**Enrique Olivares 224, La Florida**):\n${lineasResumen}\nTotal: **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
+        `¡Perfecto! 🛒 Ya armé **tu carro consolidado** para retiro sin costo en nuestra sucursal (**Enrique Olivares 224, La Florida**):\n${lineasResumen}\n• **Total repuestos en stock:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
+        `👉 **Ir a comprar todos tus productos juntos en facilrepuestos.cl:**\n${linkCarroConsolidado}` +
+        `${notaFaltanteEnBusqueda}\n\n` +
         `¿Necesitas **boleta** o **factura**?`,
       accionTomada: 'flujo_compra_paso_documento',
     };
@@ -739,7 +788,7 @@ export async function conducirFlujoCompraDeterministico({
     const respuestaFinal =
       `¡Listo ${combinados.nombre.split(' ')[0]}! Tu pedido **\`${pedidoCreado.codigoPedido}\`**${
         pedidoCreado?.wooOrderId ? ` (Orden Web **#${pedidoCreado.wooOrderId}**)` : ''
-      } quedó creado:\n\n` +
+      } quedó creado con todos tus repuestos disponibles:\n\n` +
       `${lineasResumen}\n` +
       `- **Subtotal repuestos:** $${totalIva.toLocaleString('es-CL')} IVA inc.\n` +
       (costoEnvioFinal > 0
@@ -748,8 +797,9 @@ export async function conducirFlujoCompraDeterministico({
       `- **Documento:** ${estado.documento || 'BOLETA'} (RUT \`${combinados.rut}\`)\n` +
       `- **Entrega:** ${entregaTxt}\n` +
       `- **Total final a pagar:** **$${Number(pedidoCreado.totalConIva).toLocaleString('es-CL')} IVA inc.**\n\n` +
-      `🛒 **Paga seguro en tu Carro de Compra Oficial (Webpay / MercadoPago / Toku / Transferencia):**\n` +
-      `👉 ${linkCarroWoo}\n\n` +
+      `🛒 **Paga seguro tu Carro Consolidado en facilrepuestos.cl (Webpay / MercadoPago / Toku / Transferencia):**\n` +
+      `👉 ${linkCarroWoo}` +
+      `${notaFaltanteEnBusqueda}\n\n` +
       `Recuerda que el stock queda reservado al confirmar tu pago en el carro o enviándonos el comprobante por aquí.`;
 
 
@@ -859,7 +909,7 @@ export async function redactarRespuestaConGeminiLuna({
     if (!accessToken) return respuestaFallback;
 
     const horaCtx = obtenerContextoHoraChile();
-    const instruccionSistema = `Te llamas Repuestín y eres el asistente de ventas de mostrador de FácilRepuestos.cl en Chile. Atiendes directamente a clientes finales que buscan repuestos para su vehículo exclusivamente por WhatsApp.
+    const instruccionSistema = `Te llamas Repuestín y eres el asistente de ventas de mostrador de facilrepuestos.cl en Chile. Atiendes directamente a clientes finales que buscan repuestos para su vehículo exclusivamente por WhatsApp.
 Hablas como un vendedor experto de mostrador en Chile: directo, breve, amable y claro (máximo 3 a 5 líneas por respuesta). Tratas al cliente de "tú". Usas "tenemos", "te puedo ofrecer", "revisemos".
 
 REGLAS INQUEBRANTABLES (HEREDADAS DE LUNA SOLUPARTS):
@@ -869,10 +919,10 @@ REGLAS INQUEBRANTABLES (HEREDADAS DE LUNA SOLUPARTS):
 4. Si el cliente dio la patente o el vehículo pero aún no dice qué repuesto necesita, confírmale el vehículo identificado y pregúntale qué pieza anda buscando.
 5. Cuando ofrezcas productos con stock confirmado en [DATOS VERIFICADOS DEL SISTEMA]:
    - Muestra siempre el nombre del producto, su código SKU exacto entre backticks (ej. \`FRP-...\`) y su precio final CON IVA incluido en pesos chilenos.
-   - Si en los datos verificados viene un link de carro de compras (\`https://facilrepuestos.cl/?add-to-cart=...\`), mantenlo intacto para que el cliente pueda comprar con 1 clic en el carro de FácilRepuestos.cl o escribir **COMPRAR** por WhatsApp.
+   - Si en los datos verificados viene el link para ver el producto en la página (\`https://facilrepuestos.cl/?p=...\`), mantenlo intacto para que el cliente pueda verlo en facilrepuestos.cl (NUNCA escribas fácilrepuestos.cl con tilde) y dile que al confirmar escriba **COMPRAR** para armarle un solo carro con todos los productos.
    - Si quedan 5 unidades o menos, menciona la cantidad como dato sin presionar.
    - Recomienda el Retiro sin costo en nuestra sucursal ubicada en **Enrique Olivares 224, La Florida, Santiago** o **Despacho a domicilio pre-calculado** en Santiago (en nuestro furgón) y a todo Chile (con tarifa conocida antes de pagar según la talla del repuesto).
-6. NUNCA menciones nombres de proveedores mayoristas internos (jamás nombres a Soluparts, Global Repuestos ni bodegas externas). Todo el stock y la gestión son de FácilRepuestos.cl.
+6. NUNCA menciones nombres de proveedores mayoristas internos (jamás nombres a Soluparts, Global Repuestos ni bodegas externas). Todo el stock y la gestión son de facilrepuestos.cl (escrito siempre sin tilde cuando lleva .cl).
 7. Horario de nuestra sucursal (Enrique Olivares 224, La Florida): lunes a jueves de 9:30 a 18:00, viernes de 9:30 a 17:00 y sábados de 9:30 a 14:00. Domingos y festivos cerrado.
 8. Usa negritas (**texto**) solo para destacar el vehículo, el precio o la palabra **COMPRAR**. No uses títulos largos ni lenguaje robótico.`;
 

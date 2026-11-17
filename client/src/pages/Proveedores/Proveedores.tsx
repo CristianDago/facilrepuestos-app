@@ -1,310 +1,295 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../../store/useAppStore';
 import { proveedoresService } from '../../services/proveedores';
+import { woocommerceService } from '../../services/woocommerce';
 import type { Proveedor, TipoIntegracionProveedor } from '../../types';
-import { MARCAS_VEHICULOS } from '../../types';
-import { marcasVehiculoService } from '../../services/marcasVehiculo';
-import type { MarcaVehiculo } from '../../services/marcasVehiculo';
-import {
-  validarTelefonoChileno,
-  errorTelefono,
-  formatRut,
-} from '../../utils/validaciones';
-import Pagination from '../../components/ui/Pagination';
-import { usePagination } from '../../hooks/usePagination';
-import styles from './Proveedores.module.css';
+import { formatRut } from '../../utils/validaciones';
 
-const CATEGORIAS = [
-  'Frenos', 'Embrague', 'Motor', 'Suspensión',
-  'Distribución', 'Eléctrico', 'Transmisión', 'Carrocería',
-  'Filtros', 'Lubricantes', 'Neumáticos', 'General', 'Otros',
-];
-
-const TIPOS_INTEGRACION: {
-  value: TipoIntegracionProveedor;
-  label: string;
-  badge: string;
-  desc: string;
-  defaultPrefix: string;
-}[] = [
-  {
-    value: 'cotizacion_whatsapp',
-    label: '📲 Cotización WhatsApp en Vivo (Etapa 3)',
-    badge: '📲 WhatsApp Etapa 3',
-    desc: 'Sin ERP propio. Recibe solicitudes automáticas de cotización por WhatsApp cuando no hay stock en catálogo.',
-    defaultPrefix: 'FRP-WSP',
-  },
-  {
-    value: 'portal_erp_local',
-    label: '🏭 Portal Proveedor ERP Local (Etapa 1 y 2)',
-    badge: '🏭 Portal ERP Local',
-    desc: 'Sube su inventario al Portal Proveedor y responde escalamientos técnicos en su bandeja.',
-    defaultPrefix: 'FRP-LOC',
-  },
-  {
-    value: 'hibrido_erp_wsp',
-    label: '⚡ Híbrido (Portal ERP + Mesa WhatsApp)',
-    badge: '⚡ Híbrido ERP + WSP',
-    desc: 'Opera con catálogo en Portal ERP y además recibe cotizaciones urgentes por WhatsApp en vivo.',
-    defaultPrefix: 'FRP-LOC',
-  },
-  {
-    value: 'nodo_ailoo',
-    label: '🔗 Nodo Enterprise Ailoo (BigQuery Sync)',
-    badge: '🔗 Nodo Enterprise Ailoo',
-    desc: 'Sincronización corporativa bidireccional vía BigQuery (inventario + escalamientos expertos).',
-    defaultPrefix: 'FRP-AIL',
-  },
-];
-
-const emptyProveedor = (): Omit<Proveedor, 'id'> => ({
-  nombre: '',
-  rut: '',
-  contacto: '',
-  telefono: '',
-  email: '',
-  direccion: '',
-  categoria: 'Frenos',
-  categoriasEspecialidad: ['Frenos'],
-  marcas: [],
-  notas: '',
-  tipoIntegracion: 'cotizacion_whatsapp',
-  canalWspActivo: true,
-  margenPct: 28,
-  prefijoSku: 'FRP-WSP',
-  tiempoRespuestaPromMin: 5,
-});
+const rutToEmail = (rut: string) => {
+  const clean = (rut || '').replace(/\./g, '').replace(/-/g, '').toLowerCase();
+  return clean ? `${clean}@drmotors.internal` : 'sin-rut@drmotors.internal';
+};
 
 export default function Proveedores() {
   const navigate = useNavigate();
   const { proveedores, setProveedores, setLoading, notify } = useAppStore();
-  const [search, setSearch] = useState('');
-  const [filtrocat, setFiltrocat] = useState('');
-  const [filtroCanal, setFiltroCanal] = useState('');
-  const [modal, setModal] = useState(false);
+
+  const [filtroModo, setFiltroModo] = useState<
+    'todos' | 'portal_erp_local' | 'conexion_api_erp' | 'scraping_portal_b2b' | 'nodo_ailoo'
+  >('todos');
+  const [busqueda, setBusqueda] = useState('');
+
+  // Modal de Alta / Edición de Integración Técnica (Tenant ERP / API / Scraping)
+  const [modalAbierto, setModalAbierto] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<Omit<Proveedor, 'id'>>(emptyProveedor());
-  const [errorTel, setErrorTel] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  const [sincronizandoAiloo, setSincronizandoAiloo] = useState(false);
 
-  // Para agregar marcas personalizadas
-  const [marcaCustom, setMarcaCustom] = useState('');
-  const [marcasExtra, setMarcasExtra] = useState<string[]>([]);
-  const [marcasPersistidas, setMarcasPersistidas] = useState<MarcaVehiculo[]>([]);
-  const [guardandoMarca, setGuardandoMarca] = useState(false);
+  const [form, setForm] = useState({
+    nombre: '',
+    rut: '',
+    contacto: '',
+    email: '',
+    telefono: '',
+    direccion: '',
+    tipoIntegracion: 'portal_erp_local' as TipoIntegracionProveedor,
+    prefijoSku: 'FRP-TND',
+    margenPct: 30,
+    notas: '',
+    // Configuración API
+    apiTipo: 'rest_json' as 'rest_json' | 'bigquery_ailoo' | 'graphql' | 'xml_feed',
+    apiEndpointUrl: '',
+    apiKey: '',
+    apiFrecuenciaSync: 'Cada 30 minutos (Delta)',
+    // Configuración Scraping Portal B2B
+    scrapingPortalUrl: '',
+    scrapingUsuario: '',
+    scrapingClave: '',
+    scrapingModo: 'catalogo_completo' as 'catalogo_completo' | 'consulta_sku_demanda',
+    scrapingSelectorPrecio: '',
+    scrapingSelectorStock: '',
+    // Password opcional al crear nuevo Tenant ERP en 1 paso
+    passwordInicialTenant: '',
+  });
 
-  // Acceso al Panel Proveedor
+  // Modal de Credenciales / Acceso Usuario Tenant ERP
   const [accesoModal, setAccesoModal] = useState(false);
   const [accesoProveedor, setAccesoProveedor] = useState<Proveedor | null>(null);
   const [accesoPassword, setAccesoPassword] = useState('');
   const [dandoAcceso, setDandoAcceso] = useState(false);
 
-  useEffect(() => {
-    loadProveedores();
-    loadMarcas();
-  }, []);
-
-  const loadMarcas = async () => {
-    try {
-      const r = await marcasVehiculoService.getAll();
-      if (r.success && r.data) setMarcasPersistidas(r.data);
-    } catch {}
-  };
-
-  // Lista completa: fijas del sistema + las que se han ido agregando y guardando
-  const allMarcas = [
-    ...MARCAS_VEHICULOS.filter((m) => m !== 'OTRO'),
-    ...marcasPersistidas.map((m) => m.nombre).filter((n) => !MARCAS_VEHICULOS.includes(n)),
-  ];
-
   const loadProveedores = async () => {
     setLoading(true);
     try {
       const res = await proveedoresService.getAll();
-      if (res.success && res.data) setProveedores(res.data);
+      if (res.success && res.data) {
+        setProveedores(res.data);
+      }
     } catch {
-      notify('Error al cargar proveedores', 'error');
+      notify('Error al cargar integraciones y tenants ERP', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const openNuevo = () => {
+  useEffect(() => {
+    loadProveedores();
+  }, []);
+
+  // Filtrar solo proveedores/tiendas de integración técnica (excluyendo los contactos puros de Mesa WSP)
+  const integracionesTecnicas = useMemo(() => {
+    return proveedores.filter((p) => {
+      const tipo = p.tipoIntegracion || (p.uid ? 'portal_erp_local' : 'cotizacion_whatsapp');
+      if (tipo === 'cotizacion_whatsapp' && !p.uid && !p.configApi && !p.configScraping) {
+        return false;
+      }
+      if (filtroModo !== 'todos') {
+        if (filtroModo === 'conexion_api_erp') {
+          return tipo === 'conexion_api_erp' || tipo === 'nodo_ailoo';
+        }
+        return tipo === filtroModo;
+      }
+      return true;
+    });
+  }, [proveedores, filtroModo]);
+
+  const listaFiltrada = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return integracionesTecnicas;
+    return integracionesTecnicas.filter(
+      (p) =>
+        (p.nombre || '').toLowerCase().includes(q) ||
+        (p.rut || '').toLowerCase().includes(q) ||
+        (p.prefijoSku || '').toLowerCase().includes(q) ||
+        (p.configApi?.endpointUrl || '').toLowerCase().includes(q) ||
+        (p.configScraping?.portalUrl || '').toLowerCase().includes(q)
+    );
+  }, [integracionesTecnicas, busqueda]);
+
+  const abrirNuevo = (modoInicial: TipoIntegracionProveedor = 'portal_erp_local') => {
     setEditingId(null);
-    setForm(emptyProveedor());
-    setMarcasExtra([]);
-    setMarcaCustom('');
-    setErrorTel('');
-    setModal(true);
+    const prefijoDefault =
+      modoInicial === 'conexion_api_erp'
+        ? 'FRP-API'
+        : modoInicial === 'scraping_portal_b2b'
+        ? 'FRP-SCR'
+        : 'FRP-TND';
+    setForm({
+      nombre: '',
+      rut: '',
+      contacto: '',
+      email: '',
+      telefono: '',
+      direccion: '',
+      tipoIntegracion: modoInicial,
+      prefijoSku: prefijoDefault,
+      margenPct: 30,
+      notas: '',
+      apiTipo: 'rest_json',
+      apiEndpointUrl: '',
+      apiKey: '',
+      apiFrecuenciaSync: 'Cada 30 minutos (Delta)',
+      scrapingPortalUrl: '',
+      scrapingUsuario: '',
+      scrapingClave: '',
+      scrapingModo: 'catalogo_completo',
+      scrapingSelectorPrecio: '',
+      scrapingSelectorStock: '',
+      passwordInicialTenant: '',
+    });
+    setModalAbierto(true);
   };
 
-  const openEditar = (p: Proveedor) => {
-    setEditingId(p.id!);
-    const marcasFuente = p.marcas || p.marcasVehiculo || [];
-    const marcasConocidas = marcasFuente.filter((m) => allMarcas.includes(m));
-    const extra = marcasFuente.filter((m) => !allMarcas.includes(m));
-    const cats =
-      Array.isArray(p.categoriasEspecialidad) && p.categoriasEspecialidad.length > 0
-        ? p.categoriasEspecialidad
-        : p.categoria
-          ? [p.categoria]
-          : ['General'];
-
-    const tipoInt: TipoIntegracionProveedor =
-      p.tipoIntegracion ||
-      (p.nodoAilooId
-        ? 'nodo_ailoo'
-        : p.uid && p.canalWspActivo
-          ? 'hibrido_erp_wsp'
-          : p.uid
-            ? 'portal_erp_local'
-            : 'cotizacion_whatsapp');
-
+  const abrirEditar = (p: Proveedor) => {
+    setEditingId(p.id || null);
     setForm({
       nombre: p.nombre || '',
       rut: p.rut || '',
       contacto: p.contacto || '',
-      telefono: p.telefono || '',
       email: p.email || '',
+      telefono: p.telefono || '',
       direccion: p.direccion || '',
-      categoria: p.categoria || cats[0] || 'General',
-      categoriasEspecialidad: cats,
-      marcas: marcasConocidas,
+      tipoIntegracion: p.tipoIntegracion || 'portal_erp_local',
+      prefijoSku: p.prefijoSku || 'FRP-TND',
+      margenPct: Number(p.margenPct) || 30,
       notas: p.notas || '',
-      tipoIntegracion: tipoInt,
-      canalWspActivo:
-        p.canalWspActivo !== undefined
-          ? Boolean(p.canalWspActivo)
-          : tipoInt === 'cotizacion_whatsapp' || tipoInt === 'hibrido_erp_wsp',
-      margenPct: Number(p.margenPct) > 0 ? Number(p.margenPct) : 28,
-      prefijoSku:
-        p.prefijoSku ||
-        (tipoInt === 'nodo_ailoo' ? 'FRP-AIL' : tipoInt === 'cotizacion_whatsapp' ? 'FRP-WSP' : 'FRP-LOC'),
-      tiempoRespuestaPromMin: Number(p.tiempoRespuestaPromMin) > 0 ? Number(p.tiempoRespuestaPromMin) : 5,
-      nodoAilooId: p.nodoAilooId || null,
+      apiTipo: p.configApi?.tipo || 'rest_json',
+      apiEndpointUrl: p.configApi?.endpointUrl || '',
+      apiKey: p.configApi?.apiKey || '',
+      apiFrecuenciaSync: p.configApi?.frecuenciaSync || 'Cada 30 minutos (Delta)',
+      scrapingPortalUrl: p.configScraping?.portalUrl || '',
+      scrapingUsuario: p.configScraping?.usuarioPortal || '',
+      scrapingClave: p.configScraping?.clavePortal || '',
+      scrapingModo: p.configScraping?.modoExtraccion || 'catalogo_completo',
+      scrapingSelectorPrecio: p.configScraping?.selectorPrecio || '',
+      scrapingSelectorStock: p.configScraping?.selectorStock || '',
+      passwordInicialTenant: '',
     });
-    setMarcasExtra(extra);
-    setMarcaCustom('');
-    setErrorTel('');
-    setModal(true);
+    setModalAbierto(true);
   };
 
-  const toggleMarca = (marca: string) => {
-    const current = form.marcas || [];
-    if (current.includes(marca)) {
-      setForm((prev) => ({ ...prev, marcas: current.filter((m) => m !== marca) }));
-    } else {
-      setForm((prev) => ({ ...prev, marcas: [...current, marca] }));
-    }
-  };
-
-  const toggleCategoriaEspecialidad = (cat: string) => {
-    const actuales = form.categoriasEspecialidad || [];
-    let nuevas: string[];
-    if (actuales.includes(cat)) {
-      nuevas = actuales.filter((c) => c !== cat);
-      if (nuevas.length === 0) nuevas = ['General'];
-    } else {
-      nuevas = [...actuales, cat];
-    }
-    setForm((prev) => ({
-      ...prev,
-      categoriasEspecialidad: nuevas,
-      categoria: nuevas[0] || prev.categoria || 'General',
-    }));
-  };
-
-  const handleChangeTipoIntegracion = (nuevoTipo: TipoIntegracionProveedor) => {
-    const info = TIPOS_INTEGRACION.find((t) => t.value === nuevoTipo);
-    const activarWsp = nuevoTipo === 'cotizacion_whatsapp' || nuevoTipo === 'hibrido_erp_wsp';
-    setForm((prev) => ({
-      ...prev,
-      tipoIntegracion: nuevoTipo,
-      canalWspActivo: activarWsp,
-      prefijoSku: info?.defaultPrefix || prev.prefijoSku || 'FRP-LOC',
-    }));
-  };
-
-  const handleToggleWspDirecto = async (p: Proveedor) => {
-    if (!p.id) return;
-    const nuevoEstado = !p.canalWspActivo;
-    try {
-      await proveedoresService.update(p.id, {
-        ...p,
-        canalWspActivo: nuevoEstado,
-      });
-      notify(
-        nuevoEstado
-          ? `📲 ${p.nombre} activado en Mesa WhatsApp (Etapa 3)`
-          : `Canal WhatsApp pausado para ${p.nombre}`,
-        'success'
-      );
-      loadProveedores();
-    } catch {
-      notify('Error al actualizar estado de WhatsApp', 'error');
-    }
-  };
-
-  const agregarMarcaCustom = async () => {
-    const m = marcaCustom.trim().toUpperCase();
-    if (!m) return;
-    if (allMarcas.includes(m) || marcasExtra.includes(m) || form.marcas.includes(m)) {
-      notify('Esa marca ya está en la lista', 'error');
+  const handleGuardarIntegracion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.nombre.trim()) {
+      notify('Ingresa el nombre de la Tienda o Proveedor', 'error');
       return;
     }
-    setGuardandoMarca(true);
+    if (form.tipoIntegracion === 'portal_erp_local' && !form.rut.trim()) {
+      notify('Para crear un Tenant ERP con usuario y clave, ingresa el RUT de la tienda', 'error');
+      return;
+    }
+
+    setGuardando(true);
     try {
-      const r = await marcasVehiculoService.create(m);
-      if (r.success) {
-        notify(`Marca "${m}" agregada ✓`, 'success');
-        setMarcaCustom('');
-        await loadMarcas();
-        setForm((prev) => ({ ...prev, marcas: [...(prev.marcas || []), m] }));
+      const payload: Omit<Proveedor, 'id'> = {
+        nombre: form.nombre.trim(),
+        rut: form.rut.trim(),
+        contacto: form.contacto.trim() || 'Administrador Tenant',
+        email: form.email.trim(),
+        telefono: form.telefono.trim(),
+        direccion: form.direccion.trim(),
+        categoria: 'General',
+        categoriasEspecialidad: ['General'],
+        marcas: [],
+        notas: form.notas.trim(),
+        tipoIntegracion: form.tipoIntegracion,
+        canalWspActivo: false,
+        margenPct: Number(form.margenPct) || 30,
+        prefijoSku: form.prefijoSku.trim().toUpperCase() || 'FRP-TND',
+        configApi:
+          form.tipoIntegracion === 'conexion_api_erp' || form.tipoIntegracion === 'nodo_ailoo'
+            ? {
+                tipo: form.apiTipo,
+                endpointUrl: form.apiEndpointUrl.trim(),
+                apiKey: form.apiKey.trim(),
+                frecuenciaSync: form.apiFrecuenciaSync,
+                estadoConexion: 'configurado',
+              }
+            : null,
+        configScraping:
+          form.tipoIntegracion === 'scraping_portal_b2b'
+            ? {
+                portalUrl: form.scrapingPortalUrl.trim(),
+                usuarioPortal: form.scrapingUsuario.trim(),
+                clavePortal: form.scrapingClave.trim(),
+                modoExtraccion: form.scrapingModo,
+                selectorPrecio: form.scrapingSelectorPrecio.trim(),
+                selectorStock: form.scrapingSelectorStock.trim(),
+              }
+            : null,
+      };
+
+      if (editingId) {
+        await proveedoresService.update(editingId, payload);
+        notify(`✓ Configuración de "${payload.nombre}" actualizada`, 'success');
       } else {
-        notify(r.error || 'Error al guardar la marca', 'error');
+        const creado = await proveedoresService.create(payload);
+        // Si es Tenant ERP y definió contraseña inicial, crear la cuenta de usuario automáticamente
+        if (
+          creado.success &&
+          creado.data?.id &&
+          form.tipoIntegracion === 'portal_erp_local' &&
+          form.passwordInicialTenant.trim().length >= 6
+        ) {
+          await proveedoresService.darAcceso(
+            creado.data.id,
+            form.passwordInicialTenant.trim()
+          );
+          notify(
+            `✓ Tenant ERP "${payload.nombre}" creado con usuario ${rutToEmail(payload.rut)} y clave activa`,
+            'success'
+          );
+        } else {
+          notify(`✓ Integración "${payload.nombre}" registrada correctamente`, 'success');
+        }
       }
-    } catch {
-      notify('Error al guardar la marca', 'error');
+
+      setModalAbierto(false);
+      await loadProveedores();
+    } catch (err) {
+      notify((err as Error).message || 'Error al guardar integración', 'error');
     } finally {
-      setGuardandoMarca(false);
+      setGuardando(false);
     }
   };
 
-  const removeMarcaExtra = (m: string) => {
-    setMarcasExtra(marcasExtra.filter((x) => x !== m));
-  };
-
-  const abrirAcceso = (p: Proveedor) => {
+  const abrirModalAcceso = (p: Proveedor) => {
     setAccesoProveedor(p);
     setAccesoPassword('');
     setAccesoModal(true);
   };
 
-  const handleDarAcceso = async () => {
+  const handleGuardarAccesoUsuario = async () => {
     if (!accesoProveedor?.id) return;
     if (!accesoProveedor.rut) {
-      notify('Este proveedor necesita un RUT para poder tener acceso', 'error');
+      notify('Edita primero el proveedor y agrégale un RUT para generar su usuario de Tenant ERP', 'error');
       return;
     }
     if (accesoPassword.length < 6) {
-      notify('La contraseña debe tener mínimo 6 caracteres', 'error');
+      notify('La clave debe tener al menos 6 caracteres', 'error');
       return;
     }
     setDandoAcceso(true);
     try {
-      const esReset = !!accesoProveedor.uid;
-      const r = esReset
+      const yaTiene = Boolean(accesoProveedor.uid);
+      const res = yaTiene
         ? await proveedoresService.resetPassword(accesoProveedor.id, accesoPassword)
         : await proveedoresService.darAcceso(accesoProveedor.id, accesoPassword);
-      if (r.success) {
-        notify(esReset ? 'Contraseña actualizada ✓' : 'Acceso creado ✓', 'success');
+      if (res.success) {
+        notify(
+          yaTiene
+            ? `✓ Clave actualizada para ${accesoProveedor.nombre}`
+            : `✓ Usuario Tenant creado: ${rutToEmail(accesoProveedor.rut)}`,
+          'success'
+        );
         setAccesoModal(false);
-        loadProveedores();
+        await loadProveedores();
       } else {
-        notify(r.error || 'Error', 'error');
+        notify(res.error || 'Error al configurar credenciales', 'error');
       }
     } catch {
-      notify('Error al procesar el acceso', 'error');
+      notify('Error al configurar credenciales de usuario', 'error');
     } finally {
       setDandoAcceso(false);
     }
@@ -312,652 +297,849 @@ export default function Proveedores() {
 
   const handleRevocarAcceso = async (p: Proveedor) => {
     if (!p.id) return;
-    if (!confirm(`¿Revocar el acceso al portal de "${p.nombre}"? Podrás volver a crearlo después.`)) return;
-    setLoading(true);
+    if (!confirm(`¿Revocar el acceso de usuario al Tenant ERP de "${p.nombre}"?`)) return;
     try {
       await proveedoresService.revocarAcceso(p.id);
       notify('Acceso revocado', 'info');
-      loadProveedores();
+      await loadProveedores();
     } catch {
-      notify('Error al revocar', 'error');
-    } finally {
-      setLoading(false);
+      notify('Error al revocar acceso', 'error');
     }
   };
 
-  const handleSave = async () => {
-    if (!form.nombre) {
-      notify('Ingresa el nombre del proveedor', 'error');
-      return;
-    }
-    if (form.canalWspActivo && !form.telefono) {
-      notify('Para activar cotizaciones por WhatsApp (Etapa 3), ingresa el teléfono WhatsApp del proveedor', 'error');
-      return;
-    }
-    setLoading(true);
+  const handleEliminar = async (p: Proveedor) => {
+    if (!p.id) return;
+    if (!confirm(`¿Eliminar la integración "${p.nombre}"?`)) return;
     try {
-      const todasMarcas = [...(form.marcas || []), ...marcasExtra];
-      const cats =
-        Array.isArray(form.categoriasEspecialidad) && form.categoriasEspecialidad.length > 0
-          ? form.categoriasEspecialidad
-          : [form.categoria || 'General'];
-      const data: Omit<Proveedor, 'id'> = {
-        ...form,
-        categoria: cats[0] || form.categoria || 'General',
-        categoriasEspecialidad: cats,
-        marcas: todasMarcas,
-        marcasVehiculo: todasMarcas,
-      };
-      if (editingId) {
-        await proveedoresService.update(editingId, data);
-        notify('Proveedor actualizado con configuración omnicanal ✓', 'success');
-      } else {
-        await proveedoresService.create(data);
-        notify('Proveedor agregado a la red FácilRepuestos ✓', 'success');
-      }
-      setModal(false);
-      loadProveedores();
-    } catch {
-      notify('Error al guardar', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDelete = async (id: string, nombre: string) => {
-    if (!confirm(`¿Eliminar el proveedor "${nombre}"?\nEsta acción no se puede deshacer.`)) return;
-    setLoading(true);
-    try {
-      await proveedoresService.delete(id);
-      notify('Proveedor eliminado', 'info');
-      loadProveedores();
+      await proveedoresService.delete(p.id);
+      notify('Integración eliminada', 'info');
+      await loadProveedores();
     } catch {
       notify('Error al eliminar', 'error');
+    }
+  };
+
+  const handleSyncNodosAiloo = async () => {
+    setSincronizandoAiloo(true);
+    try {
+      const r = await woocommerceService.syncAilooTodos({ forzar: false });
+      if (r.success) {
+        notify('✓ Sincronización de Nodos Ailoo completada', 'success');
+      }
+    } catch {
+      notify('Error al sincronizar Nodos Ailoo', 'error');
     } finally {
-      setLoading(false);
+      setSincronizandoAiloo(false);
     }
   };
 
-  const setField = (field: keyof typeof form, value: string | number | boolean) =>
-    setForm((prev) => ({ ...prev, [field]: value }));
-
-  const filtered = proveedores.filter((p) => {
-    const q = search.toLowerCase();
-    const marcasProv = p.marcas || p.marcasVehiculo || [];
-    const catsProv =
-      Array.isArray(p.categoriasEspecialidad) && p.categoriasEspecialidad.length > 0
-        ? p.categoriasEspecialidad
-        : [p.categoria].filter(Boolean);
-
-    const matchSearch =
-      !q ||
-      p.nombre.toLowerCase().includes(q) ||
-      (p.contacto || '').toLowerCase().includes(q) ||
-      (p.rut || '').toLowerCase().includes(q) ||
-      (p.prefijoSku || '').toLowerCase().includes(q) ||
-      marcasProv.some((m) => m.toLowerCase().includes(q)) ||
-      catsProv.some((c) => c.toLowerCase().includes(q));
-
-    const matchCat = !filtrocat || p.categoria === filtrocat || catsProv.includes(filtrocat);
-
-    const matchCanal =
-      !filtroCanal ||
-      (filtroCanal === 'wsp_activo' && Boolean(p.canalWspActivo)) ||
-      (filtroCanal === 'portal_erp' && (Boolean(p.uid) || p.tipoIntegracion === 'portal_erp_local')) ||
-      p.tipoIntegracion === filtroCanal;
-
-    return matchSearch && matchCat && matchCanal;
-  });
-
-  const { paged, page, pageSize, totalPages, goTo, changeSize } = usePagination(filtered);
-
-  const totalWspActivos = proveedores.filter((p) => p.canalWspActivo && p.telefono).length;
-  const totalPortalONodo = proveedores.filter(
-    (p) => Boolean(p.uid) || p.tipoIntegracion === 'portal_erp_local' || p.tipoIntegracion === 'nodo_ailoo'
+  const totalTenantsErp = integracionesTecnicas.filter(
+    (p) => p.tipoIntegracion === 'portal_erp_local' || Boolean(p.uid)
   ).length;
-  const margenPromedio =
-    proveedores.length > 0
-      ? Math.round(
-          proveedores.reduce((acc, p) => acc + (Number(p.margenPct) || 28), 0) / proveedores.length
-        )
-      : 28;
-
-  const renderBadgeCanal = (p: Proveedor) => {
-    const tipo = p.tipoIntegracion || (p.uid ? 'portal_erp_local' : 'cotizacion_whatsapp');
-    if (tipo === 'nodo_ailoo') {
-      return <span className={`${styles.badgeCanal} ${styles.canalAiloo}`}>🔗 Nodo Enterprise Ailoo</span>;
-    }
-    if (tipo === 'hibrido_erp_wsp') {
-      return <span className={`${styles.badgeCanal} ${styles.canalHibrido}`}>⚡ Híbrido ERP + WSP</span>;
-    }
-    if (tipo === 'portal_erp_local') {
-      return <span className={`${styles.badgeCanal} ${styles.canalErp}`}>🏭 Portal ERP Local</span>;
-    }
-    return <span className={`${styles.badgeCanal} ${styles.canalWsp}`}>📲 WhatsApp Etapa 3</span>;
-  };
+  const totalApis = integracionesTecnicas.filter(
+    (p) => p.tipoIntegracion === 'conexion_api_erp' || p.tipoIntegracion === 'nodo_ailoo'
+  ).length;
+  const totalScraping = integracionesTecnicas.filter(
+    (p) => p.tipoIntegracion === 'scraping_portal_b2b'
+  ).length;
 
   return (
-    <div>
-      <div className="page-header">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {/* Cabecera de Administración Técnica */}
+      <div
+        style={{
+          background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+          color: '#ffffff',
+          borderRadius: 16,
+          padding: '20px 24px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 16,
+        }}
+      >
         <div>
-          <div className="page-title">Red Omnicanal de Proveedores</div>
-          <div className={styles.pageSub}>
-            Configura qué proveedores operan por Portal ERP, Nodos Ailoo o Mesa de Cotización en Vivo por WhatsApp (Etapa 3), sus marcas especialistas y márgenes comerciales.
+          <div style={{ fontSize: '1.35rem', fontWeight: 800 }}>
+            🏭 Administración de Proveedores, Tenants ERP, APIs & Scraping
+          </div>
+          <div style={{ fontSize: '0.85rem', color: '#cbd5e1', marginTop: 4 }}>
+            Levanta nuevas tiendas creando su <strong>Tenant ERP con Usuario y Clave</strong>, conecta un proveedor vía <strong>API / BigQuery (Ailoo)</strong>, o configura <strong>Scraping de Portales B2B</strong> para alimentar el compilado de <strong>ERP & Tiendas</strong>.
           </div>
         </div>
-        <div className={styles.toolbarRight}>
-          <input
-            type="text"
-            placeholder="Buscar proveedor, marca, rubro, prefijo..."
-            className={styles.searchInput}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <select
-            className={styles.filtroCanal}
-            value={filtroCanal}
-            onChange={(e) => setFiltroCanal(e.target.value)}
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn btn-sm"
+            style={{ background: '#ea580c', color: '#fff', fontWeight: 700 }}
+            onClick={() => abrirNuevo('portal_erp_local')}
           >
-            <option value="">Todos los canales</option>
-            <option value="wsp_activo">📲 Activos en Mesa WhatsApp (Etapa 3)</option>
-            <option value="cotizacion_whatsapp">📲 Solo Cotización WhatsApp</option>
-            <option value="portal_erp">🏭 Con Portal ERP Local</option>
-            <option value="hibrido_erp_wsp">⚡ Híbrido (ERP + WhatsApp)</option>
-            <option value="nodo_ailoo">🔗 Nodos Enterprise Ailoo</option>
-          </select>
-          <select
-            className={styles.filtroCategoria}
-            value={filtrocat}
-            onChange={(e) => setFiltrocat(e.target.value)}
+            🏢 + Nuevo Tenant ERP / Tienda
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm"
+            style={{ background: '#2563eb', color: '#fff', fontWeight: 700 }}
+            onClick={() => abrirNuevo('conexion_api_erp')}
           >
-            <option value="">Todas las especialidades</option>
-            {CATEGORIAS.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-          <button className="btn btn-primary" onClick={openNuevo}>
-            + Nuevo Proveedor
+            🔌 + Conectar API / Solución ERP
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm"
+            style={{ background: '#7c3aed', color: '#fff', fontWeight: 700 }}
+            onClick={() => abrirNuevo('scraping_portal_b2b')}
+          >
+            🕷️ + Agregar Portal para Scraping
           </button>
         </div>
       </div>
 
-      {/* ── STATS ──────────────────────────────────────── */}
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-value">{proveedores.length}</div>
-          <div className="stat-label">Total Red Proveedores</div>
+      {/* Tarjetas de los 3 Pilares de Administración */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gap: 14,
+        }}
+      >
+        <div
+          style={{
+            background: '#ffffff',
+            borderRadius: 14,
+            padding: 16,
+            border: '1px solid #fed7aa',
+          }}
+        >
+          <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#c2410c' }}>
+            1. TENANTS ERP & ACCESOS DE USUARIOS
+          </div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a', marginTop: 4 }}>
+            {totalTenantsErp} Tiendas ERP
+          </div>
+          <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 4 }}>
+            Crea credenciales (<code>RUT@drmotors.internal</code> + clave) para que una tienda suba su stock y use su propio POS.
+          </div>
         </div>
-        <div className="stat-card">
-          <div className={`stat-value ${styles.statConMarcas}`}>{totalWspActivos}</div>
-          <div className="stat-label">📲 Activos en Mesa WhatsApp</div>
+
+        <div
+          style={{
+            background: '#ffffff',
+            borderRadius: 14,
+            padding: 16,
+            border: '1px solid #bfdbfe',
+          }}
+        >
+          <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#1d4ed8' }}>
+            2. CONEXIONES API / NODOS AILOO
+          </div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a', marginTop: 4 }}>
+            {totalApis} Conectores API
+          </div>
+          <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 4 }}>
+            Integra soluciones externas (Soluparts Ailoo, Global Ailoo, APIs REST JSON/XML) con prefijo SKU propio.
+          </div>
         </div>
-        <div className="stat-card">
-          <div className={`stat-value ${styles.statConEmail}`}>{totalPortalONodo}</div>
-          <div className="stat-label">🏭 Portal ERP / Nodos Ailoo</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-value">+{margenPromedio}%</div>
-          <div className="stat-label">💰 Margen Promedio FRP</div>
+
+        <div
+          style={{
+            background: '#ffffff',
+            borderRadius: 14,
+            padding: 16,
+            border: '1px solid #ddd6fe',
+          }}
+        >
+          <div style={{ fontSize: '0.74rem', fontWeight: 800, color: '#6d28d9' }}>
+            3. SCRAPING DE PORTALES MAYORISTAS B2B
+          </div>
+          <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0f172a', marginTop: 4 }}>
+            {totalScraping} Portales Scraping
+          </div>
+          <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 4 }}>
+            Configura URL, usuario/clave y selectores para extraer piezas, precios y stock de portales web de proveedores.
+          </div>
         </div>
       </div>
 
-      {/* ── TABLA ──────────────────────────────────────── */}
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        totalItems={filtered.length}
-        pageSize={pageSize}
-        onPage={goTo}
-        onPageSize={changeSize}
-      />
-      <div className="tbl-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Proveedor / RUT</th>
-              <th>Canal Omnicanal & WhatsApp</th>
-              <th>Especialidades Técnicas</th>
-              <th>Marcas Especialistas</th>
-              <th>Regla Comercial FRP</th>
-              <th>Contacto / WhatsApp</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
+      {/* Barra de Filtros y Acciones */}
+      <div
+        style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: 14,
+          padding: '12px 16px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: 10,
+        }}
+      >
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {(
+            [
+              ['todos', `Todas las Integraciones (${integracionesTecnicas.length})`],
+              ['portal_erp_local', `🏢 Tenants ERP (${totalTenantsErp})`],
+              ['conexion_api_erp', `🔌 APIs & Ailoo (${totalApis})`],
+              ['scraping_portal_b2b', `🕷️ Portales Scraping (${totalScraping})`],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              className={`btn btn-sm ${filtroModo === key ? 'btn-primary' : 'btn-outline'}`}
+              onClick={() => setFiltroModo(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline"
+            onClick={handleSyncNodosAiloo}
+            disabled={sincronizandoAiloo}
+          >
+            {sincronizandoAiloo ? 'Sincronizando...' : '🔄 Ejecutar Sync Nodos Ailoo'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline"
+            onClick={() => navigate('/inventario-erp')}
+          >
+            🏢 Ver Compilado en ERP & Tiendas →
+          </button>
+          <input
+            type="text"
+            placeholder="Buscar tienda, prefijo SKU, URL..."
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            style={{
+              padding: '7px 12px',
+              borderRadius: 8,
+              border: '1px solid #cbd5e1',
+              fontSize: '0.82rem',
+              minWidth: 210,
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Tabla de Administración de Tenants, APIs y Scraping */}
+      <div
+        style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: 14,
+          overflow: 'hidden',
+        }}
+      >
+        <div className="tbl-wrap">
+          <table>
+            <thead>
               <tr>
-                <td colSpan={7} className={styles.emptyRow}>
-                  No hay proveedores que coincidan con los filtros seleccionados
-                </td>
+                <th>Tienda / Proveedor Integrado</th>
+                <th>Tipo de Conexión</th>
+                <th>Prefijo SKU & Margen</th>
+                <th>Endpoint API / Portal Scraping / Tenant</th>
+                <th>Usuario & Acceso ERP</th>
+                <th>Acciones de Administración</th>
               </tr>
-            )}
-            {paged.map((p) => {
-              const cats =
-                Array.isArray(p.categoriasEspecialidad) && p.categoriasEspecialidad.length > 0
-                  ? p.categoriasEspecialidad
-                  : [p.categoria || 'General'];
-              const marcasProv = p.marcas || p.marcasVehiculo || [];
-              return (
-                <tr key={p.id}>
-                  <td data-label="Proveedor">
-                    <div className={styles.cellNombre}>{p.nombre}</div>
-                    <div className={styles.cellRut}>
-                      RUT: {p.rut || '—'}
-                      {p.tiempoRespuestaPromMin ? ` · ⏱ SLA ~${p.tiempoRespuestaPromMin} min` : ''}
-                    </div>
-                  </td>
+            </thead>
+            <tbody>
+              {listaFiltrada.map((p) => {
+                const tipo = p.tipoIntegracion || 'portal_erp_local';
+                const loginEmail = p.rut ? rutToEmail(p.rut) : 'Define RUT para crear usuario';
 
-                  <td data-label="Canal Omnicanal">
-                    <div className={styles.canalCellCol}>
-                      {renderBadgeCanal(p)}
-                      <button
-                        type="button"
-                        onClick={() => handleToggleWspDirecto(p)}
-                        className={`${styles.wspTogglePill} ${
-                          p.canalWspActivo ? styles.wspToggleOn : styles.wspToggleOff
-                        }`}
-                        title="Haz clic para activar/pausar la recepción de cotizaciones automáticas por WhatsApp (Etapa 3)"
-                      >
-                        {p.canalWspActivo ? '🟢 Recibe Cotización WSP' : '⚪ WSP Pausado'}
-                      </button>
-                    </div>
-                  </td>
-
-                  <td data-label="Especialidades">
-                    <div className={styles.catsRow}>
-                      {cats.map((c) => (
-                        <span key={c} className={styles.badgeCat}>
-                          {c}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-
-                  <td data-label="Marcas Especialistas">
-                    {marcasProv.length > 0 ? (
-                      <div className={styles.marcasRow}>
-                        {marcasProv.slice(0, 5).map((m) => (
-                          <span key={m} className={styles.badgeMarca}>
-                            {m}
-                          </span>
-                        ))}
-                        {marcasProv.length > 5 && (
-                          <span className={styles.badgeMore}>+{marcasProv.length - 5} más</span>
-                        )}
+                return (
+                  <tr key={p.id}>
+                    <td>
+                      <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a' }}>
+                        {p.nombre}
                       </div>
-                    ) : (
-                      <span className={styles.dash}>Multimarca</span>
-                    )}
-                  </td>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        RUT: {p.rut || '—'} · {p.contacto || 'Sin contacto'}
+                      </div>
+                    </td>
 
-                  <td data-label="Regla Comercial FRP">
-                    <div className={styles.comercialCell}>
-                      <span className={styles.margenBadge}>+{p.margenPct ?? 28}% Margen</span>
-                      <span className={styles.prefijoBadge}>
-                        SKU: {p.prefijoSku || 'FRP-LOC'}-*
-                      </span>
-                    </div>
-                  </td>
-
-                  <td data-label="Contacto" className="hide-mobile">
-                    <div className={styles.contactoNombre}>{p.contacto || '—'}</div>
-                    <div className={styles.contactoTel}>{p.telefono || 'Sin teléfono'}</div>
-                    {p.email && <div className={styles.contactoEmail}>{p.email}</div>}
-                  </td>
-
-                  <td data-label="Acciones">
-                    <div className={styles.accionesCol}>
-                      {p.canalWspActivo && p.telefono && (
-                        <button
-                          className={`btn btn-sm ${styles.btnWspAction}`}
-                          onClick={() => navigate('/mesa-wsp')}
+                    <td>
+                      {tipo === 'nodo_ailoo' || tipo === 'conexion_api_erp' ? (
+                        <span
+                          style={{
+                            background: '#dbeafe',
+                            color: '#1d4ed8',
+                            padding: '4px 9px',
+                            borderRadius: 999,
+                            fontSize: '0.74rem',
+                            fontWeight: 800,
+                          }}
                         >
-                          📲 Mesa WSP
-                        </button>
-                      )}
-                      <button className="btn btn-outline btn-sm" onClick={() => openEditar(p)}>
-                        ✏ Editar
-                      </button>
-                      {p.uid ? (
-                        <button className="btn btn-dark btn-sm" onClick={() => abrirAcceso(p)}>
-                          🔑 Restablecer clave
-                        </button>
+                          🔌 Conexión API / Ailoo
+                        </span>
+                      ) : tipo === 'scraping_portal_b2b' ? (
+                        <span
+                          style={{
+                            background: '#ede9fe',
+                            color: '#6d28d9',
+                            padding: '4px 9px',
+                            borderRadius: 999,
+                            fontSize: '0.74rem',
+                            fontWeight: 800,
+                          }}
+                        >
+                          🕷️ Scraping Portal B2B
+                        </span>
                       ) : (
-                        <button className="btn btn-dark btn-sm" onClick={() => abrirAcceso(p)}>
-                          🔑 Dar Acceso Portal
-                        </button>
-                      )}
-                      {p.uid && (
-                        <button
-                          className={`btn btn-sm ${styles.btnDanger}`}
-                          onClick={() => handleRevocarAcceso(p)}
+                        <span
+                          style={{
+                            background: '#ffedd5',
+                            color: '#c2410c',
+                            padding: '4px 9px',
+                            borderRadius: 999,
+                            fontSize: '0.74rem',
+                            fontWeight: 800,
+                          }}
                         >
-                          ✕ Revocar Acceso
-                        </button>
+                          🏢 Tenant ERP Local
+                        </span>
                       )}
-                      <button
-                        className={`btn btn-sm ${styles.btnDanger}`}
-                        onClick={() => handleDelete(p.id!, p.nombre)}
-                      >
-                        ✕ Eliminar
-                      </button>
-                    </div>
+                    </td>
+
+                    <td>
+                      <div style={{ fontFamily: 'monospace', fontWeight: 800, color: '#0369a1' }}>
+                        {p.prefijoSku || 'FRP-LOC'}-*
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#16a34a', fontWeight: 700 }}>
+                        Margen FRP: +{p.margenPct || 28}%
+                      </div>
+                    </td>
+
+                    <td style={{ fontSize: '0.78rem', color: '#334155', maxWidth: 290 }}>
+                      {p.configApi?.endpointUrl ? (
+                        <div>
+                          <div>
+                            <strong>Endpoint:</strong> <code>{p.configApi.endpointUrl}</code>
+                          </div>
+                          <div style={{ color: '#64748b', fontSize: '0.72rem' }}>
+                            Sync: {p.configApi.frecuenciaSync || 'Delta'}
+                          </div>
+                        </div>
+                      ) : p.configScraping?.portalUrl ? (
+                        <div>
+                          <div>
+                            <strong>Portal B2B:</strong> <code>{p.configScraping.portalUrl}</code>
+                          </div>
+                          <div style={{ color: '#64748b', fontSize: '0.72rem' }}>
+                            Usuario B2B: {p.configScraping.usuarioPortal || '—'} · Modo:{' '}
+                            {p.configScraping.modoExtraccion || 'Catálogo'}
+                          </div>
+                        </div>
+                      ) : (
+                        <div>
+                          <div>
+                            <strong>URL Tenant:</strong> <code>sistema.facilrepuestos.cl/proveedor</code>
+                          </div>
+                          <div style={{ color: '#64748b', fontSize: '0.72rem' }}>
+                            Carga de catálogo, Excel, Factura IA y POS propio
+                          </div>
+                        </div>
+                      )}
+                    </td>
+
+                    <td>
+                      {p.uid ? (
+                        <div>
+                          <span
+                            style={{
+                              background: '#dcfce7',
+                              color: '#15803d',
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                              fontSize: '0.72rem',
+                              fontWeight: 800,
+                            }}
+                          >
+                            🟢 Usuario Activo
+                          </span>
+                          <div
+                            style={{
+                              fontSize: '0.73rem',
+                              fontFamily: 'monospace',
+                              color: '#334155',
+                              marginTop: 4,
+                            }}
+                          >
+                            {loginEmail}
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                          Sin clave de usuario asignada
+                        </div>
+                      )}
+                    </td>
+
+                    <td>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline"
+                          onClick={() => abrirModalAcceso(p)}
+                        >
+                          🔑 {p.uid ? 'Cambiar Clave' : 'Crear Usuario / Clave'}
+                        </button>
+                        {p.uid && (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline"
+                            onClick={() => handleRevocarAcceso(p)}
+                            title="Revocar acceso de usuario"
+                          >
+                            🔒 Revocar
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline"
+                          onClick={() => abrirEditar(p)}
+                        >
+                          ⚙️ Configurar
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-danger"
+                          onClick={() => handleEliminar(p)}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {listaFiltrada.length === 0 && (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: 32, color: '#64748b' }}>
+                    No hay integraciones registradas en este filtro. Usa los botones superiores para crear un Tenant ERP, conectar una API o agregar un Portal de Scraping.
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* ── MODAL CREAR / EDITAR PROVEEDOR ─────────────────────────── */}
-      {modal && (
-        <div className="overlay open">
-          <div className={`modal ${styles.modalProveedorForm}`}>
-            <div className="modal-title">
-              {editingId ? 'Editar Proveedor Omnicanal' : 'Nuevo Proveedor Omnicanal'}
+      {/* Modal para Crear / Configurar Tenant ERP, API o Scraping */}
+      {modalAbierto && (
+        <div className="modal-overlay" onClick={() => setModalAbierto(false)}>
+          <div
+            className="modal"
+            style={{ maxWidth: 680, width: '95%' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="modal-title">
+                {editingId
+                  ? '⚙️ Configurar Integración / Tenant'
+                  : '🚀 Levantar Nuevo Proveedor / Tienda Integrada'}
+              </div>
+              <button className="modal-close" onClick={() => setModalAbierto(false)}>
+                ✕
+              </button>
             </div>
 
-            {/* Datos básicos */}
-            <div className="form-grid fg-2">
-              <div className={`field ${styles.fullWidth}`}>
-                <label>Nombre o Razón Social *</label>
-                <input
-                  value={form.nombre}
-                  onChange={(e) => setField('nombre', e.target.value.toUpperCase())}
-                  placeholder="Ej: IMPORTADORA COREAPARTS 10 DE JULIO"
-                />
-              </div>
-              <div className="field">
-                <label>RUT Empresa</label>
-                <input
-                  value={form.rut}
-                  onChange={(e) => setField('rut', formatRut(e.target.value))}
-                  placeholder="76.123.456-7"
-                  maxLength={12}
-                />
-              </div>
-              <div className="field">
-                <label>Nombre Ejecutivo / Mesón</label>
-                <input
-                  value={form.contacto}
-                  onChange={(e) => setField('contacto', e.target.value)}
-                  placeholder="Ej: Don Patricio Rojas (Mesón WSP)"
-                />
-              </div>
-              <div className="field">
-                <label>Teléfono / WhatsApp Cotizaciones *</label>
-                <input
-                  value={form.telefono}
-                  onChange={(e) => {
-                    setField('telefono', e.target.value);
-                    setErrorTel('');
-                  }}
-                  onBlur={() => {
-                    if (form.telefono && !validarTelefonoChileno(form.telefono)) setErrorTel(errorTelefono);
-                  }}
-                  placeholder="+569 8412 0931"
-                  className={errorTel ? styles.inputError : ''}
-                />
-                {errorTel && <span className={styles.fieldError}>{errorTel}</span>}
-              </div>
-              <div className="field">
-                <label>Email</label>
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setField('email', e.target.value)}
-                  placeholder="ventas@proveedor.cl"
-                />
-              </div>
-              <div className={`field ${styles.fullWidth}`}>
-                <label>Dirección Comercial / Bodega</label>
-                <input
-                  value={form.direccion}
-                  onChange={(e) => setField('direccion', e.target.value)}
-                  placeholder="Ej: Av. 10 de Julio 482, Santiago"
-                />
-              </div>
-            </div>
+            <form onSubmit={handleGuardarIntegracion}>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {/* Selector del Tipo de Solución */}
+                <div>
+                  <label className="form-label">Tipo de Integración Técnica</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                    {(
+                      [
+                        ['portal_erp_local', '🏢 Tenant ERP Propio', 'FRP-TND'],
+                        ['conexion_api_erp', '🔌 Conexión API / ERP', 'FRP-API'],
+                        ['scraping_portal_b2b', '🕷️ Scraping Portal B2B', 'FRP-SCR'],
+                      ] as const
+                    ).map(([val, label, pref]) => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            tipoIntegracion: val,
+                            prefijoSku: editingId ? prev.prefijoSku : pref,
+                          }))
+                        }
+                        style={{
+                          padding: '10px 12px',
+                          borderRadius: 10,
+                          fontWeight: 800,
+                          fontSize: '0.8rem',
+                          cursor: 'pointer',
+                          border:
+                            form.tipoIntegracion === val
+                              ? '2px solid #2563eb'
+                              : '1px solid #cbd5e1',
+                          background: form.tipoIntegracion === val ? '#eff6ff' : '#ffffff',
+                          color: form.tipoIntegracion === val ? '#1d4ed8' : '#334155',
+                        }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            {/* ── SECCIÓN INTEGRACIÓN OMNICANAL Y REGLA COMERCIAL ───────── */}
-            <div className="modal-sep" />
-            <div className={styles.sectionTitle}>
-              <span className={styles.sectionTitleBar} />
-              Canal de Integración Omnicanal y Regla Comercial FácilRepuestos
-            </div>
+                {/* Datos Base de la Tienda / Proveedor */}
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Nombre de la Tienda / Proveedor *</label>
+                    <input
+                      className="form-input"
+                      placeholder="Ej. Importadora Autopar / Tienda Asociada"
+                      value={form.nombre}
+                      onChange={(e) => setForm((p) => ({ ...p, nombre: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">RUT Empresa (Genera Usuario Tenant) *</label>
+                    <input
+                      className="form-input"
+                      placeholder="76.123.456-7"
+                      value={form.rut}
+                      onChange={(e) => setForm((p) => ({ ...p, rut: formatRut(e.target.value) }))}
+                    />
+                  </div>
+                </div>
 
-            <div className="form-grid fg-2">
-              <div className={`field ${styles.fullWidth}`}>
-                <label>Tipo de Integración con FácilRepuestos</label>
-                <select
-                  value={form.tipoIntegracion || 'cotizacion_whatsapp'}
-                  onChange={(e) =>
-                    handleChangeTipoIntegracion(e.target.value as TipoIntegracionProveedor)
-                  }
-                >
-                  {TIPOS_INTEGRACION.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-                <span className={styles.helperText}>
-                  {
-                    TIPOS_INTEGRACION.find((t) => t.value === form.tipoIntegracion)?.desc
-                  }
-                </span>
-              </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Prefijo SKU Público en Catálogo</label>
+                    <input
+                      className="form-input"
+                      placeholder="Ej. FRP-TND, FRP-API, FRP-SCR"
+                      value={form.prefijoSku}
+                      onChange={(e) =>
+                        setForm((p) => ({ ...p, prefijoSku: e.target.value.toUpperCase() }))
+                      }
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Margen Comercial FácilRepuestos (%)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={form.margenPct}
+                      onChange={(e) =>
+                        setForm((p) => ({ ...p, margenPct: Number(e.target.value) || 30 }))
+                      }
+                    />
+                  </div>
+                </div>
 
-              <div className={`field ${styles.fullWidth}`}>
-                <label className={styles.wspCheckboxBox}>
-                  <input
-                    type="checkbox"
-                    checked={Boolean(form.canalWspActivo)}
-                    onChange={(e) => setField('canalWspActivo', e.target.checked)}
-                  />
-                  <div>
-                    <strong>📲 Recibe cotizaciones automáticas en vivo por WhatsApp (Etapa 3)</strong>
-                    <div className={styles.wspCheckboxSub}>
-                      Cuando el Agente Omnicanal o la Mesa de Cotización busquen un repuesto sin stock de las marcas y especialidades de este proveedor, se le enviará automáticamente la consulta por WhatsApp.
+                {/* Bloque Específico 1: Tenant ERP Propio */}
+                {form.tipoIntegracion === 'portal_erp_local' && (
+                  <div
+                    style={{
+                      background: '#fff7ed',
+                      border: '1px solid #fed7aa',
+                      borderRadius: 12,
+                      padding: 14,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#9a3412' }}>
+                      🏢 Credenciales de Tenant ERP para la Tienda
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#7c2d12' }}>
+                      Usuario de acceso generado automáticamente:{' '}
+                      <code>{rutToEmail(form.rut)}</code>
+                    </div>
+                    {!editingId && (
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">
+                          Contraseña Inicial para el Tenant ERP (mín. 6 caracteres)
+                        </label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="Ej. tienda2026"
+                          value={form.passwordInicialTenant}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, passwordInicialTenant: e.target.value }))
+                          }
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Bloque Específico 2: Conexión API / ERP */}
+                {(form.tipoIntegracion === 'conexion_api_erp' ||
+                  form.tipoIntegracion === 'nodo_ailoo') && (
+                  <div
+                    style={{
+                      background: '#eff6ff',
+                      border: '1px solid #bfdbfe',
+                      borderRadius: 12,
+                      padding: 14,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#1e40af' }}>
+                      🔌 Parámetros de Conexión API / Solución Externa
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label className="form-label">Protocolo / Conector</label>
+                        <select
+                          className="form-select"
+                          value={form.apiTipo}
+                          onChange={(e) =>
+                            setForm((p) => ({
+                              ...p,
+                              apiTipo: e.target.value as typeof form.apiTipo,
+                            }))
+                          }
+                        >
+                          <option value="rest_json">API REST JSON</option>
+                          <option value="bigquery_ailoo">Nodo BigQuery / Ailoo</option>
+                          <option value="graphql">GraphQL API</option>
+                          <option value="xml_feed">Feed XML / CSV Remoto</option>
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Frecuencia de Sincronización</label>
+                        <input
+                          className="form-input"
+                          value={form.apiFrecuenciaSync}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, apiFrecuenciaSync: e.target.value }))
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">URL Endpoint / Dataset ID</label>
+                      <input
+                        className="form-input"
+                        placeholder="Ej. https://api.proveedor.cl/v1/repuestos o bigquery://dataset.inventario"
+                        value={form.apiEndpointUrl}
+                        onChange={(e) =>
+                          setForm((p) => ({ ...p, apiEndpointUrl: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">API Key / Bearer Token</label>
+                      <input
+                        type="password"
+                        className="form-input"
+                        placeholder="Token o llave secreta de la API..."
+                        value={form.apiKey}
+                        onChange={(e) => setForm((p) => ({ ...p, apiKey: e.target.value }))}
+                      />
                     </div>
                   </div>
-                </label>
+                )}
+
+                {/* Bloque Específico 3: Scraping de Portal B2B */}
+                {form.tipoIntegracion === 'scraping_portal_b2b' && (
+                  <div
+                    style={{
+                      background: '#f5f3ff',
+                      border: '1px solid #ddd6fe',
+                      borderRadius: 12,
+                      padding: 14,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, fontSize: '0.85rem', color: '#5b21b6' }}>
+                      🕷️ Configuración de Scraping de Portal Mayorista B2B
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">URL del Portal B2B del Proveedor *</label>
+                      <input
+                        className="form-input"
+                        placeholder="Ej. https://b2b.importadorarepuestos.cl/catalogo"
+                        value={form.scrapingPortalUrl}
+                        onChange={(e) =>
+                          setForm((p) => ({ ...p, scrapingPortalUrl: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label className="form-label">Usuario Login Portal B2B</label>
+                        <input
+                          className="form-input"
+                          placeholder="Usuario cliente mayorista"
+                          value={form.scrapingUsuario}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, scrapingUsuario: e.target.value }))
+                          }
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Clave Login Portal B2B</label>
+                        <input
+                          type="password"
+                          className="form-input"
+                          placeholder="••••••••"
+                          value={form.scrapingClave}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, scrapingClave: e.target.value }))
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label className="form-label">Modo de Extracción</label>
+                        <select
+                          className="form-select"
+                          value={form.scrapingModo}
+                          onChange={(e) =>
+                            setForm((p) => ({
+                              ...p,
+                              scrapingModo: e.target.value as typeof form.scrapingModo,
+                            }))
+                          }
+                        >
+                          <option value="catalogo_completo">
+                            Barrido de Catálogo Completo + Stock
+                          </option>
+                          <option value="consulta_sku_demanda">
+                            Consulta en vivo por SKU / OEM bajo demanda
+                          </option>
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Selector CSS / JSON de Precio y Stock</label>
+                        <input
+                          className="form-input"
+                          placeholder="Ej. .price-neto, .stock-badge"
+                          value={form.scrapingSelectorPrecio}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, scrapingSelectorPrecio: e.target.value }))
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label className="form-label">Notas Técnicas / Acuerdos de Integración</label>
+                  <textarea
+                    className="form-textarea"
+                    rows={2}
+                    placeholder="Detalles técnicos de la conexión, horarios de corte o condiciones..."
+                    value={form.notas}
+                    onChange={(e) => setForm((p) => ({ ...p, notas: e.target.value }))}
+                  />
+                </div>
               </div>
 
-              <div className="field">
-                <label>Margen Comercial FácilRepuestos (%)</label>
-                <input
-                  type="number"
-                  min={5}
-                  max={150}
-                  value={form.margenPct ?? 28}
-                  onChange={(e) => setField('margenPct', Number(e.target.value))}
-                />
-              </div>
-
-              <div className="field">
-                <label>Prefijo SKU Público (Oculta SKU proveedor)</label>
-                <input
-                  value={form.prefijoSku || 'FRP-WSP'}
-                  onChange={(e) => setField('prefijoSku', e.target.value.toUpperCase())}
-                  placeholder="FRP-WSP / FRP-LOC"
-                />
-              </div>
-
-              <div className="field">
-                <label>SLA Tiempo de Respuesta Estimado (min)</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={180}
-                  value={form.tiempoRespuestaPromMin ?? 5}
-                  onChange={(e) => setField('tiempoRespuestaPromMin', Number(e.target.value))}
-                />
-              </div>
-
-              <div className="field">
-                <label>Categoría Principal</label>
-                <select
-                  value={form.categoria}
-                  onChange={(e) => setField('categoria', e.target.value)}
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => setModalAbierto(false)}
                 >
-                  {CATEGORIAS.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={guardando}>
+                  {guardando ? 'Guardando...' : '✓ Guardar Integración'}
+                </button>
               </div>
-            </div>
-
-            {/* Especialidades Técnicas Múltiples */}
-            <div className="modal-sep" />
-            <div className={styles.sectionTitle}>
-              <span className={styles.sectionTitleBar} />
-              Especialidades Técnicas que Cotiza (Filtro Automático Etapa 3)
-            </div>
-            <div className={styles.marcasGrid}>
-              {CATEGORIAS.map((cat) => {
-                const selected = (form.categoriasEspecialidad || []).includes(cat);
-                return (
-                  <button
-                    type="button"
-                    key={cat}
-                    onClick={() => toggleCategoriaEspecialidad(cat)}
-                    className={`${styles.marcaToggle} ${selected ? styles.marcaToggleActive : ''}`}
-                  >
-                    {selected ? '✓ ' : ''}
-                    {cat}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Marcas */}
-            <div className="modal-sep" />
-            <div className={styles.sectionTitle}>
-              <span className={styles.sectionTitleBar} />
-              Marcas de Vehículos Especialistas
-            </div>
-
-            <div className={styles.marcasGrid}>
-              {allMarcas.map((m) => {
-                const selected = (form.marcas || []).includes(m);
-                return (
-                  <button
-                    type="button"
-                    key={m}
-                    onClick={() => toggleMarca(m)}
-                    className={`${styles.marcaToggle} ${selected ? styles.marcaToggleActive : ''}`}
-                  >
-                    {selected ? '✓ ' : ''}
-                    {m}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Marcas personalizadas */}
-            {marcasExtra.length > 0 && (
-              <div className={styles.marcasExtraRow}>
-                {marcasExtra.map((m) => (
-                  <span key={m} className={styles.chipMarcaExtra}>
-                    {m}
-                    <span
-                      className={styles.chipRemoveExtra}
-                      onClick={() => removeMarcaExtra(m)}
-                    >
-                      ✕
-                    </span>
-                  </span>
-                ))}
-              </div>
-            )}
-
-            <div className={styles.customAddRow}>
-              <input
-                type="text"
-                value={marcaCustom}
-                onChange={(e) => setMarcaCustom(e.target.value.toUpperCase())}
-                onKeyDown={(e) => e.key === 'Enter' && agregarMarcaCustom()}
-                placeholder="Agregar marca no listada..."
-                className={styles.flexInput}
-              />
-              <button
-                type="button"
-                className="btn btn-dark btn-sm"
-                onClick={agregarMarcaCustom}
-                disabled={!marcaCustom.trim() || guardandoMarca}
-              >
-                {guardandoMarca ? 'Guardando...' : '+ Agregar'}
-              </button>
-            </div>
-
-            {/* Marcas seleccionadas resumen */}
-            {((form.marcas || []).length > 0 || marcasExtra.length > 0) && (
-              <div className={styles.resumenBox}>
-                <strong className={styles.resumenStrong}>
-                  {(form.marcas || []).length + marcasExtra.length} marca(s) especialista(s):
-                </strong>{' '}
-                {[...(form.marcas || []), ...marcasExtra].join(', ')}
-              </div>
-            )}
-
-            {/* Notas */}
-            <div className="field">
-              <label>Notas Técnicas y Condiciones de Mesón</label>
-              <textarea
-                value={form.notas}
-                onChange={(e) => setField('notas', e.target.value)}
-                rows={2}
-                className={styles.textarea}
-                placeholder="Ej: Especialista en motores diésel coreanos D4CB/D4BH, responde WhatsApp con foto de mesón..."
-              />
-            </div>
-
-            <div className="modal-actions">
-              <button className="btn btn-dark" onClick={() => setModal(false)}>
-                Cancelar
-              </button>
-              <button className="btn btn-primary" onClick={handleSave}>
-                💾 Guardar Proveedor
-              </button>
-            </div>
+            </form>
           </div>
         </div>
       )}
 
-      {/* ── MODAL ACCESO PORTAL ─────────────────────────── */}
+      {/* Modal para Crear / Cambiar Clave de Usuario Tenant ERP */}
       {accesoModal && accesoProveedor && (
-        <div className="overlay open">
-          <div className="modal">
-            <div className="modal-title">
-              {accesoProveedor.uid ? 'Restablecer Contraseña' : 'Dar Acceso al Portal'}
+        <div className="modal-overlay" onClick={() => setAccesoModal(false)}>
+          <div
+            className="modal"
+            style={{ maxWidth: 460, width: '95%' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div className="modal-title">
+                🔑 Credenciales Tenant ERP — {accesoProveedor.nombre}
+              </div>
+              <button className="modal-close" onClick={() => setAccesoModal(false)}>
+                ✕
+              </button>
             </div>
-            <div className="modal-sub">
-              {accesoProveedor.nombre} · RUT {accesoProveedor.rut || '—'}
-              {!accesoProveedor.uid && (
-                <> — accederá con su RUT y esta contraseña, y solo verá sus propios repuestos y escalamientos.</>
-              )}
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 10,
+                  padding: 12,
+                  fontSize: '0.82rem',
+                }}
+              >
+                <div>
+                  <strong>URL Portal ERP:</strong>{' '}
+                  <code>https://sistema.facilrepuestos.cl/login</code>
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  <strong>Usuario / RUT de ingreso:</strong>{' '}
+                  <code>{accesoProveedor.rut || 'Sin RUT'}</code> (o{' '}
+                  <code>{rutToEmail(accesoProveedor.rut)}</code>)
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">
+                  {accesoProveedor.uid ? 'Nueva Contraseña' : 'Crear Contraseña Inicial'} (mín. 6
+                  caracteres)
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Ingresa la clave para esta tienda..."
+                  value={accesoPassword}
+                  onChange={(e) => setAccesoPassword(e.target.value)}
+                />
+              </div>
             </div>
-            <div className="field">
-              <label>{accesoProveedor.uid ? 'Nueva Contraseña' : 'Contraseña'}</label>
-              <input
-                type="text"
-                value={accesoPassword}
-                onChange={(e) => setAccesoPassword(e.target.value)}
-                placeholder="Mínimo 6 caracteres"
-              />
-            </div>
-            <div className="modal-actions">
-              <button className="btn btn-dark" onClick={() => setAccesoModal(false)}>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => setAccesoModal(false)}
+              >
                 Cancelar
               </button>
-              <button className="btn btn-primary" onClick={handleDarAcceso} disabled={dandoAcceso}>
-                {dandoAcceso ? 'Guardando...' : '💾 Guardar'}
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={dandoAcceso}
+                onClick={handleGuardarAccesoUsuario}
+              >
+                {dandoAcceso
+                  ? 'Guardando...'
+                  : accesoProveedor.uid
+                  ? '✓ Actualizar Clave'
+                  : '✓ Crear Acceso Tenant ERP'}
               </button>
             </div>
           </div>

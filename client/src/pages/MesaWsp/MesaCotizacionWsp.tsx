@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
 import type {
@@ -23,6 +23,7 @@ interface EstadoMesaWspResponse {
 export default function MesaCotizacionWsp() {
   const { notify } = useAppStore();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [solicitudes, setSolicitudes] = useState<SolicitudCotizacionWsp[]>([]);
   const [proveedoresWsp, setProveedoresWsp] = useState<Proveedor[]>([]);
@@ -460,7 +461,7 @@ export default function MesaCotizacionWsp() {
               <div className={styles.kpiSub}>Enrutados por marca de vehículo y rubro</div>
             </div>
           </div>
-          <div style={{ marginTop: 10 }}>
+          <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <button
               type="button"
               className="btn btn-sm btn-primary"
@@ -470,6 +471,14 @@ export default function MesaCotizacionWsp() {
               {mostrarGestionProveedores
                 ? '✕ Cerrar Proveedores'
                 : '+ Agregar Nuevos Proveedores'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-dark"
+              style={{ width: '100%', fontWeight: 700, fontSize: '0.74rem' }}
+              onClick={() => navigate('/portal-proveedores-wsp')}
+            >
+              🏪 Abrir Portal Proveedor (Doble Clic) →
             </button>
           </div>
         </div>

@@ -646,9 +646,28 @@ export const getStockInfo = (item: ItemInventario): StockInfo => {
 // ─── PROVEEDOR ────────────────────────────────────────────
 export type TipoIntegracionProveedor =
   | 'portal_erp_local'
+  | 'conexion_api_erp'
+  | 'scraping_portal_b2b'
   | 'cotizacion_whatsapp'
   | 'hibrido_erp_wsp'
   | 'nodo_ailoo';
+
+export interface ConfigApiProveedor {
+  tipo?: 'rest_json' | 'bigquery_ailoo' | 'graphql' | 'xml_feed';
+  endpointUrl?: string;
+  apiKey?: string;
+  frecuenciaSync?: string;
+  estadoConexion?: string;
+}
+
+export interface ConfigScrapingProveedor {
+  portalUrl?: string;
+  usuarioPortal?: string;
+  clavePortal?: string;
+  modoExtraccion?: 'catalogo_completo' | 'consulta_sku_demanda';
+  selectorPrecio?: string;
+  selectorStock?: string;
+}
 
 export interface Proveedor {
   id?: string;
@@ -667,9 +686,11 @@ export interface Proveedor {
   tipoIntegracion?: TipoIntegracionProveedor;
   canalWspActivo?: boolean;          // habilitado para recibir cotizaciones automáticas por WhatsApp (Etapa 3)
   margenPct?: number;                // margen comercial por defecto de FácilRepuestos (%)
-  prefijoSku?: string;               // ej: FRP-LOC, FRP-WSP, FRP-SOL, FRP-GLB
+  prefijoSku?: string;               // ej: FRP-LOC, FRP-WSP, FRP-SOL, FRP-GLB, FRP-API, FRP-SCR
   nodoAilooId?: string | null;       // 'soluparts' | 'global' cuando es nodo enterprise Ailoo
   tiempoRespuestaPromMin?: number;   // SLA promedio de respuesta en mesón (minutos)
+  configApi?: ConfigApiProveedor | null;
+  configScraping?: ConfigScrapingProveedor | null;
   createdAt?: string;
   updatedAt?: string;
 }

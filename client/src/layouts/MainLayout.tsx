@@ -210,16 +210,6 @@ export default function MainLayout() {
           <div className="nav-section">
             <div className="nav-section-label">Catálogo & Bodegas</div>
             <NavLink
-              to="/inventario"
-              end
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `nav-item ${isActive ? "active" : ""}`
-              }
-            >
-              <span className="nav-icon">📦</span> Inventario & Web
-            </NavLink>
-            <NavLink
               to="/inventario-erp"
               onClick={closeSidebar}
               className={({ isActive }) =>
@@ -238,13 +228,22 @@ export default function MainLayout() {
               <span className="nav-icon">🏭</span> Proveedores & Ailoo
             </NavLink>
             <NavLink
-              to="/proveedor"
+              to="/portal-proveedores-wsp"
               onClick={closeSidebar}
               className={({ isActive }) =>
                 `nav-item ${isActive ? "active" : ""}`
               }
             >
               <span className="nav-icon">🏪</span> Portal Proveedor
+            </NavLink>
+            <NavLink
+              to="/inventario-propio"
+              onClick={closeSidebar}
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+            >
+              <span className="nav-icon">📦</span> Inventario Propio
             </NavLink>
             <NavLink
               to="/pos"
@@ -418,7 +417,7 @@ export default function MainLayout() {
                               className={styles.searchResultInfo}
                               onClick={() => {
                                 closeSearch();
-                                navigate("/inventario");
+                                navigate("/inventario-erp");
                               }}
                             >
                               <div className={styles.srSkuRow}>
@@ -454,7 +453,7 @@ export default function MainLayout() {
                                 className={styles.searchQuickBtn}
                                 onClick={() => {
                                   closeSearch();
-                                  navigate("/inventario");
+                                  navigate("/inventario-erp");
                                 }}
                               >
                                 Ficha
@@ -532,10 +531,10 @@ export default function MainLayout() {
             </button>
             <button
               className={`btn btn-sm ${styles.headerTallerBtn}`}
-              onClick={() => navigate("/inventario")}
-              title="Abrir Catálogo e Inventario Web"
+              onClick={() => navigate("/inventario-erp")}
+              title="Abrir Consolidado ERP & Tiendas"
             >
-              📦 Catálogo
+              🏢 ERP & Tiendas
             </button>
           </div>
 

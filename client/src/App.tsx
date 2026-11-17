@@ -23,6 +23,7 @@ import Vehiculos        from './pages/Vehiculos/Vehiculos';
 import PerfilVehiculo   from './pages/Vehiculos/PerfilVehiculo';
 import Inventario       from './pages/Inventario/Inventario';
 import Proveedores      from './pages/Proveedores/Proveedores';
+import DirectorioProveedoresWsp from './pages/Proveedores/DirectorioProveedoresWsp';
 import CostosFijos      from './pages/CostosFijos/CostosFijos';
 import Trabajadores     from './pages/Trabajadores/Trabajadores';
 import Estadisticas     from './pages/Estadisticas/Estadisticas';
@@ -111,9 +112,11 @@ export default function App() {
               <Route path="ordenes/:id/ver"          element={<VerOrden />} />
               <Route path="vehiculos"                element={<Vehiculos />} />
               <Route path="vehiculos/:patente"       element={<PerfilVehiculo />} />
-              <Route path="inventario"               element={<Inventario />} />
+              <Route path="inventario"               element={<Navigate to="/inventario-erp" replace />} />
               <Route path="inventario-erp"           element={<InventarioErpConsolidado />} />
+              <Route path="inventario-propio"        element={<Inventario modo="bodega_propia" />} />
               <Route path="proveedores"              element={<Proveedores />} />
+              <Route path="portal-proveedores-wsp"   element={<DirectorioProveedoresWsp />} />
               <Route path="ventas-web"               element={<VentasCanalesOmnicanal canalInicial="web_directo" />} />
               <Route path="ventas-pos-canal"         element={<VentasCanalesOmnicanal canalInicial="pos_olivares" />} />
               <Route path="ventas-canales"           element={<VentasCanalesOmnicanal canalInicial="todos" />} />

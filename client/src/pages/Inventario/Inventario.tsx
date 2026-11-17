@@ -126,13 +126,57 @@ const CONTACTO_TALLER = "contacto@facilrepuestos.cl";
 const autoNombre = (tipo?: string, codigo?: string) =>
   [tipo, codigo].map(s => (s || "").trim().toUpperCase()).filter(Boolean).join(" ");
 
+const NOMBRE_BODEGA_PROPIA_DEFAULT = "Bodega Enrique Olivares 224 (Dr. Motors)";
+
+/**
+ * Determina si un ítem pertenece al inventario propio de Dr. Motors / Sucursal Enrique Olivares 224
+ * (excluyendo catálogos externos Ailoo Soluparts/Global, adjudicaciones externas WSP y tenants de proveedores terceros).
+ */
+export function esItemPropioDrMotorsOlivares(item: ItemInventario): boolean {
+  const origen = (item.origenDatos || "").toLowerCase();
+  const skuPub = (item.skuPublicoFrp || "").toUpperCase();
+  const prov = (item.proveedor || "").trim();
+
+  // Excluir catálogos automatizados Ailoo y adjudicaciones externas WSP
+  if (
+    origen === "soluparts_ailoo" ||
+    origen === "global_ailoo" ||
+    origen === "mesa_whatsapp_vivo" ||
+    skuPub.startsWith("FRP-SOL") ||
+    skuPub.startsWith("FRP-GLB") ||
+    skuPub.startsWith("FRP-WSP") ||
+    /soluparts/i.test(prov) ||
+    /global\s*repuestos|global\s*\(ailoo\)/i.test(prov) ||
+    /mesa\s*wsp/i.test(prov)
+  ) {
+    return false;
+  }
+
+  // Es explícitamente bodega propia / Dr. Motors / Enrique Olivares 224 / Taller
+  if (
+    origen === "bodega_propia_olivares" ||
+    skuPub.startsWith("FRP-OWN") ||
+    /propio|bodega|olivares|dr\.?\s*motors|taller|facilrepuestos|fácilrepuestos/i.test(prov)
+  ) {
+    return true;
+  }
+
+  // Si no tiene proveedor externo asignado, es producto propio de la bodega
+  if (!prov && !item.proveedorId) {
+    return true;
+  }
+
+  return false;
+}
+
 interface InventarioProps {
-  /** "taller" = administrador (todo el inventario) · "proveedor" = solo su propio inventario */
-  modo?: "taller" | "proveedor";
+  /** "taller" = administrador (todo) · "proveedor" = portal externo · "bodega_propia" = Dr. Motors & Enrique Olivares 224 */
+  modo?: "taller" | "proveedor" | "bodega_propia";
 }
 
 export default function Inventario({ modo = "taller" }: InventarioProps) {
   const esProveedor = modo === "proveedor";
+  const esBodegaPropia = modo === "bodega_propia";
   const { inventario, setInventario, setLoading, notify } = useAppStore();
   const [search, setSearch]       = useState("");
   const [filtrocat, setFiltrocat] = useState("");
@@ -297,7 +341,12 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
   };
 
   const openNuevo = () => {
-    setEditingId(null); setForm(emptyItem()); setMarcasExtra([]); setMarcaCustom("");
+    setEditingId(null);
+    setForm({
+      ...emptyItem(),
+      proveedor: esBodegaPropia ? NOMBRE_BODEGA_PROPIA_DEFAULT : "",
+    });
+    setMarcasExtra([]); setMarcaCustom("");
     setTipoCustom(""); setModeloInputs({}); setMarcasExpandidas({}); setEqPanel([]);
     setEqExpandidos({}); setEqInputs({}); setEqFabricanteNuevo(""); setModal(true);
   };
@@ -426,7 +475,16 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
     if (!nombreFinal) { notify("Ingresa un nombre, o elige un tipo de pieza e ingresa el código para generarlo","error"); return; }
     setLoading(true);
     try {
-      const data = { ...form, nombre: nombreFinal, marcasCompatibles: [...(form.marcasCompatibles || []), ...marcasExtra] };
+      const proveedorFinal = esBodegaPropia
+        ? (form.proveedor || "").trim() || NOMBRE_BODEGA_PROPIA_DEFAULT
+        : form.proveedor;
+      const data = {
+        ...form,
+        nombre: nombreFinal,
+        proveedor: proveedorFinal,
+        ...(esBodegaPropia ? { origenDatos: "bodega_propia_olivares" as const } : {}),
+        marcasCompatibles: [...(form.marcasCompatibles || []), ...marcasExtra],
+      };
       if (editingId) { await inventarioService.update(editingId, data); notify("Repuesto actualizado ✓","success"); }
       else           { await inventarioService.create(data);            notify("Repuesto agregado ✓","success"); }
       setModal(false); loadInventario();
@@ -480,11 +538,16 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
       return { ...next, nombre: nombreEsAuto ? despues : prev.nombre };
     });
 
-  const lowStock   = inventario.filter(i => getStockInfo(i).disponible <= (i.stockMinimo || 0));
-  const reservados = inventario.filter(i => (i.stockReservado || 0) > 0);
-  const pendientesWooCount = inventario.filter(i => i.needsWooSync === true).length;
-  const totalValue = inventario.reduce((s, i) => s + (i.precioCompra || 0) * (i.stock || 0), 0);
-  const cats       = [...new Set(inventario.map(i => i.categoria).filter(Boolean))].length;
+  // En modo "bodega_propia" mostramos exclusivamente los productos propios de Dr. Motors y Enrique Olivares 224
+  const inventarioVisible = esBodegaPropia
+    ? inventario.filter(esItemPropioDrMotorsOlivares)
+    : inventario;
+
+  const lowStock   = inventarioVisible.filter(i => getStockInfo(i).disponible <= (i.stockMinimo || 0));
+  const reservados = inventarioVisible.filter(i => (i.stockReservado || 0) > 0);
+  const pendientesWooCount = inventarioVisible.filter(i => i.needsWooSync === true).length;
+  const totalValue = inventarioVisible.reduce((s, i) => s + (i.precioCompra || 0) * (i.stock || 0), 0);
+  const cats       = [...new Set(inventarioVisible.map(i => i.categoria).filter(Boolean))].length;
 
   // Contadores de categorías y marcas de vehículo presentes en el inventario (alineados con facilrepuestos.cl)
   const categoriasConConteo = (() => {
@@ -492,7 +555,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
     for (const c of allCategorias) {
       map.set(c.nombre, 0);
     }
-    for (const it of inventario) {
+    for (const it of inventarioVisible) {
       const catNorm = resolverJerarquiaCategoria(it).categoria || it.categoria;
       if (catNorm) {
         map.set(catNorm, (map.get(catNorm) || 0) + 1);
@@ -505,7 +568,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
 
   const marcasVehiculoConConteo = (() => {
     const map = new Map<string, number>();
-    for (const it of inventario) {
+    for (const it of inventarioVisible) {
       for (const m of it.marcasCompatibles || []) {
         const marca = (m || "").trim().toUpperCase();
         if (!marca) continue;
@@ -515,7 +578,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   })();
 
-  const filtered = inventario.filter(i => {
+  const filtered = inventarioVisible.filter(i => {
     const q = search.toLowerCase();
     const jer = resolverJerarquiaCategoria(i);
     const modelosFlat = Object.values(i.modelosCompatibles || {}).flat().join(" ").toLowerCase();
@@ -660,6 +723,10 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
               <>
                 Mis <span>Repuestos</span>
               </>
+            ) : esBodegaPropia ? (
+              <>
+                Inventario Propio <span>Dr. Motors & Enrique Olivares 224</span>
+              </>
             ) : (
               <>
                 Inventario <span>& Web WooCommerce</span>
@@ -721,7 +788,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
                 color: filtrocat === "" ? '#ffffff' : '#334155',
               }}
             >
-              Todas ({inventario.length})
+              Todas ({inventarioVisible.length})
             </button>
             {categoriasConConteo.map(([nombreCat, cant]) => {
               const activa = filtrocat === nombreCat;
@@ -826,7 +893,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
                   setFiltroSubcat("");
                 }}
               >
-                <option value="">Todas las categorías ({inventario.length})</option>
+                <option value="">Todas las categorías ({inventarioVisible.length})</option>
                 {categoriasConConteo.map(([nombreCat, cant]) => (
                   <option key={nombreCat} value={nombreCat}>
                     {nombreCat} ({cant})
@@ -922,7 +989,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
           </button>
           <button className="btn btn-dark" onClick={() => setModalExcel(true)}>⬆ Importar Excel</button>
           <button className="btn btn-dark" onClick={exportarExcel} disabled={filtered.length === 0}>⬇ Exportar Excel</button>
-          {!esProveedor && (
+          {!esProveedor && !esBodegaPropia && (
             <button
               className="btn btn-dark"
               style={{ background: '#4f46e5', borderColor: '#4f46e5', color: '#ffffff', fontWeight: 700 }}
@@ -955,7 +1022,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
 
       {/* Stats */}
       <div className="stats-grid">
-        <div className="stat-card"><div className="stat-value">{inventario.length}</div><div className="stat-label">Total Items</div></div>
+        <div className="stat-card"><div className="stat-value">{inventarioVisible.length}</div><div className="stat-label">Total Items</div></div>
         <div className="stat-card"><div className={`stat-value ${styles.colorDanger}`}>{lowStock.length}</div><div className="stat-label">Stock Bajo</div></div>
         <div className="stat-card"><div className={`stat-value ${styles.colorWarning}`}>{reservados.length}</div><div className="stat-label">Con Reservas</div></div>
         <div className="stat-card"><div className={`stat-value ${styles.statValorInventario}`}>{fmtCLP(totalValue)}</div><div className="stat-label">Valor Inventario (neto)</div></div>
@@ -1763,7 +1830,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
       {/* MODAL IMPORTAR EXCEL */}
       {modalExcel && (
         <ImportarExcelModal
-          inventarioActual={inventario}
+          inventarioActual={inventarioVisible}
           onClose={() => setModalExcel(false)}
           onSuccess={() => { setModalExcel(false); loadInventario(); }}
         />
@@ -1794,7 +1861,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
       {/* MODAL BANCO DE FOTOS DE REPUESTOS (CAPTURA CON TELÉFONO) */}
       {modalBancoFotos && (
         <BancoFotosModal
-          inventario={inventario}
+          inventario={inventarioVisible}
           itemPreseleccionado={itemBancoFotoPreseleccionado}
           onClose={() => {
             setModalBancoFotos(false);

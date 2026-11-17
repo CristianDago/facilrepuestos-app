@@ -876,7 +876,9 @@ router.post('/facturas/ingresar', requireAuth, async (req, res, next) => {
 
     const esProveedor = req.user?.rol === 'proveedor';
     const proveedorId = esProveedor ? req.user.docId : (req.body.proveedorId || null);
-    const proveedorNombre = esProveedor ? (req.user.nombre || 'PROVEEDOR') : (req.body.proveedorNombre || 'TALLER / FÁCILREPUESTOS');
+    const proveedorNombre = esProveedor
+      ? (req.user.nombre || 'PROVEEDOR')
+      : (req.body.proveedorNombre || 'Bodega Enrique Olivares 224 (Dr. Motors)');
 
     const invSnap = await db.collection('inventario').get();
     const misItems = invSnap.docs
@@ -979,6 +981,8 @@ router.post('/facturas/ingresar', requireAuth, async (req, res, next) => {
           stockReservado: 0,
           unidad: 'UNIDAD',
           proveedor: proveedorNombre,
+          origenDatos: esProveedor ? 'proveedor_local' : 'bodega_propia_olivares',
+          prefijoSku: esProveedor ? 'FRP-LOC' : 'FRP-OWN',
           ...(proveedorId ? { proveedorId } : {}),
           ultimaFacturaCompra: {
             folio: String(folio || ''),
@@ -1406,10 +1410,19 @@ router.post('/', requireAuth, async (req, res, next) => {
       // Creado por el taller con un proveedor elegido por nombre: vincular al id real
       const prov = resolverProveedor({ proveedor: rest.proveedor }, await cargarProveedores());
       if (prov) rest.proveedorId = prov.id;
+    } else {
+      rest.proveedor = 'Bodega Enrique Olivares 224 (Dr. Motors)';
     }
 
+    const esPropioOlivares =
+      req.user?.rol !== 'proveedor' &&
+      (!rest.proveedorId ||
+        /propio|bodega|olivares|dr\.?\s*motors|taller|facilrepuestos|fácilrepuestos/i.test(
+          rest.proveedor || ''
+        ));
+
     const now = new Date().toISOString();
-    const prefijoSku = rest.prefijoSku || 'FRP-LOC';
+    const prefijoSku = rest.prefijoSku || (esPropioOlivares ? 'FRP-OWN' : 'FRP-LOC');
     const skuPublicoFrp = rest.skuPublicoFrp || generarSkuPublicoFrp(prefijoSku, rest.codigo || nombre.slice(0, 12));
     const taxonomia = clasificarProductoEnTaxonomiaFrp({
       nombre,
@@ -1422,7 +1435,7 @@ router.post('/', requireAuth, async (req, res, next) => {
       nombre,
       stock: stock || 0,
       stockReservado: 0,
-      origenDatos: rest.origenDatos || 'proveedor_local',
+      origenDatos: rest.origenDatos || (esPropioOlivares ? 'bodega_propia_olivares' : 'proveedor_local'),
       prefijoSku,
       skuPublicoFrp,
       ...rest,

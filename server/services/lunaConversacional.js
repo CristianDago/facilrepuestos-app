@@ -23,6 +23,7 @@
 import { google } from 'googleapis';
 import {
   cotizarDespachoAnticipado,
+  calcularPromesaRetiroYDespacho,
   NODOS_DESPACHO_DEFAULT,
 } from './logisticaTarifarioService.js';
 
@@ -261,9 +262,19 @@ export function clasificarIntencionConversacional({
     return { tipo: 'CANCELAR_PEDIDO' };
   }
 
-  // 2. Consulta por estado de pedido o pago
+  // 2. Consulta específica sobre reglas/tiempos de retiro o despacho en Santiago
   if (
-    /\b(MI\s+PEDIDO|ESTADO\s+DE\s+MI\s+PEDIDO|COMO\s+VA\s+MI\s+PEDIDO|YA\s+PAGUE|TRANSFERI|MANDE\s+EL\s+COMPROBANTE|VALIDARON\s+MI\s+PAGO|CUANDO\s+PUEDO\s+RETIRAR|FRP-PED-\d+)\b/.test(
+    !tienePiezaEnMensaje &&
+    /\b(CUANDO\s+PUEDO\s+RETIRAR|A\s+QUE\s+HORA\s+PUEDO\s+RETIRAR|PUEDO\s+RETIRAR\s+HOY|CUANTO\s+DEMORA\s+EL\s+RETIRO|CUANTO\s+TARDA\s+EL\s+RETIRO|COMO\s+FUNCIONA\s+EL\s+RETIRO|TIENEN\s+RETIRO|DONDE\s+RETIRO|PUEDO\s+IR\s+A\s+RETIRAR|CUANTO\s+DEMORA\s+EL\s+DESPACHO|CUANTO\s+TARDA\s+EL\s+DESPACHO|DESPACHAN\s+HOY|TIENEN\s+DELIVERY)\b/.test(
+      limpio
+    )
+  ) {
+    return { tipo: 'CONSULTA_RETIRO_DESPACHO' };
+  }
+
+  // 2.B Consulta por estado de pedido o pago
+  if (
+    /\b(MI\s+PEDIDO|ESTADO\s+DE\s+MI\s+PEDIDO|COMO\s+VA\s+MI\s+PEDIDO|YA\s+PAGUE|TRANSFERI|MANDE\s+EL\s+COMPROBANTE|VALIDARON\s+MI\s+PAGO|FRP-PED-\d+)\b/.test(
       limpio
     )
   ) {
@@ -395,6 +406,7 @@ export async function conducirFlujoCompraDeterministico({
     faltantesPendientes.length > 0
       ? `\n\n🔎 **Repuesto pendiente en búsqueda (${faltantesPendientes.join(', ')}):** No detenemos la venta de los productos disponibles. El repuesto que falta sigue en búsqueda activa en nuestra Mesa de Abastecimiento y te avisaremos por este mismo WhatsApp apenas sea encontrado.`
       : '';
+  const promesaSla = calcularPromesaRetiroYDespacho({ itemsCarrito: carritoActual });
 
   // Inicio del flujo COMPRAR: arma de inmediato el carro consolidado en WooCommerce con todos los productos disponibles
   if (esComandoComprar) {
@@ -447,7 +459,10 @@ export async function conducirFlujoCompraDeterministico({
           `¡Perfecto! 🛒 Ya armé **un único carro consolidado** con todos tus repuestos disponibles:\n${lineasResumen}\n• **Subtotal repuestos en stock:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
           `👉 **Ir a comprar todos tus productos juntos en facilrepuestos.cl:**\n${linkCarroConsolidado}` +
           `${notaFaltanteEnBusqueda}\n\n` +
-          `📍 O si prefieres dejar listo el envío por aquí: ¿prefieres **Retiro sin costo en nuestro taller** (**Enrique Olivares 224, La Florida**) o **Despacho a domicilio** (calculado al tiro según tu comuna o región)?`,
+          `⏱️ **Tiempos de entrega para tu pedido:**\n` +
+          `• **Retiro sin costo en tienda:** ${promesaSla.promesaRetiroCorta}\n` +
+          `• **Despacho en Santiago:** ${promesaSla.promesaDespachoSantiagoCorta}\n\n` +
+          `📍 ¿Prefieres **Retiro en Enrique Olivares 224, La Florida** o **Despacho a domicilio**?`,
         accionTomada: 'flujo_compra_paso_modalidad',
       };
     }
@@ -477,7 +492,7 @@ export async function conducirFlujoCompraDeterministico({
         flujoCompra: nuevoEstado,
         pedidoCreado: pedidoPreCreado || null,
         respuestaTexto:
-          `¡Perfecto! 🛒 Ya armé **tu carro consolidado** con **Despacho a domicilio**:\n${lineasResumen}\n• **Subtotal repuestos en stock:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
+          `¡Perfecto! 🛒 Ya armé **tu carro consolidado** con **Despacho a domicilio** (${promesaSla.promesaDespachoSantiagoCorta}):\n${lineasResumen}\n• **Subtotal repuestos en stock:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
           `👉 **Ir a comprar todos tus productos juntos en facilrepuestos.cl:**\n${linkCarroConsolidado}` +
           `${notaFaltanteEnBusqueda}\n\n` +
           `📍 Mándame tu **dirección de entrega** (calle, número y comuna/ciudad) si quieres que te deje calculado el despacho exacto saliendo desde **Enrique Olivares 224, La Florida**.`,
@@ -490,7 +505,7 @@ export async function conducirFlujoCompraDeterministico({
       flujoCompra: nuevoEstado,
       pedidoCreado: pedidoPreCreado || null,
       respuestaTexto:
-        `¡Perfecto! 🛒 Ya armé **tu carro consolidado** para retiro sin costo en nuestra sucursal (**Enrique Olivares 224, La Florida**):\n${lineasResumen}\n• **Total repuestos en stock:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
+        `¡Perfecto! 🛒 Ya armé **tu carro consolidado** para retiro sin costo (**${promesaSla.promesaRetiroCorta}**):\n${lineasResumen}\n• **Total repuestos en stock:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
         `👉 **Ir a comprar todos tus productos juntos en facilrepuestos.cl:**\n${linkCarroConsolidado}` +
         `${notaFaltanteEnBusqueda}\n\n` +
         `¿Necesitas **boleta** o **factura**?`,
@@ -601,7 +616,7 @@ export async function conducirFlujoCompraDeterministico({
       interceptado: true,
       flujoCompra: estado,
       respuestaTexto:
-        'Perfecto, queda con **Retiro sin costo en sucursal** (**Enrique Olivares 224, La Florida**).\n\n¿Necesitas **boleta** o **factura**?',
+        `Perfecto, queda con **Retiro sin costo en sucursal** (**Enrique Olivares 224, La Florida**).\n⏱️ **Disponibilidad de retiro:** ${promesaSla.promesaRetiroDetallada}\n\n¿Necesitas **boleta** o **factura**?`,
       accionTomada: 'flujo_compra_paso_documento',
     };
   }
@@ -845,6 +860,7 @@ export function requiereRedaccionConGemini({
   const intencionesCeroTokens = new Set([
     'CANCELAR_PEDIDO',
     'ESTADO_PEDIDO',
+    'CONSULTA_RETIRO_DESPACHO',
     'ATENCION_HUMANA',
     'CONSULTA_GARANTIAS',
     'CONSULTA_HORARIO',
@@ -921,7 +937,11 @@ REGLAS INQUEBRANTABLES (HEREDADAS DE LUNA SOLUPARTS):
    - Muestra siempre el nombre del producto, su código SKU exacto entre backticks (ej. \`FRP-...\`) y su precio final CON IVA incluido en pesos chilenos.
    - Si en los datos verificados viene el link para ver el producto en la página (\`https://facilrepuestos.cl/?p=...\`), mantenlo intacto para que el cliente pueda verlo en facilrepuestos.cl (NUNCA escribas fácilrepuestos.cl con tilde) y dile que al confirmar escriba **COMPRAR** para armarle un solo carro con todos los productos.
    - Si quedan 5 unidades o menos, menciona la cantidad como dato sin presionar.
-   - Recomienda el Retiro sin costo en nuestra sucursal ubicada en **Enrique Olivares 224, La Florida, Santiago** o **Despacho a domicilio pre-calculado** en Santiago (en nuestro furgón) y a todo Chile (con tarifa conocida antes de pagar según la talla del repuesto).
+   - Recomienda el Retiro sin costo en nuestra sucursal ubicada en **Enrique Olivares 224, La Florida, Santiago** o **Despacho a domicilio pre-calculado** en Santiago (Delivery en 2 horas de Lunes a Viernes de 09:00 a 18:00 hrs; compras después de las 16:00 hrs se despachan al día siguiente) y a todo Chile.
+   - REGLAS DE RETIRO EN ENRIQUE OLIVARES 224, LA FLORIDA:
+     * Si el producto está en nuestro stock directo en tienda: Retiro inmediato / automático.
+     * Si el producto está en portal de proveedor asociado: Retiro en 1 hora 30 minutos (1h 30m).
+     * Si el producto es SKU \`FRP-SOL-...\` (bodega central): Todas las compras antes de las 12:00 del día se pueden retirar en Enrique Olivares 224 a las 15:00 hrs (3:00 de la tarde) del mismo día; si la compra es después de las 12:00 del día y hasta el día siguiente a las 12:00 del día, se puede retirar siempre desde las 15:00 hrs (3:00 de la tarde) del día siguiente en Enrique Olivares 224.
 6. NUNCA menciones nombres de proveedores mayoristas internos (jamás nombres a Soluparts, Global Repuestos ni bodegas externas). Todo el stock y la gestión son de facilrepuestos.cl (escrito siempre sin tilde cuando lleva .cl).
 7. Horario de nuestra sucursal (Enrique Olivares 224, La Florida): lunes a jueves de 9:30 a 18:00, viernes de 9:30 a 17:00 y sábados de 9:30 a 14:00. Domingos y festivos cerrado.
 8. Usa negritas (**texto**) solo para destacar el vehículo, el precio o la palabra **COMPRAR**. No uses títulos largos ni lenguaje robótico.`;

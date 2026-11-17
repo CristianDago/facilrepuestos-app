@@ -159,7 +159,7 @@ const TARIFAS_RM_ANILLOS = {
   1: {
     anillo: 1,
     nombre: "Anillo 1 RM (0–7 km desde Taller)",
-    tiempoEstimado: "Despacho Hoy / 2 a 4 hrs hábiles en Furgón",
+    tiempoEstimado: "Delivery Express 2 horas (Lunes a Viernes 09:00 a 18:00 hrs; compras tras 16:00 hrs al día siguiente)",
     preciosPorTalla: {
       XS: 3990,
       S: 3990,
@@ -171,7 +171,7 @@ const TARIFAS_RM_ANILLOS = {
   2: {
     anillo: 2,
     nombre: "Anillo 2 RM (7–15 km desde Taller)",
-    tiempoEstimado: "Despacho Same-Day / 3 a 6 hrs hábiles en Furgón",
+    tiempoEstimado: "Delivery Express 2 horas (Lunes a Viernes 09:00 a 18:00 hrs; compras tras 16:00 hrs al día siguiente)",
     preciosPorTalla: {
       XS: 5490,
       S: 5490,
@@ -183,7 +183,7 @@ const TARIFAS_RM_ANILLOS = {
   3: {
     anillo: 3,
     nombre: "Anillo 3 RM (15–26 km Gran Santiago)",
-    tiempoEstimado: "Despacho en Ruta Furgón (24 hrs hábiles)",
+    tiempoEstimado: "Delivery Express 2 horas (Lunes a Viernes 09:00 a 18:00 hrs; compras tras 16:00 hrs al día siguiente)",
     preciosPorTalla: {
       XS: 6990,
       S: 6990,
@@ -195,7 +195,7 @@ const TARIFAS_RM_ANILLOS = {
   4: {
     anillo: 4,
     nombre: "Anillo 4 RM Periferia (26–45 km)",
-    tiempoEstimado: "Despacho en Ruta Extendida o Courier RM (24 a 48 hrs hábiles)",
+    tiempoEstimado: "Delivery Santiago 2 horas (Lunes a Viernes 09:00 a 18:00 hrs; compras tras 16:00 hrs al día siguiente)",
     preciosPorTalla: {
       XS: 9990,
       S: 9990,
@@ -655,6 +655,178 @@ function resolverZonaDestinoYHub(direccionOComuna = "", nodosActivos = NODOS_DES
 }
 
 /**
+ * Determina el SLA exacto de Retiro en Tienda (Enrique Olivares 224, La Florida) y
+ * Despacho Delivery en Santiago según la hora actual en Chile (`America/Santiago`) y el
+ * origen del stock de los repuestos:
+ *   1. Stock propio FácilRepuestos -> Retiro inmediato / automático en Enrique Olivares 224.
+ *   2. Soluparts (`FRP-SOL-*` / `soluparts_ailoo`):
+ *      - Compras antes de las 12:00 del día -> Retiro a las 15:00 hrs (3:00 PM) del mismo día en Enrique Olivares 224.
+ *      - Compras después de las 12:00 del día (y hasta las 12:00 del día siguiente) -> Retiro desde las 15:00 hrs (3:00 PM) del día siguiente en Enrique Olivares 224.
+ *   3. Portal de cualquier proveedor (`portal_proveedor_local`, `global_ailoo`, `mesa_whatsapp`) -> Retiro en 1 hora 30 minutos (1h 30m) en Enrique Olivares 224.
+ *   4. Despacho Delivery a todo Santiago -> 2 horas (Lunes a Viernes de 09:00 a 18:00 hrs; compras después de las 16:00 hrs se despachan al día hábil siguiente).
+ */
+function calcularPromesaRetiroYDespacho({
+  itemsCarrito = [],
+  fechaActual = new Date(),
+} = {}) {
+  const partes = new Intl.DateTimeFormat("es-CL", {
+    timeZone: "America/Santiago",
+    weekday: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(fechaActual);
+
+  const map = {};
+  for (const p of partes) map[p.type] = p.value;
+  const diaSemana = String(map.weekday || "").toLowerCase();
+  const hora = parseInt(map.hour || "12", 10);
+  const minuto = parseInt(map.minute || "0", 10);
+  const minutosDia = hora * 60 + minuto;
+  const horaStr = `${String(hora).padStart(2, "0")}:${String(minuto).padStart(2, "0")}`;
+
+  const esLunesAViernes = [
+    "lunes",
+    "martes",
+    "miércoles",
+    "miercoles",
+    "jueves",
+    "viernes",
+  ].includes(diaSemana);
+  const antesDeLas12 = minutosDia < 12 * 60;
+  const enVentanaDeliveryHoy =
+    esLunesAViernes && minutosDia >= 9 * 60 && minutosDia < 16 * 60;
+
+  const lista = Array.isArray(itemsCarrito) ? itemsCarrito : [];
+  let tieneSoluparts = false;
+  let tienePortalProveedor = false;
+  let tieneStockPropio = false;
+
+  for (const it of lista) {
+    const sku = String(it?.skuPublicoFrp || it?.codigo || "").toUpperCase();
+    const origen = String(it?.origen || it?.origenCatalogo || "").toLowerCase();
+    const nodo = String(it?.nodoAilooId || "").toLowerCase();
+    const provNombre = String(it?.proveedorNombre || it?.proveedor || "").toLowerCase();
+
+    if (
+      nodo === "soluparts" ||
+      origen === "soluparts_ailoo" ||
+      sku.startsWith("FRP-SOL-") ||
+      provNombre.includes("solupart")
+    ) {
+      tieneSoluparts = true;
+    } else if (
+      origen === "portal_proveedor_local" ||
+      origen === "global_ailoo" ||
+      origen === "mesa_whatsapp" ||
+      origen === "mesa_whatsapp_etapa3" ||
+      nodo === "global" ||
+      sku.startsWith("FRP-GLB-") ||
+      sku.startsWith("FRP-WSP-") ||
+      sku.startsWith("FRP-PROV-") ||
+      Boolean(it?.proveedorId)
+    ) {
+      tienePortalProveedor = true;
+    } else if (
+      it?.enStockPropioTienda === true ||
+      origen === "stock_propio" ||
+      sku.startsWith("FRP-OWN-") ||
+      sku.startsWith("FRP-STOCK-") ||
+      (!it?.proveedorId &&
+        !nodo &&
+        (!provNombre ||
+          /facil\s*repuesto|bodega\s*local|stock\s*propio|enrique\s*olivares|taller\s*propio/i.test(
+            provNombre
+          )))
+    ) {
+      tieneStockPropio = true;
+    } else {
+      tienePortalProveedor = true;
+    }
+  }
+
+  // Determinar regla aplicable al retiro según los productos en el carrito
+  let tipoOrigenConsolidado = "general";
+  let promesaRetiroCorta = "";
+  let promesaRetiroDetallada = "";
+
+  if (tieneSoluparts) {
+    tipoOrigenConsolidado = "soluparts";
+    if (esLunesAViernes && antesDeLas12) {
+      promesaRetiroCorta =
+        "Retiro HOY desde las 15:00 hrs (3:00 PM) en Enrique Olivares 224, La Florida";
+      promesaRetiroDetallada =
+        "Como tu compra es antes de las 12:00 del día, puedes retirar hoy mismo desde las 15:00 hrs (3:00 de la tarde) en nuestra tienda en Enrique Olivares 224, La Florida.";
+    } else {
+      promesaRetiroCorta =
+        "Retiro desde las 15:00 hrs (3:00 PM) del siguiente día hábil en Enrique Olivares 224, La Florida";
+      promesaRetiroDetallada =
+        "Para compras realizadas después de las 12:00 del día (y hasta las 12:00 del día siguiente), el retiro está disponible desde las 15:00 hrs (3:00 de la tarde) del siguiente día hábil en Enrique Olivares 224, La Florida.";
+    }
+  } else if (tienePortalProveedor) {
+    tipoOrigenConsolidado = "portal_proveedor";
+    if (esLunesAViernes && minutosDia >= 9 * 60 && minutosDia <= 16 * 60 + 30) {
+      promesaRetiroCorta =
+        "Retiro en 1 hora 30 minutos (1h 30m) en Enrique Olivares 224, La Florida";
+      promesaRetiroDetallada =
+        "Este repuesto se coordina desde el portal de nuestra bodega asociada y queda listo para retiro en 1 hora 30 minutos (1h 30m) en Enrique Olivares 224, La Florida.";
+    } else {
+      promesaRetiroCorta =
+        "Retiro en 1h 30m dentro del horario hábil (09:00 a 18:00 hrs) en Enrique Olivares 224, La Florida";
+      promesaRetiroDetallada =
+        "Este repuesto de portal proveedor demora 1 hora 30 minutos (1h 30m) en estar listo para retiro en Enrique Olivares 224, La Florida (en horario hábil de Lunes a Viernes de 09:00 a 18:00 hrs).";
+    }
+  } else if (tieneStockPropio) {
+    tipoOrigenConsolidado = "stock_propio";
+    promesaRetiroCorta =
+      "Retiro inmediato / automático en Enrique Olivares 224, La Florida";
+    promesaRetiroDetallada =
+      "¡Está en nuestro stock directo en tienda! Puedes retirarlo automáticamente de inmediato en Enrique Olivares 224, La Florida.";
+  } else {
+    tipoOrigenConsolidado = "sin_items_especificos";
+    promesaRetiroCorta =
+      "Retiro en Enrique Olivares 224, La Florida (Inmediato en stock propio · 1h 30m en portal proveedor · 15:00 hrs línea bodega central)";
+    promesaRetiroDetallada =
+      "En Enrique Olivares 224, La Florida tenemos 3 modalidades según el origen del repuesto: (1) Si está en nuestro stock en tienda, el retiro es automático/inmediato; (2) Si está en el portal de un proveedor asociado, se retira en 1 hora 30 minutos; (3) Para repuestos de bodega central, las compras antes de las 12:00 hrs se retiran hoy mismo desde las 15:00 hrs (3:00 de la tarde), y las compras después de las 12:00 hrs (hasta las 12:00 del día siguiente) se retiran desde las 15:00 hrs del día hábil siguiente.";
+  }
+
+  // Regla de Despacho Delivery a todo Santiago (2 horas entre 09:00 y 18:00 L-V; corte 16:00 hrs)
+  const promesaDespachoSantiagoCorta = enVentanaDeliveryHoy
+    ? "Delivery Express en 2 horas a todo Santiago (Lunes a Viernes 09:00 a 18:00 hrs)"
+    : "Despacho al día hábil siguiente a primera hora (compras después de las 16:00 hrs se despachan al día siguiente; horario Delivery 2 hrs: Lunes a Viernes 09:00 a 18:00 hrs)";
+
+  const promesaDespachoSantiagoDetallada = enVentanaDeliveryHoy
+    ? `Contamos con Delivery Express en 2 horas para todo Santiago (operamos de Lunes a Viernes de 09:00 a 18:00 hrs; las compras después de las 16:00 hrs se despachan al día siguiente).`
+    : `Ofrecemos Delivery en 2 horas para todo Santiago de Lunes a Viernes entre 09:00 y 18:00 hrs. Como son las ${horaStr} hrs (después del corte de las 16:00 hrs o fuera de jornada L-V), tu compra queda programada para despacho a primera hora del día hábil siguiente.`;
+
+  const resumenReglasCliente =
+    `📍 **Reglas de Retiro en Enrique Olivares 224, La Florida y Despacho Santiago:**\n` +
+    `• **Stock directo en tienda:** Retiro automático e inmediato en Enrique Olivares 224, La Florida.\n` +
+    `• **Portal de bodegas asociadas:** Retiro en **1 hora 30 minutos (1h 30m)** en Enrique Olivares 224, La Florida.\n` +
+    `• **Línea Bodega Central:** Todas las compras **antes de las 12:00 del día** se pueden retirar en **Enrique Olivares 224 a las 15:00 hrs (3:00 de la tarde) del mismo día**; si compras **después de las 12:00 del día y hasta el día siguiente a las 12:00 del día**, se retiran **desde las 15:00 hrs (3:00 de la tarde)** en Enrique Olivares 224.\n` +
+    `• **Delivery a todo Santiago:** Entrega en **2 horas** entre **09:00 y 18:00 hrs de Lunes a Viernes** (todas las compras **después de las 16:00 hrs** se despachan **al día hábil siguiente**).`;
+
+  return {
+    horaChile: horaStr,
+    diaSemana,
+    esLunesAViernes,
+    antesDeLas12,
+    enVentanaDeliveryHoy,
+    tipoOrigenConsolidado,
+    tieneSoluparts,
+    tienePortalProveedor,
+    tieneStockPropio,
+    promesaRetiroCorta,
+    promesaRetiroDetallada,
+    promesaDespachoSantiagoCorta,
+    promesaDespachoSantiagoDetallada,
+    textoRetiroCarrito: promesaRetiroCorta,
+    textoDespachoSantiago: promesaDespachoSantiagoCorta,
+    resumenReglasCliente,
+  };
+}
+
+/**
  * Cotiza el despacho pre-pagado exacto (RM en Peugeot Partner desde el taller más cercano
  * o Regiones vía Courier Prepagado según Talla Volumétrica XS..XL).
  */
@@ -666,6 +838,7 @@ function cotizarDespachoAnticipado({
 } = {}) {
   const esRetiro = /retiro/i.test(String(modalidad || ""));
   const volumetria = calcularVolumetriaCarrito(itemsCarrito);
+  const promesaSla = calcularPromesaRetiroYDespacho({ itemsCarrito });
   const nodoPrincipal =
     (Array.isArray(nodosActivos) && nodosActivos.find((n) => n.esPrincipal)) ||
     NODOS_DESPACHO_DEFAULT[0];
@@ -677,7 +850,8 @@ function cotizarDespachoAnticipado({
       esPrepagado: true,
       esRegionMetropolitana: true,
       tituloTarifa: `Retiro Gratis en Taller (${nodoPrincipal.direccion})`,
-      tiempoEstimado: "Listo para retiro previa coordinación",
+      tiempoEstimado: promesaSla.promesaRetiroCorta,
+      promesaSla,
       nodoOrigen: {
         id: nodoPrincipal.id,
         nombre: nodoPrincipal.nombre,
@@ -685,7 +859,7 @@ function cotizarDespachoAnticipado({
         comuna: nodoPrincipal.comuna,
       },
       volumetria,
-      explicacionCliente: `Retiro sin costo en nuestro taller ubicado en ${nodoPrincipal.direccion}.`,
+      explicacionCliente: `${promesaSla.promesaRetiroDetallada}`,
     };
   }
 
@@ -705,11 +879,12 @@ function cotizarDespachoAnticipado({
       comunaDetectada: destino.comunaDetectada,
       esFallbackReferencial: Boolean(destino.esFallbackReferencial),
       tituloTarifa: `Delivery Propio FácilRepuestos — ${defAnillo.nombre} (${volumetria.tallaConsolidada})`,
-      tiempoEstimado: defAnillo.tiempoEstimado,
+      tiempoEstimado: promesaSla.promesaDespachoSantiagoCorta,
+      promesaSla,
       medioTransporte: destino.nodoOrigen.vehiculoFlota || "Peugeot Partner",
       nodoOrigen: destino.nodoOrigen,
       volumetria,
-      explicacionCliente: `Despacho directo en nuestro furgón desde ${destino.nodoOrigen.direccion} hacia ${destino.comunaDetectada} (Caja Talla ${talla}, ~${volumetria.pesoTarifableConsolidadoKg} kg volumétricos).`,
+      explicacionCliente: `${promesaSla.promesaDespachoSantiagoDetallada} Salida desde ${destino.nodoOrigen.direccion} hacia ${destino.comunaDetectada} (Caja Talla ${talla}, ~${volumetria.pesoTarifableConsolidadoKg} kg volumétricos).`,
     };
   }
 
@@ -774,6 +949,7 @@ export {
   MACROZONAS_REGIONES,
   clasificarTallaLogisticaRepuesto,
   calcularVolumetriaCarrito,
+  calcularPromesaRetiroYDespacho,
   resolverZonaDestinoYHub,
   cotizarDespachoAnticipado,
   obtenerNodosDespachoActivos,

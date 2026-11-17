@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { useAppStore } from '../../store/useAppStore';
@@ -34,6 +34,13 @@ export default function AgenteOmnicanal() {
     'auto' | 'forzar_escalamiento' | 'forzar_mesa_wsp'
   >('auto');
   const [mostrarAdjuntos, setMostrarAdjuntos] = useState(false);
+
+  // Buffer de 5 segundos desde el último mensaje para agrupar múltiples envíos seguidos
+  const [mensajesEnBuffer, setMensajesEnBuffer] = useState<string[]>([]);
+  const [segundosRestantesBuffer, setSegundosRestantesBuffer] = useState<number>(0);
+  const timerDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intervalCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const bufferTextosRef = useRef<string[]>([]);
 
   // Modal nueva conversación
   const [mostrarNuevaSesion, setMostrarNuevaSesion] = useState(false);
@@ -120,6 +127,43 @@ export default function AgenteOmnicanal() {
 
     if (!payload.texto.trim() && !(payload.transcripcionAudio || '').trim()) {
       notify('Escribe un mensaje del cliente o selecciona un escenario de prueba', 'error');
+      return;
+    }
+
+    // Si es un envío manual desde el composer, agrupar mensajes durante 5 segundos desde el último envío
+    if (!payloadOverride) {
+      const nuevoTexto = payload.texto.trim();
+      bufferTextosRef.current = [...bufferTextosRef.current, nuevoTexto];
+      setMensajesEnBuffer([...bufferTextosRef.current]);
+      setTextoMensaje('');
+
+      if (timerDebounceRef.current) clearTimeout(timerDebounceRef.current);
+      if (intervalCountdownRef.current) clearInterval(intervalCountdownRef.current);
+
+      setSegundosRestantesBuffer(5);
+      intervalCountdownRef.current = setInterval(() => {
+        setSegundosRestantesBuffer((prev) => (prev > 1 ? prev - 1 : 0));
+      }, 1000);
+
+      const snapshotAudio = transcripcionAudio;
+      const snapshotFoto = fotoUrl;
+      const snapshotPatente = patenteInput;
+      const snapshotModo = modoForzado;
+
+      timerDebounceRef.current = setTimeout(() => {
+        if (intervalCountdownRef.current) clearInterval(intervalCountdownRef.current);
+        const textoCombinado = bufferTextosRef.current.join('\n');
+        bufferTextosRef.current = [];
+        setMensajesEnBuffer([]);
+        setSegundosRestantesBuffer(0);
+        void enviarConsultaCascada({
+          texto: textoCombinado,
+          transcripcionAudio: snapshotAudio,
+          fotoUrl: snapshotFoto,
+          patente: snapshotPatente,
+          modoForzado: snapshotModo,
+        });
+      }, 5000);
       return;
     }
 
@@ -433,12 +477,18 @@ export default function AgenteOmnicanal() {
                     <span className={styles.sessionName}>{ses.clienteNombre}</span>
                     <span
                       className={
-                        ses.canal === 'whatsapp_cliente'
+                        ses.canal === 'whatsapp_cliente' ||
+                        ses.canal === 'whatsapp_meta_cloud' ||
+                        ses.id.startsWith('wsp_')
                           ? styles.canalBadgeWsp
                           : styles.canalBadgeWeb
                       }
                     >
-                      {ses.canal === 'whatsapp_cliente' ? '📲 WSP' : '🌐 WEB'}
+                      {ses.canal === 'whatsapp_cliente' ||
+                      ses.canal === 'whatsapp_meta_cloud' ||
+                      ses.id.startsWith('wsp_')
+                        ? '📲 WSP'
+                        : '🌐 WEB'}
                     </span>
                   </div>
                   {ses.vehiculoContexto ? (
@@ -596,13 +646,42 @@ export default function AgenteOmnicanal() {
                   </div>
                 )}
 
+                {mensajesEnBuffer.length > 0 && (
+                  <div
+                    style={{
+                      background: '#eff6ff',
+                      border: '1px solid #93c5fd',
+                      borderRadius: 8,
+                      padding: '8px 12px',
+                      fontSize: '0.8rem',
+                      color: '#1e3a8a',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 10,
+                    }}
+                  >
+                    <span>
+                      ⏳ <strong>Agrupando {mensajesEnBuffer.length} mensaje(s):</strong>{' '}
+                      "{mensajesEnBuffer.join(' · ')}" — Repuestín responderá en{' '}
+                      <strong>{segundosRestantesBuffer}s</strong> si no escribes otro mensaje.
+                    </span>
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', gap: 10 }}>
                   <textarea
                     className={styles.textarea}
                     style={{ flex: 1 }}
-                    placeholder="Escribe como cliente final (ej. 'Hola, necesito bomba de agua para mi Hyundai Porter patente JPKR42')..."
+                    placeholder="Escribe uno o varios mensajes seguidos (Repuestín espera 5 segundos desde el último mensaje para unirlos en una sola solicitud)..."
                     value={textoMensaje}
                     onChange={(e) => setTextoMensaje(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        void enviarConsultaCascada();
+                      }
+                    }}
                   />
                   <button
                     type="button"
@@ -610,7 +689,11 @@ export default function AgenteOmnicanal() {
                     disabled={enviandoMensaje}
                     onClick={() => enviarConsultaCascada()}
                   >
-                    {enviandoMensaje ? 'Procesando Cascada...' : 'Enviar Mensaje →'}
+                    {enviandoMensaje
+                      ? 'Procesando Cascada...'
+                      : mensajesEnBuffer.length > 0
+                        ? `Sumar mensaje (${segundosRestantesBuffer}s) →`
+                        : 'Enviar Mensaje →'}
                   </button>
                 </div>
               </div>

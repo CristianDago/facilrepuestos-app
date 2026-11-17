@@ -1105,7 +1105,7 @@ export interface MensajeSesionAgente {
 
 export interface SesionAgenteOmnicanal {
   id: string;
-  canal: 'whatsapp_cliente' | 'web_cliente';
+  canal: 'whatsapp_cliente' | 'whatsapp_meta_cloud' | 'web_cliente';
   clienteNombre: string;
   clienteTelefono?: string;
   estado: 'activa' | 'cerrada';

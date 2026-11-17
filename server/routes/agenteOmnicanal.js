@@ -42,6 +42,7 @@ import { sincronizarTodosLosNodosAiloo } from '../services/ailooCatalogSync.js';
 import {
   obtenerContextoHoraChile,
   clasificarIntencionConversacional,
+  contieneRepuestoRealOCodigo,
   conducirFlujoCompraDeterministico,
   redactarRespuestaConGeminiLuna,
 } from '../services/lunaConversacional.js';
@@ -58,6 +59,7 @@ import {
   TARIFAS_RM_ANILLOS,
   MACROZONAS_REGIONES,
   clasificarTallaLogisticaRepuesto,
+  calcularPromesaRetiroYDespacho,
   cotizarDespachoAnticipado,
   obtenerNodosDespachoActivos,
 } from '../services/logisticaTarifarioService.js';
@@ -1039,18 +1041,24 @@ function extraerMultiplesRepuestos(texto = '', vehiculo = null) {
     vistos.add(clave);
     subConsultas.push({
       fragmentoOriginal: frag,
+      tienePiezaReal: contieneRepuestoRealOCodigo(frag, info.tokensRepuesto),
       ...info,
     });
   }
 
-  if (subConsultas.length === 0) {
-    subConsultas.push({
+  // Si el cliente envió varios mensajes/líneas (ej: "Hola" + "Patente KDSH15" + "Pastillas de freno"),
+  // quedarnos solo con los fragmentos que contienen repuestos reales para no tratar saludos/datos del auto como piezas faltantes.
+  const conPiezaReal = subConsultas.filter((s) => s.tienePiezaReal);
+  const listaFinal = conPiezaReal.length > 0 ? conPiezaReal : subConsultas;
+
+  if (listaFinal.length === 0) {
+    listaFinal.push({
       fragmentoOriginal: textoNorm,
       ...extraerRepuestoYCategoria(textoNorm, vehiculo),
     });
   }
 
-  return subConsultas.slice(0, 6);
+  return listaFinal.slice(0, 6);
 }
 
 /**
@@ -1699,17 +1707,20 @@ async function ejecutarCascadaAgenteOmnicanal({
       nodosActivos: nodosDespachoActivos,
       modalidad: 'Despacho a domicilio',
     });
+    const promesaEntrega = calcularPromesaRetiroYDespacho({
+      itemsCarrito: carritoActual,
+    });
     const costoEnvioRef = Number(cotizacionRef.costoDespachoConIva || 0);
     const dimRef = cotizacionRef.volumetria?.dimensionesReferencialesCm || { largo: 32, ancho: 25, alto: 18 };
     const tallaRef = cotizacionRef.volumetria?.tallaConsolidada || 'S';
 
     const textoLogistica = esRM
-      ? `📍 Para **${nombreComuna}** gestionamos directamente tu entrega desde nuestro taller en **${cotizacionRef.nodoOrigen?.direccion || 'Enrique Olivares 224, La Florida'}** con dos opciones:\n` +
-        `1️⃣ **Retiro Gratis en Taller FácilRepuestos:** **Enrique Olivares 224, La Florida, Santiago** ($0).\n` +
-        `2️⃣ **Delivery Propio en Furgón (${cotizacionRef.medioTransporte || 'Peugeot Partner'}):** **$${costoEnvioRef.toLocaleString('es-CL')} IVA inc.** (Anillo ${cotizacionRef.anillo || 2} RM · Caja Talla ${tallaRef} ${dimRef.largo}×${dimRef.ancho}×${dimRef.alto} cm · ${cotizacionRef.tiempoEstimado}).`
-      : `🚚 Para **${nombreComuna}** despachamos **100% pre-pagado** saliendo desde **${cotizacionRef.nodoOrigen?.direccion || 'Enrique Olivares 224, La Florida'}** vía **${cotizacionRef.medioTransporte || 'Starken / Courier'}**:\n` +
+      ? `📍 Para **${nombreComuna}** gestionamos directamente tu entrega desde nuestra sucursal en **Enrique Olivares 224, La Florida** con dos opciones:\n` +
+        `1️⃣ **Retiro Gratis en Enrique Olivares 224, La Florida ($0):** ${promesaEntrega.textoRetiroCarrito}\n` +
+        `2️⃣ **Delivery a todo Santiago:** **$${costoEnvioRef.toLocaleString('es-CL')} IVA inc.** · ${promesaEntrega.textoDespachoSantiago} (Caja Talla ${tallaRef} ${dimRef.largo}×${dimRef.ancho}×${dimRef.alto} cm).`
+      : `🚚 Para **${nombreComuna}** despachamos **100% pre-pagado** saliendo desde **Enrique Olivares 224, La Florida** vía **${cotizacionRef.medioTransporte || 'Starken / Courier'}**:\n` +
         `• **Valor Despacho Pre-Pagado (${cotizacionRef.nombreZona || 'Regiones'} — Talla ${tallaRef}):** **$${costoEnvioRef.toLocaleString('es-CL')} IVA inc.** (${cotizacionRef.tiempoEstimado}, sin cobros sorpresa al recibir).\n` +
-        `• O **Retiro Gratis ($0)** en nuestra sucursal en **Enrique Olivares 224, La Florida, Santiago**.`;
+        `• O **Retiro Gratis ($0)** en **Enrique Olivares 224, La Florida, Santiago:** ${promesaEntrega.textoRetiroCarrito}`;
 
     const respuestaTexto =
       `¡Excelente! ${textoLogistica}\n\n` +
@@ -1835,10 +1846,25 @@ async function ejecutarCascadaAgenteOmnicanal({
         `• **Viernes:** 9:30 a 17:00 hrs\n` +
         `• **Sábado:** 9:30 a 14:00 hrs\n` +
         `¿Qué repuesto necesitas cotizar?`;
+    } else if (clasificacion.tipo === 'CONSULTA_RETIRO_DESPACHO') {
+      accionTomadaConv = 'consulta_retiro_despacho';
+      const prom = calcularPromesaRetiroYDespacho({
+        itemsCarrito: carritoActual,
+      });
+      hechoBase =
+        `${prom.resumenReglasCliente}\n\n` +
+        (carritoActual.length > 0
+          ? `🛒 **Para tu carrito actual:** ${prom.textoRetiroCarrito}\n👉 Escribe **COMPRAR** si quieres confirmarlo ahora mismo.`
+          : '¿Qué repuesto necesitas cotizar y para qué patente?');
     } else if (clasificacion.tipo === 'CONSULTA_SUCURSAL') {
       accionTomadaConv = 'consulta_sucursal';
+      const prom = calcularPromesaRetiroYDespacho({
+        itemsCarrito: carritoActual,
+      });
       hechoBase =
-        'Estamos ubicados en **Enrique Olivares 224, La Florida, Santiago de Chile** (con retiro gratis en mostrador), y también hacemos **despacho a domicilio en todo Santiago y regiones** vía Starken, Chilexpress o Blue Express. ¿Qué repuesto estás buscando y para qué vehículo?';
+        `Estamos ubicados en **Enrique Olivares 224, La Florida, Santiago de Chile** (con retiro gratis en mostrador).\n\n` +
+        `${prom.resumenReglasCliente}\n\n` +
+        `¿Qué repuesto estás buscando y para qué vehículo?`;
     } else if (clasificacion.tipo === 'SOLO_VEHICULO_SIN_REPUESTO') {
       accionTomadaConv = 'vehiculo_identificado_esperando_repuesto';
       const v = vehiculo;
@@ -2228,7 +2254,9 @@ async function ejecutarCascadaAgenteOmnicanal({
               ? 'global_ailoo'
               : item.origenCatalogo === 'mesa_whatsapp_etapa3'
                 ? 'mesa_whatsapp'
-                : 'portal_proveedor_local';
+                : item.proveedorId
+                  ? 'portal_proveedor_local'
+                  : 'stock_propio';
         const skuPub = item.skuPublicoFrp || `FRP-LOC-${item.codigo}`;
         const wooProductId = Number(item.wooProductId) || null;
         const urlProductoWoo = wooProductId
@@ -2344,10 +2372,15 @@ async function ejecutarCascadaAgenteOmnicanal({
         : '';
 
     if (lineasOpciones.length > 0) {
+      const promesaCot = calcularPromesaRetiroYDespacho({
+        itemsCarrito: candidatosEncontradosGlobal,
+      });
       respuestaTexto =
         `${notaRespuestasPrevias}¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** tenemos disponibilidad confirmada en FácilRepuestos:\n\n` +
         `${lineasOpciones.join('\n')}${notaAprendida}\n\n` +
-        `📍 Puedes revisar cada producto en el link web de arriba y, cuando confirmes lo que quieres llevar, escribe **COMPRAR** aquí mismo para armarte **un solo carro con todos tus productos** (con **Retiro sin costo en Enrique Olivares 224, La Florida** o **Despacho pre-pagado a todo Chile**).`;
+        `📍 **Retiro en tienda:** ${promesaCot.textoRetiroCarrito}\n` +
+        `🚚 **Despacho Delivery Santiago:** ${promesaCot.textoDespachoSantiago}\n\n` +
+        `👉 Puedes revisar cada producto en el link web de arriba y, cuando confirmes lo que quieres llevar, escribe **COMPRAR** aquí mismo para armarte **un solo carro con todos tus productos**.`;
     } else if (reglasAplicadasGlobal.length > 0) {
       const r = reglasAplicadasGlobal[0];
       const conIva = Math.round(r.precioVentaFrp || 0);
@@ -2576,6 +2609,9 @@ async function ejecutarCascadaAgenteOmnicanal({
     }
 
     if (accionTomada === 'cotizacion_parcial_con_mesa_wsp') {
+      const promesaParcial = calcularPromesaRetiroYDespacho({
+        itemsCarrito: candidatosEncontradosGlobal,
+      });
       const lineasDisponibles = candidatosEncontradosGlobal.map(
         (c) =>
           `• ✅ **${c.nombre}** (\`${c.skuPublicoFrp}\`) — Stock: **${c.stock} un.** · **$${c.precioVentaConIva.toLocaleString(
@@ -2584,9 +2620,11 @@ async function ejecutarCascadaAgenteOmnicanal({
       );
       respuestaTexto =
         `¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** revisé los ${subConsultas.length} repuestos de tu lista en FácilRepuestos:\n\n` +
-        `📦 **Disponibles para entrega inmediata:**\n${lineasDisponibles.join('\n')}\n\n` +
+        `📦 **Disponibles para compra inmediata:**\n${lineasDisponibles.join('\n')}\n\n` +
+        `📍 **Retiro de lo disponible:** ${promesaParcial.textoRetiroCarrito}\n` +
+        `🚚 **Delivery Santiago:** ${promesaParcial.textoDespachoSantiago}\n\n` +
         `📲 **En búsqueda activa (${resumenFaltantes}):** Ya activé nuestra **Mesa de Abastecimiento FácilRepuestos (\`#${solicitudWspCreada.codigoSolicitud}\`)** con nuestras bodegas asociadas y te avisaremos por este mismo WhatsApp apenas sea encontrado.\n\n` +
-        `🛒 **No detenemos tu compra de lo que ya está en stock:** Puedes revisar cada producto en su link web y escribir **COMPRAR** aquí mismo para armarte **un solo carro con todos los productos disponibles** (con **Despacho a todo Chile** o **Retiro en Enrique Olivares 224, La Florida**), mientras seguimos buscando el repuesto pendiente.`;
+        `🛒 **No detenemos tu compra de lo que ya está en stock:** Puedes revisar cada producto en su link web y escribir **COMPRAR** aquí mismo para armarte **un solo carro con todos los productos disponibles**, mientras seguimos buscando el repuesto pendiente.`;
     } else {
       respuestaTexto =
         `🚗 Identifiqué tu **${etiquetaVehiculo}**. Estamos verificando disponibilidad inmediata para **${resumenFaltantes}** en nuestra red de bodegas asociadas.\n\n` +
@@ -3340,6 +3378,16 @@ export async function manejarWebhookGetMeta(req, res) {
   });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BUFFER DE AGRUPACIÓN DE MENSAJES CONSECUTIVOS (DEBOUNCE 5 SEGUNDOS)
+// Cuando un cliente envía su consulta en varios mensajes seguidos (ej: "Hola",
+// luego "Patente RHYC28", luego "necesito parachoque y neblinero"), Repuestín
+// espera 5 segundos desde el último mensaje recibido y procesa todos como una
+// sola solicitud unificada.
+// ─────────────────────────────────────────────────────────────────────────────
+const DEBOUNCE_MENSAJES_WSP_MS = 5000;
+const BUFFERS_MENSAJES_WSP = new Map();
+
 /**
  * Handler POST unificado para mensajes entrantes desde Meta WhatsApp Cloud API.
  * Soporta tanto clientes finales conversando con Repuestín como proveedores respondiendo a Mesa WSP.
@@ -3432,9 +3480,79 @@ export async function manejarWebhookPostMeta(req, res) {
       creadoEn: now,
     };
 
+    // Guardar de inmediato la burbuja entrante del cliente en Firestore para que se vea en tiempo real
+    const mensajesConEntrante = [...(sesion.mensajes || []), msgCliente];
+    await docRef.set(
+      {
+        clienteNombre: perfilNombre || sesion.clienteNombre,
+        clienteTelefono: `+${remitenteTel}`,
+        phoneNumberIdMeta: phoneNumberIdReceptor || sesion.phoneNumberIdMeta || null,
+        mensajes: mensajesConEntrante,
+        updatedAt: now,
+      },
+      { merge: true }
+    );
+
+    // ─── VENTANA DE ESPERA DE 5 SEGUNDOS DESDE EL ÚLTIMO MENSAJE DEL CLIENTE ──
+    let buffer = BUFFERS_MENSAJES_WSP.get(sesionDocId);
+    if (buffer) {
+      // Si había un mensaje previo esperando los 5s, cancelar su timer y cerrar el HTTP request anterior con 200 OK
+      if (buffer.timer) clearTimeout(buffer.timer);
+      if (typeof buffer.resolverEsperaPrevia === 'function') {
+        buffer.resolverEsperaPrevia({ agrupadoEnSiguienteMensaje: true });
+      }
+      buffer.mensajesAcumulados.push(msgCliente);
+      buffer.ultimoWamid = wamid || buffer.ultimoWamid;
+      buffer.phoneNumberIdReceptor = phoneNumberIdReceptor || buffer.phoneNumberIdReceptor;
+      buffer.perfilNombre = perfilNombre || buffer.perfilNombre;
+    } else {
+      buffer = {
+        sesionDocId,
+        remitenteTel,
+        perfilNombre,
+        phoneNumberIdReceptor,
+        ultimoWamid: wamid,
+        mensajesAcumulados: [msgCliente],
+        timer: null,
+        resolverEsperaPrevia: null,
+      };
+      BUFFERS_MENSAJES_WSP.set(sesionDocId, buffer);
+    }
+
+    const resultadoEspera = await new Promise((resolve) => {
+      buffer.resolverEsperaPrevia = resolve;
+      buffer.timer = setTimeout(() => {
+        resolve({ ejecutarAhora: true });
+      }, DEBOUNCE_MENSAJES_WSP_MS);
+    });
+
+    // Si llegó otro mensaje del mismo cliente antes de cumplirse los 5 segundos, este webhook termina en 200 OK y el nuevo mensaje toma el relevo
+    if (resultadoEspera?.agrupadoEnSiguienteMensaje) {
+      return res.status(200).json({
+        received: true,
+        buffered: true,
+        debounceMs: DEBOUNCE_MENSAJES_WSP_MS,
+        sesionId: sesionDocId,
+      });
+    }
+
+    // Se cumplieron los 5 segundos sin nuevos mensajes -> consumir el buffer y responder todo como una sola solicitud
+    BUFFERS_MENSAJES_WSP.delete(sesionDocId);
+    const mensajesRafaga = buffer.mensajesAcumulados || [msgCliente];
+    const textoUnificado = mensajesRafaga
+      .map((m) => String(m.texto || '').trim())
+      .filter(Boolean)
+      .join('\n');
+
+    // Re-leer la sesión fresca de Firestore para incluir todas las burbujas guardadas durante la ráfaga
+    const snapFresco = await docRef.get();
+    const sesionFresca = snapFresco.exists
+      ? { id: snapFresco.id, ...snapFresco.data() }
+      : { ...sesion, mensajes: mensajesConEntrante };
+
     const resultadoCascada = await ejecutarCascadaAgenteOmnicanal({
-      sesion,
-      textoCliente: msgCliente.texto,
+      sesion: sesionFresca,
+      textoCliente: textoUnificado || msgCliente.texto,
       transcripcionAudio: '',
       fotoUrl: '',
     });
@@ -3445,31 +3563,34 @@ export async function manejarWebhookPostMeta(req, res) {
       texto: resultadoCascada.respuestaTexto,
       creadoEn: new Date().toISOString(),
       trazaCascada: resultadoCascada.trazaCascada,
+      mensajesAgrupadosCount: mensajesRafaga.length,
     };
 
-    const mensajesActualizados = [...(sesion.mensajes || []), msgCliente, msgAgente];
-    const vehiculoContexto = resultadoCascada.vehiculoDetectado || sesion.vehiculoContexto || null;
+    const mensajesActualizados = [...(sesionFresca.mensajes || []), msgAgente];
+    const vehiculoContexto =
+      resultadoCascada.vehiculoDetectado || sesionFresca.vehiculoContexto || null;
     const camposActualizados = {
-      clienteNombre: perfilNombre || sesion.clienteNombre,
+      clienteNombre: buffer.perfilNombre || sesionFresca.clienteNombre,
       clienteTelefono: `+${remitenteTel}`,
-      phoneNumberIdMeta: phoneNumberIdReceptor || sesion.phoneNumberIdMeta || null,
+      phoneNumberIdMeta:
+        buffer.phoneNumberIdReceptor || sesionFresca.phoneNumberIdMeta || null,
       vehiculoContexto,
-      carritoCotizado: resultadoCascada.carritoCotizado ?? sesion.carritoCotizado ?? [],
-      comunaCliente: resultadoCascada.comunaCliente ?? sesion.comunaCliente ?? null,
-      modalidadEntrega: resultadoCascada.modalidadEntrega ?? sesion.modalidadEntrega ?? null,
-      pedidoActivo: resultadoCascada.pedidoActivo ?? sesion.pedidoActivo ?? null,
+      carritoCotizado: resultadoCascada.carritoCotizado ?? sesionFresca.carritoCotizado ?? [],
+      comunaCliente: resultadoCascada.comunaCliente ?? sesionFresca.comunaCliente ?? null,
+      modalidadEntrega: resultadoCascada.modalidadEntrega ?? sesionFresca.modalidadEntrega ?? null,
+      pedidoActivo: resultadoCascada.pedidoActivo ?? sesionFresca.pedidoActivo ?? null,
       flujoCompra:
         resultadoCascada.flujoCompra !== undefined
           ? resultadoCascada.flujoCompra
-          : sesion.flujoCompra ?? null,
+          : sesionFresca.flujoCompra ?? null,
       repuestoPendienteContexto:
         resultadoCascada.repuestoPendienteContexto !== undefined
           ? resultadoCascada.repuestoPendienteContexto
-          : sesion.repuestoPendienteContexto ?? null,
+          : sesionFresca.repuestoPendienteContexto ?? null,
       escalamientosAbiertos:
-        resultadoCascada.escalamientosAbiertos ?? sesion.escalamientosAbiertos ?? [],
+        resultadoCascada.escalamientosAbiertos ?? sesionFresca.escalamientosAbiertos ?? [],
       solicitudesWspAbiertas:
-        resultadoCascada.solicitudesWspAbiertas ?? sesion.solicitudesWspAbiertas ?? [],
+        resultadoCascada.solicitudesWspAbiertas ?? sesionFresca.solicitudesWspAbiertas ?? [],
       mensajes: mensajesActualizados,
       updatedAt: new Date().toISOString(),
     };
@@ -3490,14 +3611,16 @@ export async function manejarWebhookPostMeta(req, res) {
             candidatoConFoto.precioVentaConIva || 0
           ).toLocaleString('es-CL')} IVA inc.`
         : '',
-      phoneNumberIdOverride: phoneNumberIdReceptor,
-      replyToMessageId: wamid,
+      phoneNumberIdOverride: buffer.phoneNumberIdReceptor,
+      replyToMessageId: buffer.ultimoWamid || wamid,
     });
 
     return res.status(200).json({
       received: true,
       handledBy: 'repuestin_agente_omnicanal',
       sesionId: sesionDocId,
+      mensajesAgrupados: mensajesRafaga.length,
+      textoUnificado,
       envioMeta,
     });
   } catch (err) {

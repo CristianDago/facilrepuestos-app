@@ -531,3 +531,57 @@
 .miniCopyBtn:hover {
   background: #e2e8f0;
 }
+
+.headerCompact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: linear-gradient(135deg, #0E2744 0%, #13345B 75%, #E94216 100%);
+  color: #ffffff;
+  padding: 13px 18px;
+  border-radius: 12px;
+  box-shadow: 0 6px 16px rgba(19, 52, 91, 0.16);
+}
+
+.headerCompactLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.titleCompact {
+  font-size: 1.08rem;
+  font-weight: 800;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.subtitleCompact {
+  font-size: 0.76rem;
+  color: #cbd5e1;
+}
+
+.closeSessionBtn {
+  background: transparent;
+  border: 1px solid #cbd5e1;
+  color: #64748b;
+  width: 21px;
+  height: 21px;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.closeSessionBtn:hover {
+  background: #fee2e2;
+  border-color: #f87171;
+  color: #b91c1c;
+}

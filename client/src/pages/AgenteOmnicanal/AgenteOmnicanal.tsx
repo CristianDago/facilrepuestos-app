@@ -11,12 +11,19 @@ import type {
 } from '../../types';
 import styles from './AgenteOmnicanal.module.css';
 
+interface EstadisticasHistoricas {
+  totalHistoricasWsp: number;
+  cerradasOPasadas24h: number;
+  activasEnBandeja: number;
+}
+
 interface RespuestaListadoSesiones {
   sesiones: SesionAgenteOmnicanal[];
+  estadisticasHistoricas?: EstadisticasHistoricas;
   padronDemoPatentes: VehiculoDetectadoAgente[];
 }
 
-type FiltroBandeja = 'todas' | 'wsp' | 'con_carro' | 'busqueda_wsp';
+type FiltroBandeja = 'todas' | 'con_carro' | 'busqueda_wsp';
 
 /**
  * Calcula en el frontend la promesa de retiro y despacho para mostrarla en la ficha
@@ -145,7 +152,6 @@ function renderizarTextoMensaje(texto: string) {
       );
     }
 
-    // Procesar **negrita** o *negrita*
     const trozosNegrita = fragmento.split(/(\*\*[^*]+\*\*)/g);
     return (
       <span key={idx}>
@@ -165,6 +171,11 @@ export default function AgenteOmnicanal() {
   const navigate = useNavigate();
 
   const [sesiones, setSesiones] = useState<SesionAgenteOmnicanal[]>([]);
+  const [estadisticasHistoricas, setEstadisticasHistoricas] = useState<EstadisticasHistoricas>({
+    totalHistoricasWsp: 0,
+    cerradasOPasadas24h: 0,
+    activasEnBandeja: 0,
+  });
   const [padronDemo, setPadronDemo] = useState<VehiculoDetectadoAgente[]>([]);
   const [sesionActivaId, setSesionActivaId] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -192,7 +203,7 @@ export default function AgenteOmnicanal() {
   // Modal nueva conversación manual
   const [mostrarNuevaSesion, setMostrarNuevaSesion] = useState(false);
   const [formNuevaSesion, setFormNuevaSesion] = useState({
-    canal: 'whatsapp_cliente' as 'whatsapp_cliente' | 'web_cliente',
+    canal: 'whatsapp_cliente' as const,
     clienteNombre: '',
     clienteTelefono: '+569',
     patenteInicial: '',
@@ -209,15 +220,16 @@ export default function AgenteOmnicanal() {
       if (res.success && res.data) {
         const lista = res.data.sesiones || [];
         setSesiones(lista);
+        if (res.data.estadisticasHistoricas) {
+          setEstadisticasHistoricas(res.data.estadisticasHistoricas);
+        }
         setPadronDemo(res.data.padronDemoPatentes || []);
         if (seleccionarId) {
           setSesionActivaId(seleccionarId);
         } else if (!sesionActivaId && lista.length > 0) {
-          // Priorizar la primera sesión real de WhatsApp si existe
-          const primeraWspReal = lista.find(
-            (s) => s.id.startsWith('wsp_') || s.canal === 'whatsapp_meta_cloud'
-          );
-          setSesionActivaId((primeraWspReal || lista[0]).id);
+          setSesionActivaId(lista[0].id);
+        } else if (lista.length === 0) {
+          setSesionActivaId('');
         }
       }
     } catch (err) {
@@ -239,18 +251,49 @@ export default function AgenteOmnicanal() {
     return () => clearInterval(interval);
   }, []);
 
-  // Filtrado de sesiones en la columna izquierda
+  // Quitar una conversación de la lista activa con el botón ✕ (pasa a estadística)
+  const handleArchivarSesion = async (e: React.MouseEvent, idSesion: string) => {
+    e.stopPropagation();
+    try {
+      setSesiones((prev) => prev.filter((s) => s.id !== idSesion));
+      if (sesionActivaId === idSesion) {
+        const restantes = sesiones.filter((s) => s.id !== idSesion);
+        setSesionActivaId(restantes[0]?.id || '');
+      }
+      await api.post(`/agente-omnicanal/sesiones/${idSesion}/archivar`, {});
+      setEstadisticasHistoricas((prev) => ({
+        ...prev,
+        cerradasOPasadas24h: prev.cerradasOPasadas24h + 1,
+        activasEnBandeja: Math.max(0, prev.activasEnBandeja - 1),
+      }));
+    } catch {
+      notify('No se pudo quitar la conversación', 'error');
+    }
+  };
+
+  // Limpiar toda la bandeja activa de una vez
+  const handleLimpiarBandeja = async () => {
+    try {
+      setRefreshing(true);
+      await api.post('/agente-omnicanal/sesiones/limpiar-historicos', {});
+      setSesiones([]);
+      setSesionActivaId('');
+      notify('Bandeja limpiada (conversaciones pasadas a estadística)', 'success');
+      await cargarSesiones(undefined, true);
+    } catch {
+      notify('Error al limpiar la bandeja', 'error');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Filtrado de sesiones en la columna izquierda (solo WhatsApp y < 24h)
   const sesionesFiltradas = useMemo(() => {
     const q = busquedaCliente.trim().toLowerCase();
     return sesiones.filter((s) => {
-      const esWsp =
-        s.canal === 'whatsapp_cliente' ||
-        s.canal === 'whatsapp_meta_cloud' ||
-        s.id.startsWith('wsp_');
       const tieneCarro = (s.carritoCotizado?.length || 0) > 0;
       const tieneBusqueda = (s.solicitudesWspAbiertas?.length || 0) > 0;
 
-      if (filtroBandeja === 'wsp' && !esWsp) return false;
       if (filtroBandeja === 'con_carro' && !tieneCarro) return false;
       if (filtroBandeja === 'busqueda_wsp' && !tieneBusqueda) return false;
 
@@ -309,10 +352,10 @@ export default function AgenteOmnicanal() {
     [carritoSesionActiva]
   );
 
-  // Construir link de carro unificado hacia facilrepuestos.cl para los productos con stock
   const urlCarroUnificado = useMemo(() => {
     if (carritoSesionActiva.length === 0) return '';
-    const primerUrl = carritoSesionActiva[0]?.urlAgregarAlCarroWoo || carritoSesionActiva[0]?.urlProductoWoo || '';
+    const primerUrl =
+      carritoSesionActiva[0]?.urlAgregarAlCarroWoo || carritoSesionActiva[0]?.urlProductoWoo || '';
     if (carritoSesionActiva.length === 1 && primerUrl) {
       return primerUrl;
     }
@@ -325,12 +368,9 @@ export default function AgenteOmnicanal() {
     [carritoSesionActiva]
   );
 
-  // KPIs operativos reales de todas las sesiones
+  // KPIs operativos reales
   const kpis = useMemo(() => {
-    const totalClientes = sesiones.length;
-    const clientesWspReales = sesiones.filter(
-      (s) => s.id.startsWith('wsp_') || s.canal === 'whatsapp_meta_cloud'
-    ).length;
+    const totalActivas = sesiones.length;
     const conVehiculo = sesiones.filter((s) => Boolean(s.vehiculoContexto?.marca)).length;
     const sesionesConCarro = sesiones.filter((s) => (s.carritoCotizado?.length || 0) > 0);
     const montoTotalCotizado = sesionesConCarro.reduce(
@@ -347,8 +387,7 @@ export default function AgenteOmnicanal() {
     ).length;
 
     return {
-      totalClientes,
-      clientesWspReales,
+      totalActivas,
       conVehiculo,
       carrosCount: sesionesConCarro.length,
       montoTotalCotizado,
@@ -368,7 +407,7 @@ export default function AgenteOmnicanal() {
         formNuevaSesion
       );
       if (res.success && res.data) {
-        notify(`Conversación creada con ${res.data.clienteNombre}`, 'success');
+        notify(`Conversación WhatsApp iniciada con ${res.data.clienteNombre}`, 'success');
         setMostrarNuevaSesion(false);
         setFormNuevaSesion({
           canal: 'whatsapp_cliente',
@@ -473,33 +512,20 @@ export default function AgenteOmnicanal() {
 
   return (
     <div className={styles.page}>
-      {/* ── ENCABEZADO COMERCIAL REPUESTÍN WHATSAPP ─────────────── */}
-      <div className={styles.header}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 6 }}>
-            <img
-              src="/logo-facil-repuestos.webp"
-              alt="Fácil Repuestos"
-              style={{ height: 32, width: 'auto', objectFit: 'contain' }}
-            />
-            <h1 className={styles.title} style={{ margin: 0 }}>
-              🤖 Repuestín WhatsApp — Cotizador & CRM en Vivo
+      {/* ── ENCABEZADO SUPERIOR COMPACTO Y SIMPLE ─────────────── */}
+      <div className={styles.headerCompact}>
+        <div className={styles.headerCompactLeft}>
+          <img
+            src="/logo-facil-repuestos.webp"
+            alt="Fácil Repuestos"
+            style={{ height: 28, width: 'auto', objectFit: 'contain' }}
+          />
+          <div>
+            <h1 className={styles.titleCompact}>
+              🤖 Repuestín WhatsApp (+56 9 2110 9851)
             </h1>
-          </div>
-          <p className={styles.subtitle}>
-            Atención automática en <strong>+56 9 2110 9851</strong> conectada al catálogo de{' '}
-            <strong>facilrepuestos.cl</strong>. Espera <strong>5 segundos</strong> desde el último mensaje para unir
-            solicitudes múltiples, envía el <strong>link de cada producto</strong>, arma un{' '}
-            <strong>solo carro de compra</strong> con lo disponible y deja en búsqueda lo que falte sin frenar la venta.
-          </p>
-
-          <div className={styles.rulesStrip}>
-            <span className={styles.rulePill}>⏱️ Agrupación: 5s tras último mensaje</span>
-            <span className={styles.rulePill}>
-              📍 Retiro Enrique Olivares 224: Stock Inmediato · Portal 1h 30m · Soluparts 15:00 hrs (corte 12:00)
-            </span>
-            <span className={styles.rulePill}>
-              🚚 Delivery Santiago: 2 hrs (L-V 09:00 a 18:00 · compras tras 16:00 al día siguiente)
+            <span className={styles.subtitleCompact}>
+              Espera 5s activa · Conversaciones se archivan en 24h a estadística
             </span>
           </div>
         </div>
@@ -508,42 +534,54 @@ export default function AgenteOmnicanal() {
           <button
             type="button"
             className="btn btn-outline btn-sm"
-            style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', borderColor: 'rgba(255,255,255,0.3)' }}
+            style={{
+              background: 'rgba(255,255,255,0.12)',
+              color: '#fff',
+              borderColor: 'rgba(255,255,255,0.28)',
+            }}
             onClick={() => cargarSesiones(sesionActiva?.id, false)}
             disabled={refreshing}
           >
             {refreshing ? '↻ Actualizando...' : '↻ Actualizar'}
           </button>
-          <a
-            href="https://wa.me/56921109851"
-            target="_blank"
-            rel="noopener noreferrer"
+          {sesiones.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              style={{
+                background: 'rgba(255,255,255,0.12)',
+                color: '#fff',
+                borderColor: 'rgba(255,255,255,0.28)',
+              }}
+              onClick={handleLimpiarBandeja}
+            >
+              🧹 Limpiar Bandeja
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            style={{
+              background: 'rgba(255,255,255,0.12)',
+              color: '#fff',
+              borderColor: 'rgba(255,255,255,0.28)',
+            }}
+            onClick={() => navigate('/mesa-wsp')}
+          >
+            📲 Proveedores Internos ({kpis.conBusquedaPendiente})
+          </button>
+          <button
+            type="button"
             className="btn btn-primary btn-sm"
             style={{
               background: '#25D366',
               color: '#052e16',
               fontWeight: 800,
               border: 'none',
-              textDecoration: 'none',
             }}
-          >
-            📲 WhatsApp Oficial (+56 9 2110 9851)
-          </a>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', borderColor: 'rgba(255,255,255,0.3)' }}
-            onClick={() => navigate('/mesa-wsp')}
-          >
-            📲 Mesa Abastecimiento WSP ({kpis.conBusquedaPendiente})
-          </button>
-          <button
-            type="button"
-            className="btn btn-outline btn-sm"
-            style={{ background: 'rgba(255,255,255,0.12)', color: '#fff', borderColor: 'rgba(255,255,255,0.3)' }}
             onClick={() => setMostrarNuevaSesion((v) => !v)}
           >
-            + Nueva Conversación
+            + Nueva Conversación WSP
           </button>
         </div>
       </div>
@@ -551,47 +589,47 @@ export default function AgenteOmnicanal() {
       {/* ── 4 INDICADORES OPERATIVOS REALES DE REPUESTÍN ────────── */}
       <div className={styles.pipelineBar}>
         <div className={styles.pipelineStep}>
-          <span className={styles.pipelineStepLabel}>Conversaciones Activas</span>
+          <span className={styles.pipelineStepLabel}>Conversaciones Activas (&lt; 24h)</span>
           <span className={styles.pipelineStepTitle}>
-            💬 {kpis.totalClientes} Clientes ({kpis.clientesWspReales} en WhatsApp Oficial)
+            📲 {kpis.totalActivas} en Bandeja WhatsApp
           </span>
           <span className={styles.pipelineStepDesc}>
-            Sincronización automática en tiempo real con el webhook de Meta Cloud API.
+            Estadística histórica acumulada: {estadisticasHistoricas.totalHistoricasWsp} atención(es)
           </span>
         </div>
 
         <div className={styles.pipelineStep}>
-          <span className={styles.pipelineStepLabel}>Identificación de Vehículos</span>
+          <span className={styles.pipelineStepLabel}>Vehículos Identificados</span>
           <span className={styles.pipelineStepTitle}>
-            🚗 {kpis.conVehiculo} Vehículos con Patente / Motor
+            🚗 {kpis.conVehiculo} con Patente / Motor
           </span>
           <span className={styles.pipelineStepDesc}>
-            Detecta patente chilena, marca, modelo, año y motor dentro de la conversación.
+            Patente, marca, modelo y motor resueltos automáticamente.
           </span>
         </div>
 
         <div className={styles.pipelineStep}>
-          <span className={styles.pipelineStepLabel}>Carros Listos para Compra</span>
+          <span className={styles.pipelineStepLabel}>Carros Cotizados</span>
           <span className={styles.pipelineStepTitle}>
-            🛒 {kpis.carrosCount} Carro(s) · ${kpis.montoTotalCotizado.toLocaleString('es-CL')} IVA inc.
+            🛒 {kpis.carrosCount} Carro(s) · ${kpis.montoTotalCotizado.toLocaleString('es-CL')}
           </span>
           <span className={styles.pipelineStepDesc}>
-            Cada producto envía su link web y al confirmar se arma un solo carro en facilrepuestos.cl.
+            Links de productos enviados y carro unificado listo para compra.
           </span>
         </div>
 
         <div className={styles.pipelineStep}>
-          <span className={styles.pipelineStepLabel}>Piezas Faltantes en Búsqueda</span>
+          <span className={styles.pipelineStepLabel}>Validando con Proveedores</span>
           <span className={styles.pipelineStepTitle}>
-            🔎 {kpis.conBusquedaPendiente} Solicitud(es) en Mesa WSP
+            🔎 {kpis.conBusquedaPendiente} Pendiente(s)
           </span>
           <span className={styles.pipelineStepDesc}>
-            No detiene la venta de lo que está en stock: vende lo disponible y avisa cuando aparece el faltante.
+            Repuestos sin stock inmediato en validación con proveedores internos.
           </span>
         </div>
       </div>
 
-      {/* ── MODAL / PANEL NUEVA CONVERSACIÓN ────────────────────── */}
+      {/* ── MODAL / PANEL NUEVA CONVERSACIÓN WHATSAPP ───────────── */}
       {mostrarNuevaSesion && (
         <form
           onSubmit={handleCrearSesion}
@@ -599,7 +637,7 @@ export default function AgenteOmnicanal() {
             background: '#ffffff',
             border: '1px solid #cbd5e1',
             borderRadius: 12,
-            padding: 16,
+            padding: 14,
             display: 'flex',
             gap: 12,
             alignItems: 'flex-end',
@@ -608,12 +646,12 @@ export default function AgenteOmnicanal() {
         >
           <div style={{ flex: 1, minWidth: 200 }}>
             <label style={{ display: 'block', fontSize: '0.76rem', fontWeight: 700, marginBottom: 4 }}>
-              Nombre del Cliente o Taller
+              Nombre del Cliente WhatsApp
             </label>
             <input
               className={styles.input}
               style={{ width: '100%' }}
-              placeholder="Ej: Juan Pérez / Taller San José"
+              placeholder="Ej: Juan Pérez"
               value={formNuevaSesion.clienteNombre}
               onChange={(e) =>
                 setFormNuevaSesion((p) => ({ ...p, clienteNombre: e.target.value }))
@@ -641,7 +679,7 @@ export default function AgenteOmnicanal() {
             </label>
             <input
               className={styles.input}
-              placeholder="Ej: RHYC28 o KDSH15"
+              placeholder="Ej: RHYC28"
               value={formNuevaSesion.patenteInicial}
               onChange={(e) =>
                 setFormNuevaSesion((p) => ({
@@ -653,7 +691,7 @@ export default function AgenteOmnicanal() {
           </div>
 
           <button type="submit" className="btn btn-primary btn-sm">
-            Crear Conversación
+            Iniciar Chat WSP
           </button>
           <button
             type="button"
@@ -672,12 +710,12 @@ export default function AgenteOmnicanal() {
         </div>
       ) : (
         <div className={styles.workspaceGrid}>
-          {/* COLUMNA 1: BANDEJA DE CLIENTES CON BUSCADOR Y FILTROS */}
+          {/* COLUMNA 1: BANDEJA DE CLIENTES WHATSAPP CON BOTÓN ✕ */}
           <div className={styles.sessionsPanel}>
             <div className={styles.panelHeader}>
-              <span>💬 Conversaciones ({sesionesFiltradas.length})</span>
-              <span style={{ fontSize: '0.72rem', color: '#0d9488', fontWeight: 700 }}>
-                ● En Vivo
+              <span>📲 WhatsApp Activos ({sesionesFiltradas.length})</span>
+              <span style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600 }}>
+                Auto-limpieza 24h
               </span>
             </div>
 
@@ -714,7 +752,7 @@ export default function AgenteOmnicanal() {
                   }`}
                   onClick={() => setFiltroBandeja('busqueda_wsp')}
                 >
-                  🔎 Buscando ({kpis.conBusquedaPendiente})
+                  🔎 Validando ({kpis.conBusquedaPendiente})
                 </button>
               </div>
             </div>
@@ -722,10 +760,6 @@ export default function AgenteOmnicanal() {
             <div className={styles.sessionListScroll}>
               {sesionesFiltradas.map((ses) => {
                 const activa = sesionActiva?.id === ses.id;
-                const esWsp =
-                  ses.canal === 'whatsapp_cliente' ||
-                  ses.canal === 'whatsapp_meta_cloud' ||
-                  ses.id.startsWith('wsp_');
                 const cantCarro = ses.carritoCotizado?.length || 0;
                 const montoCarro = (ses.carritoCotizado || []).reduce(
                   (acc, it) => acc + Number(it.precioVentaConIva || 0) * Number(it.cantidad || 1),
@@ -745,9 +779,17 @@ export default function AgenteOmnicanal() {
                   >
                     <div className={styles.sessionTop}>
                       <span className={styles.sessionName}>{ses.clienteNombre}</span>
-                      <span className={esWsp ? styles.canalBadgeWsp : styles.canalBadgeWeb}>
-                        {esWsp ? '📲 WSP' : '🌐 WEB'}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span className={styles.canalBadgeWsp}>📲 WSP</span>
+                        <button
+                          type="button"
+                          className={styles.closeSessionBtn}
+                          title="Quitar de la lista activa (pasa a estadística)"
+                          onClick={(e) => handleArchivarSesion(e, ses.id)}
+                        >
+                          ✕
+                        </button>
+                      </div>
                     </div>
 
                     {ses.clienteTelefono && (
@@ -785,7 +827,7 @@ export default function AgenteOmnicanal() {
                         )}
                         {cantBusqueda > 0 && (
                           <span className={styles.miniBadgeSearch}>
-                            🔎 {cantBusqueda} en búsqueda
+                            🔎 Validando proveedor
                           </span>
                         )}
                       </div>
@@ -795,215 +837,262 @@ export default function AgenteOmnicanal() {
               })}
 
               {sesionesFiltradas.length === 0 && (
-                <div style={{ padding: 24, textAlign: 'center', fontSize: '0.82rem', color: '#64748b' }}>
-                  No hay conversaciones que coincidan con el filtro seleccionado.
+                <div style={{ padding: 28, textAlign: 'center', fontSize: '0.82rem', color: '#64748b' }}>
+                  No hay conversaciones activas en las últimas 24 horas.
+                  <div style={{ fontSize: '0.75rem', marginTop: 6, color: '#94a3b8' }}>
+                    Cuando un cliente escriba al WhatsApp <strong>+56 9 2110 9851</strong> o inicies una conversación con el botón superior, aparecerá aquí automáticamente.
+                  </div>
                 </div>
               )}
             </div>
           </div>
 
           {/* COLUMNA 2: CONVERSACIÓN EN VIVO CON EL CLIENTE */}
-          {sesionActiva && (
-            <div className={styles.chatPanel}>
-              <div className={styles.vehiculoBanner}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                  {sesionActiva.vehiculoContexto?.patente && (
-                    <span className={styles.patentePlate}>
-                      {sesionActiva.vehiculoContexto.patente}
-                    </span>
-                  )}
-                  <div>
-                    <div style={{ fontWeight: 800, fontSize: '0.92rem' }}>
-                      {sesionActiva.vehiculoContexto
-                        ? `${sesionActiva.vehiculoContexto.marca} ${
-                            sesionActiva.vehiculoContexto.modelo || ''
-                          } ${sesionActiva.vehiculoContexto.anio || ''}`
-                        : sesionActiva.clienteNombre}
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                      👤 {sesionActiva.clienteNombre} · {sesionActiva.clienteTelefono || 'Sin teléfono'}
-                      {sesionActiva.vehiculoContexto?.motor
-                        ? ` · ⚙️ Motor ${sesionActiva.vehiculoContexto.motor}`
-                        : ''}
+          <div className={styles.chatPanel}>
+            {!sesionActiva ? (
+              <div
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: 40,
+                  textAlign: 'center',
+                  color: '#64748b',
+                }}
+              >
+                <div style={{ fontSize: '2.2rem', marginBottom: 10 }}>📲</div>
+                <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '1rem', marginBottom: 6 }}>
+                  Bandeja de Repuestín WhatsApp Limpia
+                </div>
+                <div style={{ maxWidth: 420, fontSize: '0.84rem', lineHeight: 1.5, marginBottom: 16 }}>
+                  Escribe desde tu celular al WhatsApp Oficial <strong>+56 9 2110 9851</strong> o presiona{' '}
+                  <strong>"+ Nueva Conversación WSP"</strong> para probar una consulta.
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setMostrarNuevaSesion(true)}
+                >
+                  + Iniciar Conversación de Prueba
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className={styles.vehiculoBanner}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    {sesionActiva.vehiculoContexto?.patente && (
+                      <span className={styles.patentePlate}>
+                        {sesionActiva.vehiculoContexto.patente}
+                      </span>
+                    )}
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '0.92rem' }}>
+                        {sesionActiva.vehiculoContexto
+                          ? `${sesionActiva.vehiculoContexto.marca} ${
+                              sesionActiva.vehiculoContexto.modelo || ''
+                            } ${sesionActiva.vehiculoContexto.anio || ''}`
+                          : sesionActiva.clienteNombre}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                        👤 {sesionActiva.clienteNombre} · {sesionActiva.clienteTelefono || 'WhatsApp'}
+                        {sesionActiva.vehiculoContexto?.motor
+                          ? ` · ⚙️ Motor ${sesionActiva.vehiculoContexto.motor}`
+                          : ''}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  {sesionActiva.clienteTelefono && (
-                    <a
-                      href={`https://wa.me/${sesionActiva.clienteTelefono.replace(/\D/g, '')}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn btn-sm"
-                      style={{
-                        background: 'rgba(37, 211, 102, 0.18)',
-                        color: '#4ade80',
-                        border: '1px solid rgba(74, 222, 128, 0.4)',
-                        fontSize: '0.74rem',
-                        textDecoration: 'none',
-                      }}
-                    >
-                      📲 Abrir Chat Directo
-                    </a>
-                  )}
-                </div>
-              </div>
-
-              <div className={styles.messagesArea}>
-                {(sesionActiva.mensajes || []).map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={
-                      msg.autor === 'cliente' ? styles.msgRowCliente : styles.msgRowAgente
-                    }
-                  >
-                    <div className={styles.msgSender}>
-                      <span>
-                        {msg.autor === 'cliente'
-                          ? `👤 ${sesionActiva.clienteNombre}`
-                          : '🤖 Repuestín · facilrepuestos.cl'}
-                      </span>
-                      <span>
-                        {new Date(msg.creadoEn).toLocaleTimeString('es-CL', {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                    </div>
-                    <div className={styles.msgText}>{renderizarTextoMensaje(msg.texto)}</div>
-
-                    {msg.transcripcionAudio && (
-                      <div
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    {sesionActiva.clienteTelefono && (
+                      <a
+                        href={`https://wa.me/${sesionActiva.clienteTelefono.replace(/\D/g, '')}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-sm"
                         style={{
-                          marginTop: 7,
-                          paddingTop: 6,
-                          borderTop: '1px dashed rgba(0,0,0,0.15)',
-                          fontSize: '0.78rem',
+                          background: 'rgba(37, 211, 102, 0.18)',
+                          color: '#4ade80',
+                          border: '1px solid rgba(74, 222, 128, 0.4)',
+                          fontSize: '0.74rem',
+                          textDecoration: 'none',
                         }}
                       >
-                        🎙️ <strong>Audio transcrito:</strong> "{msg.transcripcionAudio}"
-                      </div>
+                        📲 Abrir en WhatsApp
+                      </a>
                     )}
-
-                    {msg.fotoUrl && (
-                      <div style={{ marginTop: 8 }}>
-                        <img
-                          src={msg.fotoUrl}
-                          alt="Foto enviada por cliente"
-                          style={{
-                            maxHeight: 120,
-                            borderRadius: 8,
-                            border: '1px solid #cbd5e1',
-                          }}
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* COMPOSER PARA SIMULAR O PROBAR EN LA CONVERSACIÓN */}
-              <div className={styles.composerArea}>
-                {mensajesEnBuffer.length > 0 && (
-                  <div
-                    style={{
-                      background: '#eff6ff',
-                      border: '1px solid #93c5fd',
-                      borderRadius: 8,
-                      padding: '8px 12px',
-                      fontSize: '0.8rem',
-                      color: '#1e3a8a',
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: 10,
-                    }}
-                  >
-                    <span>
-                      ⏳ <strong>Esperando 5s desde el último mensaje ({mensajesEnBuffer.length} acumulado(s)):</strong>{' '}
-                      "{mensajesEnBuffer.join(' · ')}" — Se procesarán juntos en{' '}
-                      <strong>{segundosRestantesBuffer}s</strong>.
-                    </span>
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', gap: 10 }}>
-                  <textarea
-                    className={styles.textarea}
-                    style={{ flex: 1 }}
-                    placeholder="Escribe aquí para probar a Repuestín en esta conversación (si envías varios mensajes seguidos, espera 5 segundos desde el último y los une en una sola solicitud)..."
-                    value={textoMensaje}
-                    onChange={(e) => setTextoMensaje(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        void enviarConsultaCascada();
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={enviandoMensaje}
-                    onClick={() => enviarConsultaCascada()}
-                  >
-                    {enviandoMensaje
-                      ? 'Procesando...'
-                      : mensajesEnBuffer.length > 0
-                        ? `Sumar (${segundosRestantesBuffer}s) →`
-                        : 'Enviar →'}
-                  </button>
-                </div>
-
-                <div className={styles.composerTopRow}>
-                  <button
-                    type="button"
-                    className={styles.subtleToggleBtn}
-                    onClick={() => setMostrarOpcionesPrueba((v) => !v)}
-                  >
-                    {mostrarOpcionesPrueba
-                      ? '▴ Ocultar herramientas de simulación (Patente / Audio / Foto)'
-                      : '▾ Herramientas de simulación opcionales (Inyectar Patente, Audio o Foto)'}
-                  </button>
-                </div>
-
-                {mostrarOpcionesPrueba && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                    <select
-                      className={styles.input}
-                      value={patenteInput}
-                      onChange={(e) => setPatenteInput(e.target.value)}
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{
+                        background: 'rgba(255,255,255,0.1)',
+                        color: '#cbd5e1',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        fontSize: '0.74rem',
+                      }}
+                      onClick={(e) => handleArchivarSesion(e, sesionActiva.id)}
                     >
-                      <option value="">🚗 Patente rápida (Opcional)</option>
-                      {padronDemo.map((v) => (
-                        <option key={v.patente} value={v.patente}>
-                          {v.patente} — {v.marca} {v.modelo} {v.anio}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      className={styles.input}
-                      placeholder="🎙️ Simular transcripción de audio..."
-                      value={transcripcionAudio}
-                      onChange={(e) => setTranscripcionAudio(e.target.value)}
-                    />
-                    <input
-                      className={styles.input}
-                      placeholder="📷 URL de foto de muestra..."
-                      value={fotoUrl}
-                      onChange={(e) => setFotoUrl(e.target.value)}
-                    />
+                      ✕ Quitar de bandeja
+                    </button>
                   </div>
-                )}
-              </div>
-            </div>
-          )}
+                </div>
+
+                <div className={styles.messagesArea}>
+                  {(sesionActiva.mensajes || []).map((msg) => (
+                    <div
+                      key={msg.id}
+                      className={
+                        msg.autor === 'cliente' ? styles.msgRowCliente : styles.msgRowAgente
+                      }
+                    >
+                      <div className={styles.msgSender}>
+                        <span>
+                          {msg.autor === 'cliente'
+                            ? `👤 ${sesionActiva.clienteNombre}`
+                            : '🤖 Repuestín · facilrepuestos.cl'}
+                        </span>
+                        <span>
+                          {new Date(msg.creadoEn).toLocaleTimeString('es-CL', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                      </div>
+                      <div className={styles.msgText}>{renderizarTextoMensaje(msg.texto)}</div>
+
+                      {msg.transcripcionAudio && (
+                        <div
+                          style={{
+                            marginTop: 7,
+                            paddingTop: 6,
+                            borderTop: '1px dashed rgba(0,0,0,0.15)',
+                            fontSize: '0.78rem',
+                          }}
+                        >
+                          🎙️ <strong>Audio transcrito:</strong> "{msg.transcripcionAudio}"
+                        </div>
+                      )}
+
+                      {msg.fotoUrl && (
+                        <div style={{ marginTop: 8 }}>
+                          <img
+                            src={msg.fotoUrl}
+                            alt="Foto enviada por cliente"
+                            style={{
+                              maxHeight: 120,
+                              borderRadius: 8,
+                              border: '1px solid #cbd5e1',
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* COMPOSER CON ESPERA DE 5 SEGUNDOS */}
+                <div className={styles.composerArea}>
+                  {mensajesEnBuffer.length > 0 && (
+                    <div
+                      style={{
+                        background: '#eff6ff',
+                        border: '1px solid #93c5fd',
+                        borderRadius: 8,
+                        padding: '8px 12px',
+                        fontSize: '0.8rem',
+                        color: '#1e3a8a',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 10,
+                      }}
+                    >
+                      <span>
+                        ⏳ <strong>Esperando 5s desde el último mensaje ({mensajesEnBuffer.length} acumulado(s)):</strong>{' '}
+                        "{mensajesEnBuffer.join(' · ')}" — Se procesarán juntos en{' '}
+                        <strong>{segundosRestantesBuffer}s</strong>.
+                      </span>
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <textarea
+                      className={styles.textarea}
+                      style={{ flex: 1 }}
+                      placeholder="Escribe un mensaje (si envías varios seguidos, Repuestín espera 5 segundos desde el último y los une en una sola solicitud)..."
+                      value={textoMensaje}
+                      onChange={(e) => setTextoMensaje(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          void enviarConsultaCascada();
+                        }
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={enviandoMensaje}
+                      onClick={() => enviarConsultaCascada()}
+                    >
+                      {enviandoMensaje
+                        ? 'Procesando...'
+                        : mensajesEnBuffer.length > 0
+                          ? `Sumar (${segundosRestantesBuffer}s) →`
+                          : 'Enviar →'}
+                    </button>
+                  </div>
+
+                  <div className={styles.composerTopRow}>
+                    <button
+                      type="button"
+                      className={styles.subtleToggleBtn}
+                      onClick={() => setMostrarOpcionesPrueba((v) => !v)}
+                    >
+                      {mostrarOpcionesPrueba
+                        ? '▴ Ocultar opciones adicionales'
+                        : '▾ Opciones adicionales (Patente / Audio / Foto)'}
+                    </button>
+                  </div>
+
+                  {mostrarOpcionesPrueba && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                      <select
+                        className={styles.input}
+                        value={patenteInput}
+                        onChange={(e) => setPatenteInput(e.target.value)}
+                      >
+                        <option value="">🚗 Patente rápida (Opcional)</option>
+                        {padronDemo.map((v) => (
+                          <option key={v.patente} value={v.patente}>
+                            {v.patente} — {v.marca} {v.modelo} {v.anio}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        className={styles.input}
+                        placeholder="🎙️ Transcripción de audio..."
+                        value={transcripcionAudio}
+                        onChange={(e) => setTranscripcionAudio(e.target.value)}
+                      />
+                      <input
+                        className={styles.input}
+                        placeholder="📷 URL de foto..."
+                        value={fotoUrl}
+                        onChange={(e) => setFotoUrl(e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
 
           {/* COLUMNA 3: FICHA COMERCIAL DEL CLIENTE, CARRO WEB Y PROMESA DE RETIRO/DELIVERY */}
           <div className={styles.tracePanel}>
             <div className={styles.panelHeader}>
-              <span>📋 Ficha Comercial & Carro del Cliente</span>
+              <span>📋 Ficha Comercial & Carro</span>
               {carritoSesionActiva.length > 0 && (
                 <span className={styles.actionBadgeDirecta}>
                   🛒 {carritoSesionActiva.length} PROD.
@@ -1012,8 +1101,8 @@ export default function AgenteOmnicanal() {
             </div>
 
             {!sesionActiva ? (
-              <div style={{ padding: 24, fontSize: '0.84rem', color: '#64748b' }}>
-                Selecciona una conversación a la izquierda para revisar su vehículo, productos cotizados y promesa de entrega.
+              <div style={{ padding: 24, fontSize: '0.82rem', color: '#64748b' }}>
+                Selecciona una conversación activa para ver su vehículo, promesa de retiro/delivery y productos cotizados.
               </div>
             ) : (
               <div className={styles.traceBody}>
@@ -1022,7 +1111,7 @@ export default function AgenteOmnicanal() {
                   <div className={styles.traceSectionTitle}>
                     <span>🚗 Vehículo del Cliente</span>
                     <span style={{ fontSize: '0.7rem', color: '#0f766e' }}>
-                      {sesionActiva.vehiculoContexto?.fuente || 'Padrón Automático'}
+                      {sesionActiva.vehiculoContexto?.fuente || 'Padrón'}
                     </span>
                   </div>
                   {sesionActiva.vehiculoContexto ? (
@@ -1054,7 +1143,7 @@ export default function AgenteOmnicanal() {
                     </div>
                   ) : (
                     <div style={{ fontSize: '0.79rem', color: '#64748b' }}>
-                      El cliente aún no ha indicado patente ni modelo del vehículo.
+                      Aún sin patente ni modelo identificado.
                     </div>
                   )}
                 </div>
@@ -1065,13 +1154,13 @@ export default function AgenteOmnicanal() {
                   style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}
                 >
                   <div className={styles.traceSectionTitle} style={{ color: '#166534' }}>
-                    <span>📍 Promesa de Retiro & Delivery</span>
-                    <span>Hora Chile {infoLogisticaActiva.horaChile}</span>
+                    <span>📍 Retiro & Delivery</span>
+                    <span>{infoLogisticaActiva.horaChile} hrs</span>
                   </div>
                   <div style={{ fontSize: '0.79rem', color: '#14532d', marginBottom: 6 }}>
-                    <strong>Retiro en Enrique Olivares 224:</strong>{' '}
+                    <strong>Retiro Enrique Olivares 224:</strong>{' '}
                     {infoLogisticaActiva.reglaRetiroTitulo}
-                    <div style={{ fontSize: '0.74rem', color: '#15803d', marginTop: 2 }}>
+                    <div style={{ fontSize: '0.73rem', color: '#15803d', marginTop: 2 }}>
                       {infoLogisticaActiva.reglaRetiroDetalle}
                     </div>
                   </div>
@@ -1083,7 +1172,7 @@ export default function AgenteOmnicanal() {
                       borderTop: '1px dashed #86efac',
                     }}
                   >
-                    <strong>🚚 Delivery todo Santiago:</strong>{' '}
+                    <strong>🚚 Delivery Santiago:</strong>{' '}
                     {infoLogisticaActiva.reglaDeliveryTitulo}
                     <div style={{ fontSize: '0.73rem', color: '#15803d', marginTop: 2 }}>
                       {infoLogisticaActiva.reglaDeliveryDetalle}
@@ -1091,16 +1180,16 @@ export default function AgenteOmnicanal() {
                   </div>
                 </div>
 
-                {/* 3. PRODUCTOS COTIZADOS Y CARRO CONSOLIDADO EN FACILREPUESTOS.CL */}
+                {/* 3. PRODUCTOS COTIZADOS Y CARRO CONSOLIDADO */}
                 <div className={styles.traceSection}>
                   <div className={styles.traceSectionTitle}>
-                    <span>🛒 Productos Cotizados & Carro Web</span>
+                    <span>🛒 Productos Cotizados</span>
                     <span>{carritoSesionActiva.length} ítem(s)</span>
                   </div>
 
                   {carritoSesionActiva.length === 0 ? (
                     <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                      Aún no hay productos cotizados en el carro de este cliente.
+                      Sin productos cotizados aún en esta conversación.
                     </div>
                   ) : (
                     <>
@@ -1169,7 +1258,7 @@ export default function AgenteOmnicanal() {
                                   rel="noopener noreferrer"
                                   className={styles.miniActionLink}
                                 >
-                                  🔎 Ver Producto en Web ↗
+                                  🔎 Ver en Web ↗
                                 </a>
                                 <button
                                   type="button"
@@ -1178,7 +1267,7 @@ export default function AgenteOmnicanal() {
                                     copiarAlPortapapeles(c.urlProductoWoo!, 'Link del producto')
                                   }
                                 >
-                                  📋 Copiar Link
+                                  📋 Copiar
                                 </button>
                               </div>
                             )}
@@ -1186,7 +1275,6 @@ export default function AgenteOmnicanal() {
                         );
                       })}
 
-                      {/* Resumen del Carro Consolidado */}
                       <div
                         style={{
                           marginTop: 10,
@@ -1218,7 +1306,7 @@ export default function AgenteOmnicanal() {
                               className="btn btn-primary btn-sm"
                               style={{ flex: 1, textAlign: 'center', textDecoration: 'none' }}
                             >
-                              🛒 Abrir Carro Web ↗
+                              🛒 Abrir Carro ↗
                             </a>
                             <button
                               type="button"
@@ -1227,7 +1315,7 @@ export default function AgenteOmnicanal() {
                                 copiarAlPortapapeles(urlCarroUnificado, 'Link del carro unificado')
                               }
                             >
-                              📋 Copiar Carro
+                              📋 Copiar
                             </button>
                           </div>
                         )}
@@ -1236,11 +1324,11 @@ export default function AgenteOmnicanal() {
                   )}
                 </div>
 
-                {/* 4. BÚSQUEDAS DE REPUESTOS FALTANTES EN MESA WSP (SIN FRENAR LA VENTA) */}
+                {/* 4. REPUESTOS EN VALIDACIÓN CON PROVEEDORES INTERNOS */}
                 <div className={styles.traceSection}>
                   <div className={styles.traceSectionTitle}>
-                    <span>🔎 Repuestos Faltantes en Búsqueda</span>
-                    <span>{(sesionActiva.solicitudesWspAbiertas || []).length} activa(s)</span>
+                    <span>🔎 Validando con Proveedores</span>
+                    <span>{(sesionActiva.solicitudesWspAbiertas || []).length}</span>
                   </div>
                   {(sesionActiva.solicitudesWspAbiertas || []).length === 0 ? (
                     <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
@@ -1261,24 +1349,21 @@ export default function AgenteOmnicanal() {
                             color: '#5b21b6',
                           }}
                         >
-                          <span>Solicitud #{sol.codigoSolicitud}</span>
-                          <span>En búsqueda</span>
+                          <span>#{sol.codigoSolicitud}</span>
+                          <span>Validando</span>
                         </div>
                         {sol.resumenRepuesto && (
                           <div style={{ fontSize: '0.79rem', fontWeight: 700, marginTop: 3 }}>
-                            Pieza buscada: {sol.resumenRepuesto}
+                            {sol.resumenRepuesto}
                           </div>
                         )}
-                        <div style={{ fontSize: '0.73rem', color: '#4c1d95', marginTop: 3 }}>
-                          Consultado a: {sol.proveedoresContactados.join(', ')}
-                        </div>
                         <button
                           type="button"
                           className="btn btn-primary btn-sm"
                           style={{ width: '100%', marginTop: 8 }}
                           onClick={() => navigate('/mesa-wsp')}
                         >
-                          📲 Ver / Adjudicar en Mesa WSP →
+                          📲 Ver Proveedores Internos →
                         </button>
                       </div>
                     ))

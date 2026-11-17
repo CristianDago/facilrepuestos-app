@@ -1363,8 +1363,8 @@ async function crearPedidoSimuladoAgente({
 }
 
 /**
- * Asegura que el catálogo unificado esté inicializado y que existan sesiones demo iniciales
- * con el blindaje comercial activo (usando flag en memoria para no escanear 8.600 docs por mensaje).
+ * Asegura que el catálogo unificado esté inicializado en memoria.
+ * No crea sesiones ficticias ni de canal web (Repuestín opera 100% vía WhatsApp).
  */
 async function asegurarDatosInicialesAgente() {
   if (cacheCatalogoAgente.inicializadoDemo) return;
@@ -1378,105 +1378,6 @@ async function asegurarDatosInicialesAgente() {
     }
   }
   cacheCatalogoAgente.inicializadoDemo = true;
-
-  const demoDoc = await db.collection(COLECCION_SESIONES_AGENTE).doc('ses-omni-demo-porter').get();
-  if (demoDoc.exists) {
-    const demoData = demoDoc.data();
-    const tieneDireccionAntigua = (demoData.mensajes || []).some((m) =>
-      /Gran Avenida|San Bernardo|Soluparts/i.test(String(m.texto || ''))
-    );
-    if (!tieneDireccionAntigua) return;
-  } else {
-    const sesSnap = await db.collection(COLECCION_SESIONES_AGENTE).limit(1).get();
-    if (!sesSnap.empty) return;
-  }
-
-  const now = new Date().toISOString();
-  const sesionDemo = {
-    id: 'ses-omni-demo-porter',
-    canal: 'web_cliente',
-    clienteNombre: 'Cliente Prueba Web — Flujo Luna Mejorado',
-    clienteTelefono: '+56994128831',
-    estado: 'activa',
-    vehiculoContexto: {
-      patente: 'PDSS87',
-      marca: 'CHANGAN',
-      modelo: 'CS15',
-      anio: 2020,
-      motor: '1.5 BLUECORE JL473QF',
-      vin: 'LS4ASE2E5LA102938',
-      fuente: 'padron_luna_soluparts',
-    },
-    carritoCotizado: [
-      {
-        id: 'ailoo_soluparts_SOL-29900',
-        skuPublicoFrp: 'FRP-SOL-SOL-29900',
-        nombre: 'PASTILLAS DE FRENO DELANTERAS CERÁMICAS CHANGAN CS15 / ALSVIN 1.4 - 1.5',
-        fabricante: 'NETO / OEM',
-        origen: 'soluparts_ailoo',
-        proveedorNombre: 'FácilRepuestos SpA',
-        stock: 12,
-        cantidad: 1,
-        precioVentaNeto: 24960,
-        precioVentaConIva: 29702,
-      },
-    ],
-    comunaCliente: 'La Florida, Santiago (RM)',
-    modalidadEntrega: 'retiro_bodega',
-    escalamientosAbiertos: [],
-    solicitudesWspAbiertas: [],
-    pedidoActivo: null,
-    mensajes: [
-      {
-        id: 'msg-demo-1',
-        autor: 'cliente',
-        texto: 'Hola! Busco pastillas de freno delanteras para mi Changan CS15 patente PDSS87, ¿tienen stock?',
-        transcripcionAudio: '',
-        fotoUrl: '',
-        creadoEn: now,
-      },
-      {
-        id: 'msg-demo-2',
-        autor: 'agente_ia',
-        texto:
-          '¡Hola! 🚗 Identifiqué tu **CHANGAN CS15 (2020) · Motor 1.5 BLUECORE JL473QF [Patente PDSS87]**.\n\nTenemos disponibilidad inmediata confirmada en FácilRepuestos:\n• **PASTILLAS DE FRENO DELANTERAS CERÁMICAS CHANGAN CS15 / ALSVIN 1.4 - 1.5** (`FRP-SOL-SOL-29900`) — Marca **NETO / OEM** · Stock: **12 un.** · **$24.960 neto** (**$29.702 IVA inc.**)\n\n📍 ¿Prefieres **Despacho a domicilio en Santiago y todo Chile** o **Retiro en nuestra tienda en Enrique Olivares 224, La Florida, Santiago de Chile**? Indícame tu comuna o escribe **COMPRAR** para confirmar tu pedido en el acto.',
-        creadoEn: now,
-        trazaCascada: {
-          accionTomada: 'cotizacion_directa',
-          vehiculoDetectado: {
-            patente: 'PDSS87',
-            marca: 'CHANGAN',
-            modelo: 'CS15',
-            anio: 2020,
-            motor: '1.5 BLUECORE JL473QF',
-            fuente: 'padron_luna_soluparts',
-          },
-          reglasConocimientoAplicadas: [],
-          candidatosInventario: [
-            {
-              id: 'ailoo_soluparts_SOL-29900',
-              skuPublicoFrp: 'FRP-SOL-SOL-29900',
-              nombre: 'PASTILLAS DE FRENO DELANTERAS CERÁMICAS CHANGAN CS15 / ALSVIN 1.4 - 1.5',
-              fabricante: 'NETO / OEM',
-              origen: 'soluparts_ailoo',
-              proveedorNombre: 'Soluparts (Ailoo Enterprise)',
-              stock: 12,
-              precioCostoProveedor: 19500,
-              margenPct: 28,
-              precioVentaNeto: 24960,
-              precioVentaConIva: 29702,
-            },
-          ],
-          escalamientoCreado: null,
-          solicitudWspCreada: null,
-        },
-      },
-    ],
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  await db.collection(COLECCION_SESIONES_AGENTE).doc(sesionDemo.id).set(sesionDemo);
 }
 
 /**
@@ -1609,11 +1510,6 @@ async function ejecutarCascadaAgenteOmnicanal({
     }
 
     if (tienePendientes) {
-      const refs = [
-        ...(sesion.escalamientosAbiertos || []).map((e) => `Ticket Experto \`${e.ticketRef}\``),
-        ...(sesion.solicitudesWspAbiertas || []).map((w) => `Gestión Stock \`#${w.codigoSolicitud}\``),
-      ].join(' y ');
-
       return {
         vehiculoDetectado: sesion.vehiculoContexto || null,
         carritoCotizado: carritoActual,
@@ -1623,8 +1519,7 @@ async function ejecutarCascadaAgenteOmnicanal({
         escalamientosAbiertos: sesion.escalamientosAbiertos || [],
         solicitudesWspAbiertas: sesion.solicitudesWspAbiertas || [],
         respuestaTexto:
-          `⏳ ¡Gracias por tu paciencia! Tu consulta sigue activa bajo seguimiento prioritario en FácilRepuestos (${refs}).\n\n` +
-          `🛡️ **Anti-Duplicación Activo:** No generamos un ticket repetido para mantener tu prioridad. Apenas nuestro equipo confirme calce y disponibilidad para despacho o retiro en **Enrique Olivares 224, La Florida**, te aparecerá aquí mismo.`,
+          `⏳ Seguimos validando con nuestros proveedores internos. Apenas encontremos tu repuesto te lo confirmaremos por este mismo WhatsApp.`,
         trazaCascada: {
           accionTomada: 'seguimiento_sin_duplicar',
           vehiculoDetectado: sesion.vehiculoContexto || null,
@@ -1820,11 +1715,7 @@ async function ejecutarCascadaAgenteOmnicanal({
               : `Despacho a ${pedidoActualizado.comunaEntrega || 'domicilio'}`
           }).`;
       } else if (tienePendientes) {
-        const refs = [
-          ...(sesion.escalamientosAbiertos || []).map((e) => `Ticket Técnico \`${e.ticketRef}\``),
-          ...(sesion.solicitudesWspAbiertas || []).map((w) => `Solicitud de Stock \`#${w.codigoSolicitud}\``),
-        ].join(' y ');
-        hechoBase = `Estamos verificando disponibilidad y calce en nuestra mesa especialista (${refs}). Apenas nos confirmen te avisamos por este mismo chat.`;
+        hechoBase = `Estamos validando con nuestros proveedores internos; apenas encontremos tu repuesto te lo confirmaremos por este mismo WhatsApp.`;
       } else {
         hechoBase =
           'Aún no tienes pedidos ni cotizaciones en curso. Cuéntame qué repuesto buscas y la patente (o marca, modelo y año) de tu vehículo para cotizarte al tiro.';
@@ -2416,8 +2307,7 @@ async function ejecutarCascadaAgenteOmnicanal({
     if (existente) {
       escalamientoCreado = existente;
       respuestaTexto =
-        `⏳ Ya tenemos tu validación técnica en curso en nuestra **Mesa Técnica FácilRepuestos (Ticket \`${existente.ticketRef}\`)** para tu **${etiquetaVehiculo}**.\n\n` +
-        `🛡️ No duplicamos el ticket para mantener prioridad alta. En cuanto confirmemos la medida/calce exacto te avisamos por aquí para coordinar despacho en Santiago y todo Chile o retiro en **Enrique Olivares 224, La Florida**.`;
+        `⏳ Estamos validando con nuestros proveedores internos para tu **${etiquetaVehiculo}**; apenas tengamos confirmado tu repuesto te avisaremos por este mismo WhatsApp.`;
     } else {
       const esNodoAiloo = Boolean(mejorCandidato ? mejorCandidato.nodoAilooId : true);
       const ticketRef = `ESC-${Math.floor(100000 + Math.random() * 900000)}`;
@@ -2479,14 +2369,7 @@ async function ejecutarCascadaAgenteOmnicanal({
       };
 
       respuestaTexto =
-        `🚗 Identifiqué tu **${etiquetaVehiculo}**${
-          mejorCandidato
-            ? ` y tenemos pre-seleccionado **${mejorCandidato.nombre}** (\`${mejorCandidato.skuPublicoFrp}\`, ref. **$${mejorCandidato.precioVentaConIva.toLocaleString(
-                'es-CL'
-              )} IVA inc.**)`
-            : ''
-        }.\n\n` +
-        `🔍 Para asegurarte el calce 100% exacto antes de que pagues, acabo de derivar tu consulta a nuestra **Mesa Técnica Especialista FácilRepuestos (Ticket \`${ticketRef}\`)**. Nosotros verificamos y gestionamos la compra directamente para entregarte con **Despacho en Santiago y todo Chile** o **Retiro en nuestra sucursal en Enrique Olivares 224, La Florida, Santiago de Chile**.`;
+        `🚗 Identifiqué tu **${etiquetaVehiculo}**. Estamos validando con nuestros proveedores internos para confirmarte el repuesto exacto; apenas lo encontremos te lo confirmaremos por este mismo WhatsApp.`;
     }
   }
 
@@ -2619,16 +2502,15 @@ async function ejecutarCascadaAgenteOmnicanal({
           )} IVA inc.**\n  🔎 Ver producto en web: ${c.urlProductoWoo}`
       );
       respuestaTexto =
-        `¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** revisé los ${subConsultas.length} repuestos de tu lista en FácilRepuestos:\n\n` +
-        `📦 **Disponibles para compra inmediata:**\n${lineasDisponibles.join('\n')}\n\n` +
+        `¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** tenemos disponibles de inmediato:\n\n` +
+        `${lineasDisponibles.join('\n')}\n\n` +
         `📍 **Retiro de lo disponible:** ${promesaParcial.textoRetiroCarrito}\n` +
         `🚚 **Delivery Santiago:** ${promesaParcial.textoDespachoSantiago}\n\n` +
-        `📲 **En búsqueda activa (${resumenFaltantes}):** Ya activé nuestra **Mesa de Abastecimiento FácilRepuestos (\`#${solicitudWspCreada.codigoSolicitud}\`)** con nuestras bodegas asociadas y te avisaremos por este mismo WhatsApp apenas sea encontrado.\n\n` +
-        `🛒 **No detenemos tu compra de lo que ya está en stock:** Puedes revisar cada producto en su link web y escribir **COMPRAR** aquí mismo para armarte **un solo carro con todos los productos disponibles**, mientras seguimos buscando el repuesto pendiente.`;
+        `🔎 **Sobre ${resumenFaltantes}:** Estamos validando con nuestros proveedores internos, apenas encontremos tu repuesto te lo confirmaremos.\n\n` +
+        `🛒 **No detenemos tu compra de lo que ya está en stock:** Puedes revisar cada producto en su link web y escribir **COMPRAR** aquí mismo para armarte **un solo carro con todos los productos disponibles**.`;
     } else {
       respuestaTexto =
-        `🚗 Identifiqué tu **${etiquetaVehiculo}**. Estamos verificando disponibilidad inmediata para **${resumenFaltantes}** en nuestra red de bodegas asociadas.\n\n` +
-        `📲 **¡Sin callejones sin salida! Ya activé nuestra Mesa de Abastecimiento en Vivo (\`#${solicitudWspCreada.codigoSolicitud}\`)** (${solicitudWspCreada.proveedoresContactados.length} bodega(s) especialista(s) consultada(s) en línea por FácilRepuestos) para cotizarte en minutos con **Despacho en Santiago y todo Chile** o **Retiro en nuestra sucursal en Enrique Olivares 224, La Florida, Santiago de Chile**.`;
+        `🚗 Identifiqué tu **${etiquetaVehiculo}**. Estamos validando con nuestros proveedores internos por **${resumenFaltantes}**; apenas encontremos tu repuesto te lo confirmaremos por este mismo WhatsApp.`;
     }
   }
 
@@ -2697,25 +2579,137 @@ async function ejecutarCascadaAgenteOmnicanal({
   };
 }
 
+// Corte para limpiar todos los históricos y pruebas previas a esta actualización
+const CORTE_LIMPIEZA_HISTORICOS_MS = Date.parse('2026-11-17T02:45:00.000Z');
+const VENTANA_ACTIVA_24H_MS = 24 * 60 * 60 * 1000;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/agente-omnicanal/sesiones
-// Lista todas las sesiones de conversación del Agente Vendedor Omnicanal
-// Público para permitir el Portal Web de Consultas de Clientes en Cloud Run
+// Lista las conversaciones activas de WhatsApp (< 24 horas y no cerradas con ✕).
+// Las conversaciones cerradas con ✕ o con más de 24 horas pasan solo a estadística,
+// y cualquier sesión antigua de canal web se elimina.
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/sesiones', async (req, res, next) => {
   try {
     await asegurarDatosInicialesAgente();
     const snap = await db.collection(COLECCION_SESIONES_AGENTE).get();
-    const sesiones = snap.docs
-      .map((d) => ({ id: d.id, ...d.data() }))
-      .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+    const ahoraMs = Date.now();
+
+    const sesionesActivas = [];
+    let totalHistoricasWsp = 0;
+    let cerradasOPasadas24h = 0;
+
+    for (const d of snap.docs) {
+      const data = d.data() || {};
+      const id = d.id;
+
+      // Eliminar por completo sesiones antiguas de prueba web (solo atendemos por Repuestín vía WSP)
+      if (data.canal === 'web_cliente' || id === 'ses-omni-demo-porter' || id.startsWith('ses-omni-demo')) {
+        db.collection(COLECCION_SESIONES_AGENTE).doc(id).delete().catch(() => null);
+        continue;
+      }
+
+      totalHistoricasWsp += 1;
+      const updatedMs = Date.parse(data.updatedAt || data.createdAt || '') || 0;
+
+      // Si es anterior al corte de limpieza de históricos o tiene más de 24h o fue cerrada con ✕:
+      // desaparece de la bandeja activa y queda únicamente como estadística
+      const esHistoricoPrevio = updatedMs > 0 && updatedMs < CORTE_LIMPIEZA_HISTORICOS_MS;
+      const supero24Horas = updatedMs > 0 && ahoraMs - updatedMs > VENTANA_ACTIVA_24H_MS;
+      const fueCerradaConX = Boolean(data.archivadaEnBandeja) || data.estado === 'archivada';
+
+      if (esHistoricoPrevio || supero24Horas || fueCerradaConX) {
+        cerradasOPasadas24h += 1;
+        if (esHistoricoPrevio && !data.archivadaEnBandeja) {
+          db.collection(COLECCION_SESIONES_AGENTE)
+            .doc(id)
+            .set({ archivadaEnBandeja: true, estado: 'archivada' }, { merge: true })
+            .catch(() => null);
+        }
+        continue;
+      }
+
+      sesionesActivas.push({
+        id,
+        ...data,
+        canal: data.canal || 'whatsapp_meta_cloud',
+      });
+    }
+
+    sesionesActivas.sort((a, b) =>
+      String(b.updatedAt || '').localeCompare(String(a.updatedAt || ''))
+    );
 
     res.json({
       success: true,
       data: {
-        sesiones,
+        sesiones: sesionesActivas,
+        estadisticasHistoricas: {
+          totalHistoricasWsp,
+          cerradasOPasadas24h,
+          activasEnBandeja: sesionesActivas.length,
+        },
         padronDemoPatentes: Object.values(PADRON_PATENTES_DEMO),
       },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/agente-omnicanal/sesiones/limpiar-historicos
+// Limpia todas las conversaciones actuales de la bandeja (las pasa a estadística
+// y elimina cualquier sesión de prueba web).
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/sesiones/limpiar-historicos', async (req, res, next) => {
+  try {
+    const snap = await db.collection(COLECCION_SESIONES_AGENTE).get();
+    let archivadas = 0;
+    let eliminadasWeb = 0;
+
+    for (const d of snap.docs) {
+      const data = d.data() || {};
+      if (data.canal === 'web_cliente' || d.id.startsWith('ses-omni-demo')) {
+        await db.collection(COLECCION_SESIONES_AGENTE).doc(d.id).delete();
+        eliminadasWeb += 1;
+      } else if (!data.archivadaEnBandeja) {
+        await db
+          .collection(COLECCION_SESIONES_AGENTE)
+          .doc(d.id)
+          .set({ archivadaEnBandeja: true, estado: 'archivada' }, { merge: true });
+        archivadas += 1;
+      }
+    }
+
+    res.json({
+      success: true,
+      data: { archivadas, eliminadasWeb },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/agente-omnicanal/sesiones/:id/archivar
+// Quita una conversación de la lista activa (botón ✕) dejándola solo para estadística
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/sesiones/:id/archivar', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const docRef = db.collection(COLECCION_SESIONES_AGENTE).doc(id);
+    await docRef.set(
+      {
+        archivadaEnBandeja: true,
+        estado: 'archivada',
+        archivadaEn: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+    res.json({
+      success: true,
+      data: { id, archivadaEnBandeja: true },
     });
   } catch (err) {
     next(err);
@@ -2839,6 +2833,8 @@ router.post('/sesiones/:id/mensaje', async (req, res, next) => {
     const mensajesActualizados = [...(sesion.mensajes || []), msgCliente, msgAgente];
     const vehiculoContexto = resultadoCascada.vehiculoDetectado || sesion.vehiculoContexto || null;
     const camposActualizados = {
+      estado: 'activa',
+      archivadaEnBandeja: false,
       vehiculoContexto,
       carritoCotizado: resultadoCascada.carritoCotizado ?? sesion.carritoCotizado ?? [],
       comunaCliente: resultadoCascada.comunaCliente ?? sesion.comunaCliente ?? null,
@@ -3484,6 +3480,8 @@ export async function manejarWebhookPostMeta(req, res) {
     const mensajesConEntrante = [...(sesion.mensajes || []), msgCliente];
     await docRef.set(
       {
+        estado: 'activa',
+        archivadaEnBandeja: false,
         clienteNombre: perfilNombre || sesion.clienteNombre,
         clienteTelefono: `+${remitenteTel}`,
         phoneNumberIdMeta: phoneNumberIdReceptor || sesion.phoneNumberIdMeta || null,
@@ -3570,6 +3568,8 @@ export async function manejarWebhookPostMeta(req, res) {
     const vehiculoContexto =
       resultadoCascada.vehiculoDetectado || sesionFresca.vehiculoContexto || null;
     const camposActualizados = {
+      estado: 'activa',
+      archivadaEnBandeja: false,
       clienteNombre: buffer.perfilNombre || sesionFresca.clienteNombre,
       clienteTelefono: `+${remitenteTel}`,
       phoneNumberIdMeta:

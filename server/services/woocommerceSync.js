@@ -1076,3 +1076,67 @@ export async function crearPedidoPendienteWooCommerce({
     };
   }
 }
+
+/**
+ * Obtiene los últimos pedidos de WooCommerce desde la REST API de WordPress (`facilrepuestos.cl`)
+ * y clasifica si cada pedido fue una compra Web Directa (sin pasar por Repuestín)
+ * o si provino de Repuestín WhatsApp.
+ */
+export async function obtenerPedidosWooCommerceRecientes({ maxPedidos = 60 } = {}) {
+  if (!isWooConfigured()) {
+    return { configurado: false, pedidos: [] };
+  }
+  try {
+    const perPage = Math.min(100, Math.max(10, Number(maxPedidos) || 60));
+    const orders = await wcFetch(`/orders?per_page=${perPage}&orderby=date&order=desc`, {}, 2);
+    if (!Array.isArray(orders)) {
+      return { configurado: true, pedidos: [] };
+    }
+
+    const pedidos = orders.map((o) => {
+      const metaList = Array.isArray(o.meta_data) ? o.meta_data : [];
+      const metaCodigoFrp = metaList.find((m) => m?.key === '_frp_codigo_pedido')?.value || '';
+      const notaCliente = String(o.customer_note || '');
+      const esDeRepuestin =
+        Boolean(metaCodigoFrp) || /repuest[ií]n/i.test(notaCliente);
+
+      const nombreCliente = [o.billing?.first_name, o.billing?.last_name]
+        .filter(Boolean)
+        .join(' ')
+        .trim() || 'Cliente Web';
+
+      const items = (Array.isArray(o.line_items) ? o.line_items : []).map((li) => ({
+        nombre: li.name || 'Repuesto',
+        sku: li.sku || '',
+        cantidad: Number(li.quantity) || 1,
+        totalConIva: Math.round(Number(li.total || 0) + Number(li.total_tax || 0)),
+      }));
+
+      const totalConIva = Math.round(Number(o.total) || 0);
+      const totalNeto = Math.round(totalConIva / 1.19);
+
+      return {
+        id: String(o.id),
+        numeroPedido: String(o.number || o.id),
+        fecha: o.date_created_gmt ? new Date(o.date_created_gmt + 'Z').toISOString() : o.date_created || new Date().toISOString(),
+        estadoWoo: String(o.status || 'pending'),
+        canalOrigen: esDeRepuestin ? 'repuestin_wsp' : 'web_directo',
+        codigoPedidoFrp: metaCodigoFrp || null,
+        clienteNombre: nombreCliente,
+        clienteEmail: o.billing?.email || '',
+        clienteTelefono: o.billing?.phone || '',
+        comuna: o.shipping?.city || o.billing?.city || 'Santiago',
+        metodoPago: o.payment_method_title || o.payment_method || 'Webpay / Transferencia',
+        totalNeto,
+        totalConIva,
+        itemsCount: items.reduce((s, it) => s + it.cantidad, 0),
+        items,
+      };
+    });
+
+    return { configurado: true, pedidos };
+  } catch (err) {
+    console.warn('[woo-sync] Aviso consultando pedidos recientes de WooCommerce:', err.message);
+    return { configurado: true, pedidos: [], error: err.message };
+  }
+}

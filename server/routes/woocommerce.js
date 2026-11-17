@@ -6,6 +6,7 @@ import {
   sincronizarInventarioConWooCommerce,
   obtenerEstadoColaWooCommerce,
   exportarCatalogoCSV,
+  obtenerPedidosWooCommerceRecientes,
 } from '../services/woocommerceSync.js';
 import {
   sincronizarCatalogoNodoAiloo,
@@ -40,6 +41,371 @@ router.get('/status', requireAuth, async (req, res, next) => {
   try {
     const estado = await obtenerEstadoColaWooCommerce();
     res.json({ success: true, data: estado });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/woocommerce/canales-venta
+// Relaciona por separado y en conjunto los 3 Canales de Venta de FácilRepuestos:
+//   1) Canal Web Directo (WordPress / WooCommerce facilrepuestos.cl — sin pasar por Repuestín)
+//   2) Canal Repuestín WhatsApp (+56 9 2110 9851 — carros y pedidos asistidos por WhatsApp)
+//   3) Canal POS Sucursal Enrique Olivares 224 (Mesón / Bodega La Florida)
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/canales-venta', requireAuth, async (req, res, next) => {
+  try {
+    const [
+      wooLiveRes,
+      wooWebhookSnap,
+      pedidosRepuestinSnap,
+      sesionesWspSnap,
+      ventasPosSnap,
+    ] = await Promise.all([
+      obtenerPedidosWooCommerceRecientes({ maxPedidos: 60 }).catch(() => ({
+        configurado: false,
+        pedidos: [],
+      })),
+      db.collection('woocommerce_pedidos_procesados').get().catch(() => ({ docs: [] })),
+      db.collection('pedidos_agente_omnicanal').get().catch(() => ({ docs: [] })),
+      db.collection('sesiones_agente_omnicanal').get().catch(() => ({ docs: [] })),
+      db.collection('ventas_pos').get().catch(() => ({ docs: [] })),
+    ]);
+
+    // ── 1. CANAL WEB DIRECTO (WORDPRESS / WOOCOMMERCE SIN REPUESTÍN) ─────────
+    const pedidosWooMap = new Map();
+    for (const p of wooLiveRes.pedidos || []) {
+      pedidosWooMap.set(String(p.id), p);
+    }
+
+    // Incorporar también pedidos registrados por webhook en Firestore si no estaban en el lote reciente
+    for (const doc of wooWebhookSnap.docs || []) {
+      if (pedidosWooMap.has(String(doc.id))) continue;
+      const d = doc.data() || {};
+      const totalConIva = Math.round(Number(d.totalPedido) || 0);
+      const totalNeto = Math.round(totalConIva / 1.19);
+      const items = Array.isArray(d.items) ? d.items : [];
+      pedidosWooMap.set(String(doc.id), {
+        id: String(doc.id),
+        numeroPedido: String(d.numeroPedido || doc.id),
+        fecha: d.procesadoEn || new Date().toISOString(),
+        estadoWoo: d.estadoWoo || 'completed',
+        canalOrigen: d.canalOrigen || 'web_directo',
+        codigoPedidoFrp: d.codigoPedidoFrp || null,
+        clienteNombre: d.clienteNombre || 'Cliente Web WordPress',
+        clienteEmail: d.clienteEmail || '',
+        clienteTelefono: d.clienteTelefono || '',
+        comuna: d.comuna || 'Santiago',
+        metodoPago: d.metodoPago || 'Webpay / WooCommerce',
+        totalNeto,
+        totalConIva,
+        itemsCount: items.reduce((s, it) => s + (Number(it.cantidad) || 1), 0),
+        items: items.map((it) => ({
+          nombre: it.nombre || it.skuPublicoFrp || it.codigo || 'Repuesto Web',
+          sku: it.skuPublicoFrp || it.codigo || '',
+          cantidad: Number(it.cantidad) || 1,
+          totalConIva: 0,
+        })),
+      });
+    }
+
+    const todosPedidosWoo = Array.from(pedidosWooMap.values()).sort((a, b) =>
+      String(b.fecha || '').localeCompare(String(a.fecha || ''))
+    );
+
+    // Filtrar compras que NO pasaron por Repuestín (100% Web Directo WordPress)
+    const estadosCancelados = new Set(['cancelled', 'refunded', 'failed', 'trash']);
+    const comprasWebDirecto = todosPedidosWoo.filter(
+      (p) => p.canalOrigen === 'web_directo' && !estadosCancelados.has(p.estadoWoo)
+    );
+    const comprasWebPagadas = comprasWebDirecto.filter((p) =>
+      ['processing', 'completed', 'on-hold'].includes(p.estadoWoo)
+    );
+
+    const totalMontoWebDirectoConIva = comprasWebDirecto.reduce(
+      (acc, p) => acc + (Number(p.totalConIva) || 0),
+      0
+    );
+    const totalMontoWebDirectoNeto = Math.round(totalMontoWebDirectoConIva / 1.19);
+    const ticketPromedioWebDirecto =
+      comprasWebDirecto.length > 0
+        ? Math.round(totalMontoWebDirectoConIva / comprasWebDirecto.length)
+        : 0;
+    const unidadesWebDirecto = comprasWebDirecto.reduce(
+      (acc, p) => acc + (Number(p.itemsCount) || 1),
+      0
+    );
+
+    // ── 2. CANAL REPUESTÍN WHATSAPP (+56 9 2110 9851) ────────────────────────
+    const CORTE_REPUESTIN_ISO = '2026-11-17T02:50:00.000Z';
+    const pedidosRepuestinFirestore = (pedidosRepuestinSnap.docs || [])
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((p) => {
+        const f = String(p.createdAt || p.updatedAt || '');
+        return f >= CORTE_REPUESTIN_ISO && p.estadoPago !== 'cancelado';
+      });
+
+    const pedidosWooDeRepuestin = todosPedidosWoo.filter(
+      (p) => p.canalOrigen === 'repuestin_wsp' && !estadosCancelados.has(p.estadoWoo)
+    );
+
+    // Unificar por codigoPedido / wooOrderId para no duplicar si está en ambos
+    const repuestinMap = new Map();
+    for (const p of pedidosRepuestinFirestore) {
+      const clave = String(p.codigoPedido || p.wooOrderId || p.id);
+      const totalConIva = Math.round(
+        (Number(p.totalConIva) || 0) + (Number(p.costoDespachoConIva) || 0)
+      );
+      repuestinMap.set(clave, {
+        id: p.id,
+        codigo: p.codigoPedido || `WSP-${String(p.id).slice(0, 6)}`,
+        wooOrderId: p.wooOrderId || null,
+        fecha: p.createdAt || p.updatedAt || new Date().toISOString(),
+        clienteNombre: p.clienteNombre || 'Cliente WhatsApp',
+        clienteTelefono: p.clienteTelefono || '',
+        patente: p.vehiculo?.patente || '',
+        modalidadEntrega:
+          p.modalidadEntrega === 'retiro_bodega'
+            ? 'Retiro Enrique Olivares 224'
+            : `Delivery (${p.comunaEntrega || 'Santiago'})`,
+        estado: p.estadoPago === 'pagado' ? 'Pagado' : 'Carro Generado',
+        totalNeto: Math.round(totalConIva / 1.19),
+        totalConIva,
+        itemsCount: Array.isArray(p.items)
+          ? p.items.reduce((s, it) => s + (Number(it.cantidad) || 1), 0)
+          : 1,
+        resumenItems: Array.isArray(p.items)
+          ? p.items.map((it) => it.nombre || it.skuPublicoFrp).join(', ')
+          : 'Pedido Repuestín WhatsApp',
+      });
+    }
+
+    for (const pw of pedidosWooDeRepuestin) {
+      const clave = String(pw.codigoPedidoFrp || pw.id);
+      if (repuestinMap.has(clave)) continue;
+      repuestinMap.set(clave, {
+        id: pw.id,
+        codigo: pw.codigoPedidoFrp || `WOO-#${pw.numeroPedido}`,
+        wooOrderId: pw.id,
+        fecha: pw.fecha,
+        clienteNombre: pw.clienteNombre,
+        clienteTelefono: pw.clienteTelefono,
+        patente: '',
+        modalidadEntrega: pw.comuna || 'Santiago',
+        estado: ['processing', 'completed'].includes(pw.estadoWoo) ? 'Pagado' : 'Pendiente Pago',
+        totalNeto: pw.totalNeto,
+        totalConIva: pw.totalConIva,
+        itemsCount: pw.itemsCount,
+        resumenItems: (pw.items || []).map((i) => i.nombre).join(', '),
+      });
+    }
+
+    const ventasRepuestin = Array.from(repuestinMap.values()).sort((a, b) =>
+      String(b.fecha || '').localeCompare(String(a.fecha || ''))
+    );
+
+    const sesionesActivasRepuestin = (sesionesWspSnap.docs || [])
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .filter((s) => {
+        const f = String(s.updatedAt || s.createdAt || '');
+        return (
+          s.canal === 'whatsapp_cliente' &&
+          !s.archivadaEnPanel &&
+          f >= CORTE_REPUESTIN_ISO
+        );
+      });
+
+    const carritosActivosRepuestin = sesionesActivasRepuestin.filter(
+      (s) => Array.isArray(s.carritoCotizado) && s.carritoCotizado.length > 0
+    );
+
+    const totalMontoRepuestinConIva = ventasRepuestin.reduce(
+      (acc, v) => acc + (Number(v.totalConIva) || 0),
+      0
+    );
+    const totalMontoRepuestinNeto = Math.round(totalMontoRepuestinConIva / 1.19);
+    const ticketPromedioRepuestin =
+      ventasRepuestin.length > 0
+        ? Math.round(totalMontoRepuestinConIva / ventasRepuestin.length)
+        : 0;
+    const unidadesRepuestin = ventasRepuestin.reduce(
+      (acc, v) => acc + (Number(v.itemsCount) || 1),
+      0
+    );
+
+    // ── 3. CANAL POS SUCURSAL ENRIQUE OLIVARES 224 (LA FLORIDA) ──────────────
+    const todosDocsPos = (ventasPosSnap.docs || [])
+      .map((d) => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+
+    const ticketsPosConfirmados = todosDocsPos.filter(
+      (v) => v.tipoDocumento !== 'COTIZACION' && v.estado !== 'ANULADA'
+    );
+    const cotizacionesPosMeson = todosDocsPos.filter(
+      (v) => v.tipoDocumento === 'COTIZACION'
+    );
+
+    const totalMontoPosConIva = ticketsPosConfirmados.reduce(
+      (acc, v) => acc + (Number(v.total) || 0),
+      0
+    );
+    const totalMontoPosNeto = ticketsPosConfirmados.reduce(
+      (acc, v) => acc + (Number(v.totalNeto) || Math.round((Number(v.total) || 0) / 1.19)),
+      0
+    );
+    const ticketPromedioPos =
+      ticketsPosConfirmados.length > 0
+        ? Math.round(totalMontoPosConIva / ticketsPosConfirmados.length)
+        : 0;
+    const unidadesPos = ticketsPosConfirmados.reduce((acc, v) => {
+      const its = Array.isArray(v.items) ? v.items : [];
+      return acc + its.reduce((s, it) => s + (Number(it.cantidad) || 1), 0);
+    }, 0);
+
+    const desgloseMediosPagoPos = {
+      EFECTIVO: 0,
+      TARJETA: 0,
+      TRANSFERENCIA: 0,
+    };
+    for (const t of ticketsPosConfirmados) {
+      const mp = String(t.metodoPago || 'EFECTIVO').toUpperCase();
+      if (mp.includes('TARJETA') || mp.includes('DEBITO') || mp.includes('CREDITO')) {
+        desgloseMediosPagoPos.TARJETA += Number(t.total) || 0;
+      } else if (mp.includes('TRANSF')) {
+        desgloseMediosPagoPos.TRANSFERENCIA += Number(t.total) || 0;
+      } else {
+        desgloseMediosPagoPos.EFECTIVO += Number(t.total) || 0;
+      }
+    }
+
+    // ── 4. CONSOLIDADO EN CONJUNTO (LOS 3 CANALES UNIDOS) ────────────────────
+    const totalConjuntoConIva =
+      totalMontoWebDirectoConIva + totalMontoRepuestinConIva + totalMontoPosConIva;
+    const totalConjuntoNeto =
+      totalMontoWebDirectoNeto + totalMontoRepuestinNeto + totalMontoPosNeto;
+    const totalOperacionesConjunto =
+      comprasWebDirecto.length + ventasRepuestin.length + ticketsPosConfirmados.length;
+    const totalUnidadesConjunto =
+      unidadesWebDirecto + unidadesRepuestin + unidadesPos;
+    const ticketPromedioConjunto =
+      totalOperacionesConjunto > 0
+        ? Math.round(totalConjuntoConIva / totalOperacionesConjunto)
+        : 0;
+
+    const pct = (monto) =>
+      totalConjuntoConIva > 0 ? Math.round((monto / totalConjuntoConIva) * 100) : 0;
+
+    // Flujo unificado de las últimas operaciones de los 3 canales para análisis cruzado
+    const operacionesUnificadas = [
+      ...comprasWebDirecto.slice(0, 25).map((p) => ({
+        id: `web_${p.id}`,
+        canal: 'web_directo',
+        canalLabel: '🌐 Web Directo (WordPress)',
+        codigo: `#${p.numeroPedido}`,
+        fecha: p.fecha,
+        cliente: p.clienteNombre,
+        contacto: p.clienteEmail || p.clienteTelefono || p.comuna,
+        detalle: (p.items || []).map((i) => `${i.cantidad}x ${i.nombre}`).join(', ') || 'Compra en facilrepuestos.cl',
+        modalidad: p.comuna ? `Web (${p.comuna})` : 'Checkout Web',
+        estado: p.estadoWoo === 'completed' || p.estadoWoo === 'processing' ? 'Pagado Web' : p.estadoWoo,
+        totalNeto: p.totalNeto,
+        totalConIva: p.totalConIva,
+      })),
+      ...ventasRepuestin.slice(0, 25).map((v) => ({
+        id: `wsp_${v.id}`,
+        canal: 'repuestin_wsp',
+        canalLabel: '🤖 Repuestín WhatsApp',
+        codigo: v.codigo,
+        fecha: v.fecha,
+        cliente: v.clienteNombre,
+        contacto: v.clienteTelefono || v.patente || 'WhatsApp',
+        detalle: v.resumenItems,
+        modalidad: v.modalidadEntrega,
+        estado: v.estado,
+        totalNeto: v.totalNeto,
+        totalConIva: v.totalConIva,
+      })),
+      ...ticketsPosConfirmados.slice(0, 25).map((t) => ({
+        id: `pos_${t.id}`,
+        canal: 'pos_olivares',
+        canalLabel: '🏪 POS Enrique Olivares 224',
+        codigo: t.numeroTicket || `POS-${String(t.id).slice(0, 5)}`,
+        fecha: t.fecha,
+        cliente: t.cliente?.nombre || 'Cliente Mesón Olivares 224',
+        contacto: t.cliente?.rut || t.cliente?.telefono || t.metodoPago || 'Mesón',
+        detalle: Array.isArray(t.items)
+          ? t.items.map((i) => `${i.cantidad || 1}x ${i.nombre || i.codigo}`).join(', ')
+          : 'Venta Mesón POS',
+        modalidad: `Sucursal Olivares 224 (${t.metodoPago || 'EFECTIVO'})`,
+        estado: 'Completada POS',
+        totalNeto: Number(t.totalNeto) || Math.round((Number(t.total) || 0) / 1.19),
+        totalConIva: Number(t.total) || 0,
+      })),
+    ].sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+
+    res.json({
+      success: true,
+      data: {
+        actualizadoEn: new Date().toISOString(),
+        wooConfigurado: Boolean(wooLiveRes.configurado),
+        enConjunto: {
+          totalVentasConIva: totalConjuntoConIva,
+          totalVentasNeto: totalConjuntoNeto,
+          totalOperaciones: totalOperacionesConjunto,
+          totalUnidades: totalUnidadesConjunto,
+          ticketPromedioConIva: ticketPromedioConjunto,
+          participacionPct: {
+            webDirecto: pct(totalMontoWebDirectoConIva),
+            repuestinWsp: pct(totalMontoRepuestinConIva),
+            posOlivares: pct(totalMontoPosConIva),
+          },
+        },
+        canales: {
+          webDirecto: {
+            id: 'web_directo',
+            nombre: 'Ventas Web WordPress (Directo)',
+            subtitulo: 'Compras directas en facilrepuestos.cl sin pasar por Repuestín',
+            totalVentasConIva: totalMontoWebDirectoConIva,
+            totalVentasNeto: totalMontoWebDirectoNeto,
+            totalPedidos: comprasWebDirecto.length,
+            pedidosPagados: comprasWebPagadas.length,
+            unidadesVendidas: unidadesWebDirecto,
+            ticketPromedioConIva: ticketPromedioWebDirecto,
+            participacionPct: pct(totalMontoWebDirectoConIva),
+            pedidosRecientes: comprasWebDirecto.slice(0, 30),
+          },
+          repuestinWsp: {
+            id: 'repuestin_wsp',
+            nombre: 'Repuestín WhatsApp (+56 9 2110 9851)',
+            subtitulo: 'Ventas y carros cerrados por el asistente en WhatsApp Oficial',
+            totalVentasConIva: totalMontoRepuestinConIva,
+            totalVentasNeto: totalMontoRepuestinNeto,
+            totalPedidos: ventasRepuestin.length,
+            conversacionesActivas24h: sesionesActivasRepuestin.length,
+            carritosCotizadosActivos: carritosActivosRepuestin.length,
+            unidadesVendidas: unidadesRepuestin,
+            ticketPromedioConIva: ticketPromedioRepuestin,
+            participacionPct: pct(totalMontoRepuestinConIva),
+            pedidosRecientes: ventasRepuestin.slice(0, 30),
+          },
+          posOlivares: {
+            id: 'pos_olivares',
+            nombre: 'Ventas POS Enrique Olivares 224',
+            subtitulo: 'Ventas presenciales y retiro en mesón La Florida',
+            totalVentasConIva: totalMontoPosConIva,
+            totalVentasNeto: totalMontoPosNeto,
+            totalTickets: ticketsPosConfirmados.length,
+            cotizacionesMeson: cotizacionesPosMeson.length,
+            unidadesVendidas: unidadesPos,
+            ticketPromedioConIva: ticketPromedioPos,
+            participacionPct: pct(totalMontoPosConIva),
+            mediosPago: desgloseMediosPagoPos,
+            ticketsRecientes: ticketsPosConfirmados.slice(0, 30),
+          },
+        },
+        operacionesUnificadas: operacionesUnificadas.slice(0, 50),
+      },
+    });
   } catch (error) {
     next(error);
   }

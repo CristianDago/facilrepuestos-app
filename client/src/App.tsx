@@ -38,6 +38,8 @@ import ProveedorPOS         from './pages/Proveedor/POS/ProveedorPOS';
 import EscalamientosIA      from './pages/Escalamientos/EscalamientosIA';
 import MesaCotizacionWsp    from './pages/MesaWsp/MesaCotizacionWsp';
 import AgenteOmnicanal      from './pages/AgenteOmnicanal/AgenteOmnicanal';
+import VentasCanalesOmnicanal from './pages/VentasCanales/VentasCanalesOmnicanal';
+import InventarioErpConsolidado from './pages/Inventario/InventarioErpConsolidado';
 import ChatbotWidgetFlotante from './components/ChatbotWidget/ChatbotWidgetFlotante';
 import Mantenimiento     from './pages/Mantenimiento/Mantenimiento';
 
@@ -110,7 +112,11 @@ export default function App() {
               <Route path="vehiculos"                element={<Vehiculos />} />
               <Route path="vehiculos/:patente"       element={<PerfilVehiculo />} />
               <Route path="inventario"               element={<Inventario />} />
+              <Route path="inventario-erp"           element={<InventarioErpConsolidado />} />
               <Route path="proveedores"              element={<Proveedores />} />
+              <Route path="ventas-web"               element={<VentasCanalesOmnicanal canalInicial="web_directo" />} />
+              <Route path="ventas-pos-canal"         element={<VentasCanalesOmnicanal canalInicial="pos_olivares" />} />
+              <Route path="ventas-canales"           element={<VentasCanalesOmnicanal canalInicial="todos" />} />
               <Route path="agente-omnicanal"         element={<AgenteOmnicanal />} />
               <Route path="chat-cliente"             element={<Navigate to="/agente-omnicanal" replace />} />
               <Route path="escalamientos-ia"         element={<EscalamientosIA modo="admin" />} />

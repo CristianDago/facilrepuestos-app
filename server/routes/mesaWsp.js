@@ -277,286 +277,68 @@ async function enviarMensajeMetaWhatsApp({ telefono, textoMensaje, codigoSolicit
   };
 }
 
+const PROVEEDORES_DEMO_ELIMINAR = new Set([
+  'prov-wsp-corea-01',
+  'prov-wsp-nippon-02',
+  'prov-wsp-euro-03',
+]);
+const CORTE_LIMPIEZA_MESA_WSP_ISO = '2026-11-17T03:05:00.000Z';
+
 /**
- * Asegura que existan proveedores especialistas con WhatsApp activo para demostrar el
- * enrutamiento por Marca + Categoría en la Etapa 3 y que aparezcan enriquecidos en `/proveedores`.
+ * Mantiene únicamente los nodos Enterprise Ailoo (con `canalWspActivo: false`) y elimina
+ * cualquier proveedor ficticio de prueba de WhatsApp (`prov-wsp-corea-01`, `prov-wsp-nippon-02`, `prov-wsp-euro-03`).
  */
 export async function asegurarProveedoresWspDemo() {
-  const snap = await db.collection(COLECCION_PROVEEDORES).get();
-  const existentes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-  const demosWsp = [
-    {
-      id: 'prov-wsp-corea-01',
-      nombre: 'Importadora CoreaParts 10 de Julio',
-      rut: '76.512.890-4',
-      contacto: 'Don Patricio Rojas (Mesón WhatsApp)',
-      telefono: '+56984120931',
-      email: 'ventas@coreaparts.cl',
-      direccion: 'Av. 10 de Julio 482, Santiago',
-      categoria: 'Embrague',
-      categoriasEspecialidad: ['Embrague', 'Motor', 'Transmisión', 'Filtros'],
-      marcas: ['HYUNDAI', 'KIA', 'CHEVROLET', 'SSANGYONG'],
-      marcasVehiculo: ['HYUNDAI', 'KIA', 'CHEVROLET', 'SSANGYONG'],
-      notas: 'Especialista en embragues, cajas y motores diésel coreanos (D4CB, D4BH, G4FD). Responde WhatsApp con fotos de mesón.',
-      tipoIntegracion: 'cotizacion_whatsapp',
-      canalWspActivo: true,
-      margenPct: 28,
-      prefijoSku: 'FRP-WSP',
-      tiempoRespuestaPromMin: 4,
-    },
-    {
-      id: 'prov-wsp-nippon-02',
-      nombre: 'Nippon Frenos & Suspensión Ltda.',
-      rut: '77.219.440-K',
-      contacto: 'Rodrigo Muñoz (Cotizaciones WSP)',
-      telefono: '+56976541120',
-      email: 'meson@nipponfrenos.cl',
-      direccion: 'Lira 615, Santiago',
-      categoria: 'Frenos',
-      categoriasEspecialidad: ['Frenos', 'Suspensión', 'Embrague'],
-      marcas: ['TOYOTA', 'NISSAN', 'MITSUBISHI', 'MAZDA', 'SUZUKI', 'SUBARU'],
-      marcasVehiculo: ['TOYOTA', 'NISSAN', 'MITSUBISHI', 'MAZDA', 'SUZUKI', 'SUBARU'],
-      notas: 'Importador directo de frenos, amortiguadores KYB y embragues Aisin/Exedy para japoneses y camionetas.',
-      tipoIntegracion: 'cotizacion_whatsapp',
-      canalWspActivo: true,
-      margenPct: 30,
-      prefijoSku: 'FRP-WSP',
-      tiempoRespuestaPromMin: 6,
-    },
-    {
-      id: 'prov-wsp-euro-03',
-      nombre: 'EuroPSA & Multimarcas Lira',
-      rut: '78.901.332-1',
-      contacto: 'Camila Soto (Ventas WhatsApp)',
-      telefono: '+56963218845',
-      email: 'wsp@europsa.cl',
-      direccion: 'Lira 840, Santiago',
-      categoria: 'Distribución',
-      categoriasEspecialidad: ['Distribución', 'Embrague', 'Motor', 'Suspensión'],
-      marcas: ['PEUGEOT', 'CITROËN', 'RENAULT', 'VOLKSWAGEN', 'HYUNDAI', 'FORD'],
-      marcasVehiculo: ['PEUGEOT', 'CITROËN', 'RENAULT', 'VOLKSWAGEN', 'HYUNDAI', 'FORD'],
-      notas: 'Especialistas en kits de distribución, bombas de agua, embragues bimasa Luk/Valeo y tren delantero.',
-      tipoIntegracion: 'cotizacion_whatsapp',
-      canalWspActivo: true,
-      margenPct: 28,
-      prefijoSku: 'FRP-WSP',
-      tiempoRespuestaPromMin: 5,
-    },
-    {
-      id: 'prov-ailoo-soluparts',
-      nombre: 'Soluparts (Nodo Enterprise Ailoo)',
-      rut: '76.890.110-2',
-      contacto: 'Mesa Técnica Soluparts Ailoo',
-      telefono: '+56988112233',
-      email: 'escalamientos@soluparts.cl',
-      direccion: 'Nodo BigQuery: soluparts_ailoo',
-      categoria: 'Frenos',
-      categoriasEspecialidad: ['Frenos', 'Embrague', 'Suspensión', 'Filtros', 'Motor'],
-      marcas: ['HYUNDAI', 'KIA', 'NISSAN', 'TOYOTA', 'CHEVROLET', 'MITSUBISHI', 'SUZUKI'],
-      marcasVehiculo: ['HYUNDAI', 'KIA', 'NISSAN', 'TOYOTA', 'CHEVROLET', 'MITSUBISHI', 'SUZUKI'],
-      notas: 'Proveedor Enterprise conectado vía BigQuery (soluparts_ailoo.inventario y soluparts_ailoo.escalamientos). Sincroniza stock en tiempo real.',
-      tipoIntegracion: 'nodo_ailoo',
-      nodoAilooId: 'soluparts',
-      canalWspActivo: false,
-      margenPct: 28,
-      prefijoSku: 'FRP-SOL',
-      tiempoRespuestaPromMin: 3,
-    },
-    {
-      id: 'prov-ailoo-global',
-      nombre: 'Global Repuestos (Nodo Enterprise Ailoo)',
-      rut: '76.940.220-8',
-      contacto: 'Soporte Técnico Global Ailoo',
-      telefono: '+56977445566',
-      email: 'meson@globalrepuestos.cl',
-      direccion: 'Nodo BigQuery: global_ailoo',
-      categoria: 'Motor',
-      categoriasEspecialidad: ['Motor', 'Distribución', 'Suspensión', 'Eléctrico', 'Embrague'],
-      marcas: ['PEUGEOT', 'CITROËN', 'TOYOTA', 'MITSUBISHI', 'NISSAN', 'VOLKSWAGEN', 'FORD'],
-      marcasVehiculo: ['PEUGEOT', 'CITROËN', 'TOYOTA', 'MITSUBISHI', 'NISSAN', 'VOLKSWAGEN', 'FORD'],
-      notas: 'Proveedor Enterprise conectado vía BigQuery (global_ailoo.inventario y global_ailoo.escalamientos). Especialista en europeos y camionetas diésel.',
-      tipoIntegracion: 'nodo_ailoo',
-      nodoAilooId: 'global',
-      canalWspActivo: false,
-      margenPct: 30,
-      prefijoSku: 'FRP-GLB',
-      tiempoRespuestaPromMin: 4,
-    },
-  ];
-
-  const now = new Date().toISOString();
-  for (const demo of demosWsp) {
-    const existente = existentes.find((p) => p.id === demo.id || p.rut === demo.rut);
-    if (!existente) {
-      await db.collection(COLECCION_PROVEEDORES).doc(demo.id).set({
-        ...demo,
-        createdAt: now,
-        updatedAt: now,
-      });
-    } else if (!existente.tipoIntegracion || !existente.categoriasEspecialidad) {
-      await db.collection(COLECCION_PROVEEDORES).doc(existente.id).update({
-        tipoIntegracion: existente.tipoIntegracion || demo.tipoIntegracion,
-        categoriasEspecialidad: existente.categoriasEspecialidad || demo.categoriasEspecialidad,
-        marcasVehiculo: existente.marcasVehiculo || demo.marcasVehiculo,
-        margenPct: existente.margenPct ?? demo.margenPct,
-        prefijoSku: existente.prefijoSku || demo.prefijoSku,
-        nodoAilooId: existente.nodoAilooId ?? demo.nodoAilooId ?? null,
-        canalWspActivo: existente.canalWspActivo ?? demo.canalWspActivo,
-        tiempoRespuestaPromMin: existente.tiempoRespuestaPromMin ?? demo.tiempoRespuestaPromMin,
-      });
+  try {
+    const snap = await db.collection(COLECCION_PROVEEDORES).get();
+    for (const doc of snap.docs) {
+      const data = doc.data() || {};
+      if (
+        PROVEEDORES_DEMO_ELIMINAR.has(doc.id) ||
+        ['76.512.890-4', '77.219.440-K', '78.901.332-1'].includes(String(data.rut || ''))
+      ) {
+        await doc.ref.delete().catch(() => {});
+      }
     }
+  } catch (err) {
+    console.warn('[MesaWsp] Aviso limpiando proveedores demo:', err.message);
   }
 }
 
 /**
- * Semilla inicial de Solicitudes de Cotización en Vivo por WhatsApp (`solicitudes_cotizacion_wsp`)
- * para que la Mesa de Cotización muestre casos reales funcionando desde el primer vistazo.
+ * Purga solicitudes de prueba/demo anteriores al corte de producción para dejar la Mesa WSP en 0.
  */
-async function asegurarSolicitudesWspDemo() {
-  const snap = await db.collection(COLECCION_SOLICITUDES_WSP).limit(1).get();
-  if (!snap.empty) return;
-
+async function limpiarDatosPruebaMesaWsp() {
   await asegurarProveedoresWspDemo();
-  const now = new Date().toISOString();
-
-  const solicitudDemo1 = {
-    codigoSolicitud: 'WSP-4821',
-    estado: 'con_ofertas', // 'esperando_respuestas' | 'con_ofertas' | 'adjudicada' | 'cerrada'
-    canalCliente: 'whatsapp',
-    clienteNombre: 'Transportes San Miguel (Cliente WhatsApp)',
-    clienteTelefono: '+56991234567',
-    patente: 'JPKR42',
-    vin: 'KMJHD17BPJU109281',
-    marcaVehiculo: 'HYUNDAI',
-    modeloVehiculo: 'PORTER',
-    anioVehiculo: 2018,
-    motorVehiculo: '2.5 D4CB CRDI',
-    categoriaRepuesto: 'Embrague',
-    repuestoBuscado: 'VOLANTE BIMASA + KIT EMBRAGUE HYUNDAI PORTER 2.5 CRDI CAJA 6TA',
-    codigoReferencia: '23200-4A500 / LUK-415049210',
-    notasAdicionales: 'No disponible con stock inmediato en nodos Ailoo; cliente necesita retirar hoy en Santiago.',
-    margenPct: 28,
-    escalamientoOrigenId: null,
-    proveedoresContactados: [
-      {
-        proveedorId: 'prov-wsp-corea-01',
-        proveedorNombre: 'Importadora CoreaParts 10 de Julio',
-        contacto: 'Don Patricio Rojas (Mesón WhatsApp)',
-        telefono: '+56984120931',
-        especialidadMarcas: ['HYUNDAI', 'KIA', 'CHEVROLET', 'SSANGYONG'],
-        estadoContacto: 'respondido',
-        modoEnvio: 'simulacion_meta_local',
-        metaMessageId: 'sim_wamid_WSP-4821_1',
-        mensajeEnviado: construirMensajeSalidaWsp({
-          codigoSolicitud: 'WSP-4821',
-          nombreProveedor: 'Importadora CoreaParts 10 de Julio',
-          marcaVehiculo: 'HYUNDAI',
-          modeloVehiculo: 'PORTER',
-          anioVehiculo: 2018,
-          motorVehiculo: '2.5 D4CB CRDI',
-          patente: 'JPKR42',
-          vin: 'KMJHD17BPJU109281',
-          repuestoBuscado: 'VOLANTE BIMASA + KIT EMBRAGUE HYUNDAI PORTER 2.5 CRDI CAJA 6TA',
-          codigoReferencia: '23200-4A500 / LUK-415049210',
-          notasAdicionales: 'Confirmar si incluye volante rígido de conversión o bimasa original.',
-        }),
-        enviadoEn: now,
-        respondidoEn: now,
-      },
-      {
-        proveedorId: 'prov-wsp-euro-03',
-        proveedorNombre: 'EuroPSA & Multimarcas Lira',
-        contacto: 'Camila Soto (Ventas WhatsApp)',
-        telefono: '+56963218845',
-        especialidadMarcas: ['PEUGEOT', 'CITROËN', 'RENAULT', 'VOLKSWAGEN', 'HYUNDAI', 'FORD'],
-        estadoContacto: 'respondido',
-        modoEnvio: 'simulacion_meta_local',
-        metaMessageId: 'sim_wamid_WSP-4821_2',
-        mensajeEnviado: construirMensajeSalidaWsp({
-          codigoSolicitud: 'WSP-4821',
-          nombreProveedor: 'EuroPSA & Multimarcas Lira',
-          marcaVehiculo: 'HYUNDAI',
-          modeloVehiculo: 'PORTER',
-          anioVehiculo: 2018,
-          motorVehiculo: '2.5 D4CB CRDI',
-          patente: 'JPKR42',
-          vin: 'KMJHD17BPJU109281',
-          repuestoBuscado: 'VOLANTE BIMASA + KIT EMBRAGUE HYUNDAI PORTER 2.5 CRDI CAJA 6TA',
-          codigoReferencia: '23200-4A500 / LUK-415049210',
-          notasAdicionales: 'Confirmar si incluye volante rígido de conversión o bimasa original.',
-        }),
-        enviadoEn: now,
-        respondidoEn: now,
-      },
-    ],
-    ofertasRecibidas: [
-      {
-        id: 'of-wsp-demo-1',
-        proveedorId: 'prov-wsp-corea-01',
-        proveedorNombre: 'Importadora CoreaParts 10 de Julio',
-        telefonoProveedor: '+56984120931',
-        mensajeOriginalWsp:
-          'Hola jefe sí lo tengo acá en mesón, kit completo conversión Valeo coreano original con volante + prensa + disco + rodamiento para Porter 2.5 caja sexta en $215.000 neto entrega inmediata, te mando foto de la caja.',
-        transcripcionAudio:
-          'Audio 0:11s — "Amigo el kit Valeo coreano completo con volante llega y calza en el D4CB 2018 caja de 6 cambios, te lo dejo en 215 neto retiro inmediato en 10 de Julio."',
-        fotoUrl:
-          'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=640&q=80',
-        tieneStock: true,
-        fabricante: 'VALEO',
-        origen: 'COREA',
-        disponibilidad: 'Entrega inmediata',
-        garantia: '6 meses',
-        precioCostoNeto: 215000,
-        margenAplicadoPct: 28,
-        precioVentaFrpNeto: Math.round(215000 * 1.28),
-        precioVentaFrpConIva: Math.round(Math.round(215000 * 1.28) * 1.19),
-        confianzaIa: 0.96,
-        ganadora: false,
-        recibidoEn: now,
-      },
-      {
-        id: 'of-wsp-demo-2',
-        proveedorId: 'prov-wsp-euro-03',
-        proveedorNombre: 'EuroPSA & Multimarcas Lira',
-        telefonoProveedor: '+56963218845',
-        mensajeOriginalWsp:
-          'Hola! Tenemos el conjunto LuK alemán con volante bimasa en $265.000 más IVA, disponible para despacho mañana a primera hora desde bodega central.',
-        transcripcionAudio: '',
-        fotoUrl: '',
-        tieneStock: true,
-        fabricante: 'LUK',
-        origen: 'ALEMANIA',
-        disponibilidad: 'Pedido 24 hrs',
-        garantia: '6 meses',
-        precioCostoNeto: 265000,
-        margenAplicadoPct: 28,
-        precioVentaFrpNeto: Math.round(265000 * 1.28),
-        precioVentaFrpConIva: Math.round(Math.round(265000 * 1.28) * 1.19),
-        confianzaIa: 0.94,
-        ganadora: false,
-        recibidoEn: now,
-      },
-    ],
-    ofertaGanadoraId: null,
-    skuPublicoGenerado: null,
-    inventarioCreadoId: null,
-    conocimientoCreadoId: null,
-    mensajeCotizacionCliente: '',
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  await db.collection(COLECCION_SOLICITUDES_WSP).doc('wsp-demo-porter-4821').set(solicitudDemo1);
+  try {
+    const snap = await db.collection(COLECCION_SOLICITUDES_WSP).get();
+    for (const doc of snap.docs) {
+      const data = doc.data() || {};
+      const fechaDoc = String(data.createdAt || data.updatedAt || '');
+      const tieneContactoDemo = Array.isArray(data.proveedoresContactados) &&
+        data.proveedoresContactados.some((c) => PROVEEDORES_DEMO_ELIMINAR.has(c?.proveedorId));
+      if (
+        doc.id === 'wsp-demo-porter-4821' ||
+        data.codigoSolicitud === 'WSP-4821' ||
+        tieneContactoDemo ||
+        !fechaDoc ||
+        fechaDoc < CORTE_LIMPIEZA_MESA_WSP_ISO
+      ) {
+        await doc.ref.delete().catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.warn('[MesaWsp] Aviso limpiando solicitudes demo:', err.message);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/mesa-wsp/solicitudes
-// Lista todas las solicitudes de cotización por WhatsApp y los proveedores con WhatsApp
+// Lista todas las solicitudes de cotización por WhatsApp y los proveedores reales con WhatsApp
 // ─────────────────────────────────────────────────────────────────────────────
 router.get('/solicitudes', requireAuth, async (req, res, next) => {
   try {
-    await asegurarSolicitudesWspDemo();
+    await limpiarDatosPruebaMesaWsp();
 
     const [solSnap, provSnap] = await Promise.all([
       db.collection(COLECCION_SOLICITUDES_WSP).get(),
@@ -569,7 +351,12 @@ router.get('/solicitudes', requireAuth, async (req, res, next) => {
 
     const proveedoresWsp = provSnap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((p) => Boolean(p.telefono) && p.canalWspActivo !== false)
+      .filter(
+        (p) =>
+          Boolean(p.telefono) &&
+          p.canalWspActivo === true &&
+          !PROVEEDORES_DEMO_ELIMINAR.has(p.id)
+      )
       .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || '')));
 
     const credencialesMetaActivas = Boolean(
@@ -587,6 +374,114 @@ router.get('/solicitudes', requireAuth, async (req, res, next) => {
         proveedoresWsp,
       },
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/mesa-wsp/proveedores
+// Crea un nuevo proveedor real con WhatsApp activo directamente desde la Mesa WSP
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/proveedores', requireAuth, async (req, res, next) => {
+  try {
+    const {
+      nombre = '',
+      telefono = '',
+      contacto = '',
+      categoria = 'General',
+      marcas = [],
+      margenPct = 30,
+      direccion = '',
+      notas = '',
+    } = req.body || {};
+
+    if (!String(nombre).trim() || !String(telefono).trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'El nombre del proveedor y su teléfono de WhatsApp son obligatorios',
+      });
+    }
+
+    const telLimpio = String(telefono).trim().startsWith('+')
+      ? String(telefono).trim()
+      : `+${String(telefono).replace(/[^\d]/g, '')}`;
+
+    const marcasLimpias = (Array.isArray(marcas) ? marcas : String(marcas || '').split(','))
+      .map((m) => String(m || '').trim().toUpperCase())
+      .filter(Boolean);
+
+    const now = new Date().toISOString();
+    const nuevoProv = {
+      nombre: String(nombre).trim(),
+      telefono: telLimpio,
+      contacto: String(contacto || 'Ventas WhatsApp').trim(),
+      categoria: String(categoria || 'General').trim(),
+      categoriasEspecialidad: [String(categoria || 'General').trim()],
+      marcas: marcasLimpias,
+      marcasVehiculo: marcasLimpias,
+      direccion: String(direccion || '').trim(),
+      notas: String(notas || '').trim(),
+      tipoIntegracion: 'cotizacion_whatsapp',
+      canalWspActivo: true,
+      margenPct: Number(margenPct) || 30,
+      prefijoSku: 'FRP-WSP',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const docRef = await db.collection(COLECCION_PROVEEDORES).add(nuevoProv);
+    res.status(201).json({
+      success: true,
+      data: { id: docRef.id, ...nuevoProv },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE /api/mesa-wsp/proveedores/:id
+// Elimina o desactiva un proveedor WhatsApp desde la Mesa de Abastecimiento
+// ─────────────────────────────────────────────────────────────────────────────
+router.delete('/proveedores/:id', requireAuth, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    await db.collection(COLECCION_PROVEEDORES).doc(id).delete();
+    res.json({ success: true, deletedId: id });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DELETE /api/mesa-wsp/solicitudes/:id
+// Elimina una solicitud específica de la Mesa de Abastecimiento WSP
+// ─────────────────────────────────────────────────────────────────────────────
+router.delete('/solicitudes/:id', requireAuth, async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    await db.collection(COLECCION_SOLICITUDES_WSP).doc(id).delete();
+    res.json({ success: true, deletedId: id });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/mesa-wsp/limpiar
+// Lleva a 0 todas las solicitudes de la Mesa de Abastecimiento WSP
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/limpiar', requireAuth, async (req, res, next) => {
+  try {
+    const snap = await db.collection(COLECCION_SOLICITUDES_WSP).get();
+    let eliminadas = 0;
+    for (const doc of snap.docs) {
+      await doc.ref.delete();
+      eliminadas++;
+    }
+    await asegurarProveedoresWspDemo();
+    res.json({ success: true, data: { eliminadas } });
   } catch (error) {
     next(error);
   }
@@ -630,7 +525,12 @@ router.post('/solicitudes', requireAuth, async (req, res, next) => {
     const provSnap = await db.collection(COLECCION_PROVEEDORES).get();
     const todosProveedores = provSnap.docs
       .map((d) => ({ id: d.id, ...d.data() }))
-      .filter((p) => Boolean(p.telefono) && p.canalWspActivo !== false);
+      .filter(
+        (p) =>
+          Boolean(p.telefono) &&
+          p.canalWspActivo === true &&
+          !PROVEEDORES_DEMO_ELIMINAR.has(p.id)
+      );
 
     const marcaUpper = String(marcaVehiculo || '').trim().toUpperCase();
     const catUpper = String(categoriaRepuesto || '').trim().toUpperCase();

@@ -26,9 +26,6 @@ export default function MesaCotizacionWsp() {
 
   const [solicitudes, setSolicitudes] = useState<SolicitudCotizacionWsp[]>([]);
   const [proveedoresWsp, setProveedoresWsp] = useState<Proveedor[]>([]);
-  const [modoMeta, setModoMeta] = useState<'meta_cloud_api_live' | 'simulacion_meta_local'>(
-    'simulacion_meta_local'
-  );
   const [loading, setLoading] = useState(true);
 
   // Filtros de bandeja
@@ -36,39 +33,48 @@ export default function MesaCotizacionWsp() {
     'todas' | 'esperando_respuestas' | 'con_ofertas' | 'adjudicada'
   >('todas');
 
-  // Panel de Nueva Solicitud Multidifusión WhatsApp
+  // Panel de Gestión de Proveedores WhatsApp Activos
+  const [mostrarGestionProveedores, setMostrarGestionProveedores] = useState(false);
+  const [guardandoProveedor, setGuardandoProveedor] = useState(false);
+  const [formProveedorWsp, setFormProveedorWsp] = useState({
+    nombre: '',
+    telefono: '+569',
+    contacto: '',
+    marcas: '',
+    categoria: 'General',
+    margenPct: 30,
+  });
+
+  // Panel de Nueva Solicitud Multidifusión WhatsApp (sin datos de prueba precargados)
   const [mostrarNueva, setMostrarNueva] = useState(false);
   const [buscandoBoostr, setBuscandoBoostr] = useState(false);
   const [enviandoSolicitud, setEnviandoSolicitud] = useState(false);
   const [formSolicitud, setFormSolicitud] = useState({
-    clienteNombre: 'Cliente WhatsApp / Mostrador',
-    clienteTelefono: '+56994120088',
-    patente: 'JPKR42',
+    clienteNombre: '',
+    clienteTelefono: '',
+    patente: '',
     vin: '',
-    marcaVehiculo: 'HYUNDAI',
-    modeloVehiculo: 'PORTER',
-    anioVehiculo: '2018',
-    motorVehiculo: '2.5 D4CB CRDI',
-    categoriaRepuesto: 'Embrague',
-    repuestoBuscado: 'BOMBA DE INYECCIÓN ALTA PRESIÓN HYUNDAI PORTER 2.5 CRDI',
-    codigoReferencia: '33100-4A410',
-    notasAdicionales: 'No figura en catálogo Ailoo Soluparts ni Global. Cliente espera confirmación hoy.',
+    marcaVehiculo: '',
+    modeloVehiculo: '',
+    anioVehiculo: '',
+    motorVehiculo: '',
+    categoriaRepuesto: 'General',
+    repuestoBuscado: '',
+    codigoReferencia: '',
+    notasAdicionales: '',
     margenPct: 30,
     escalamientoOrigenId: null as string | null,
   });
   const [proveedoresSeleccionados, setProveedoresSeleccionados] = useState<string[]>([]);
 
-  // Panel Simulador / Receptor de respuesta entrante de Proveedor por WhatsApp
+  // Registro manual opcional de oferta recibida de proveedor real
   const [respondiendoSolId, setRespondiendoSolId] = useState<string | null>(null);
   const [enviandoRespuesta, setEnviandoRespuesta] = useState(false);
   const [formRespuestaWsp, setFormRespuestaWsp] = useState({
     proveedorId: '',
-    mensajeOriginalWsp:
-      'Hola jefe sí lo tengo acá en mesón, marca Bosch original coreano nuevo en $185.000 neto entrega inmediata, te adjunto foto.',
-    transcripcionAudio:
-      'Audio 0:09s — "Amigo sí me queda una unidad Bosch coreana en mesón a 185 neto retiro inmediato."',
-    fotoUrl:
-      'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=640&q=80',
+    mensajeOriginalWsp: '',
+    transcripcionAudio: '',
+    fotoUrl: '',
     garantia: '6 meses',
   });
 
@@ -83,12 +89,11 @@ export default function MesaCotizacionWsp() {
       setLoading(true);
       const res = await api.get<ApiResponse<EstadoMesaWspResponse>>('/mesa-wsp/solicitudes');
       if (res.success && res.data) {
-        setSolicitudes(res.data.solicitudes);
-        setProveedoresWsp(res.data.proveedoresWsp);
-        setModoMeta(res.data.modoOperacionMeta);
+        setSolicitudes(res.data.solicitudes || []);
+        setProveedoresWsp(res.data.proveedoresWsp || []);
       }
     } catch (err) {
-      notify((err as Error).message || 'Error al cargar Mesa de Cotización WhatsApp', 'error');
+      notify((err as Error).message || 'Error al cargar Mesa de Abastecimiento WhatsApp', 'error');
     } finally {
       setLoading(false);
     }
@@ -98,7 +103,7 @@ export default function MesaCotizacionWsp() {
     cargarMesaWsp();
   }, []);
 
-  // Si venimos derivados desde un Escalamiento IA (`location.state`), precargar formulario
+  // Si venimos derivados desde otra vista (`location.state`), precargar formulario
   useEffect(() => {
     const state = location.state as Record<string, unknown> | null;
     if (state && state.desdeEscalamiento) {
@@ -120,7 +125,10 @@ export default function MesaCotizacionWsp() {
 
   // Preseleccionar automáticamente proveedores especialistas cuando cambia la marca del vehículo
   useEffect(() => {
-    if (proveedoresWsp.length === 0) return;
+    if (proveedoresWsp.length === 0) {
+      setProveedoresSeleccionados([]);
+      return;
+    }
     const marca = formSolicitud.marcaVehiculo.trim().toUpperCase();
     const sugeridos = proveedoresWsp
       .filter((p) =>
@@ -132,9 +140,78 @@ export default function MesaCotizacionWsp() {
     if (sugeridos.length > 0) {
       setProveedoresSeleccionados(sugeridos);
     } else {
-      setProveedoresSeleccionados(proveedoresWsp.slice(0, 2).map((p) => p.id!));
+      setProveedoresSeleccionados(proveedoresWsp.map((p) => p.id!).filter(Boolean));
     }
   }, [formSolicitud.marcaVehiculo, proveedoresWsp]);
+
+  const handleAgregarProveedorWsp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formProveedorWsp.nombre.trim() || !formProveedorWsp.telefono.trim()) {
+      notify('Ingresa el nombre del proveedor y su número de WhatsApp (+569...)', 'error');
+      return;
+    }
+    try {
+      setGuardandoProveedor(true);
+      const res = await api.post<ApiResponse<Proveedor>>('/mesa-wsp/proveedores', {
+        nombre: formProveedorWsp.nombre.trim(),
+        telefono: formProveedorWsp.telefono.trim(),
+        contacto: formProveedorWsp.contacto.trim() || 'Ventas WhatsApp',
+        categoria: formProveedorWsp.categoria.trim() || 'General',
+        marcas: formProveedorWsp.marcas
+          .split(',')
+          .map((m) => m.trim().toUpperCase())
+          .filter(Boolean),
+        margenPct: Number(formProveedorWsp.margenPct) || 30,
+      });
+      if (res.success && res.data) {
+        notify(`✓ Proveedor WhatsApp "${res.data.nombre}" agregado correctamente`, 'success');
+        setFormProveedorWsp({
+          nombre: '',
+          telefono: '+569',
+          contacto: '',
+          marcas: '',
+          categoria: 'General',
+          margenPct: 30,
+        });
+        await cargarMesaWsp();
+      }
+    } catch (err) {
+      notify((err as Error).message || 'Error al agregar proveedor WhatsApp', 'error');
+    } finally {
+      setGuardandoProveedor(false);
+    }
+  };
+
+  const handleEliminarProveedorWsp = async (prov: Proveedor) => {
+    if (!prov.id) return;
+    try {
+      await api.delete(`/mesa-wsp/proveedores/${prov.id}`);
+      setProveedoresWsp((prev) => prev.filter((p) => p.id !== prov.id));
+      notify(`Proveedor "${prov.nombre}" eliminado`, 'info');
+    } catch (err) {
+      notify((err as Error).message || 'Error al eliminar proveedor', 'error');
+    }
+  };
+
+  const handleEliminarSolicitud = async (id: string) => {
+    try {
+      await api.delete(`/mesa-wsp/solicitudes/${id}`);
+      setSolicitudes((prev) => prev.filter((s) => s.id !== id));
+      notify('Solicitud quitada de la Mesa de Abastecimiento', 'info');
+    } catch (err) {
+      notify((err as Error).message || 'Error al quitar solicitud', 'error');
+    }
+  };
+
+  const handleLimpiarMesa = async () => {
+    try {
+      await api.post('/mesa-wsp/limpiar', {});
+      setSolicitudes([]);
+      notify('✓ Mesa de Abastecimiento llevada a 0', 'success');
+    } catch (err) {
+      notify((err as Error).message || 'Error al limpiar la mesa', 'error');
+    }
+  };
 
   const handleBuscarPatenteBoostr = async () => {
     const pat = formSolicitud.patente.trim().toUpperCase();
@@ -154,7 +231,10 @@ export default function MesaCotizacionWsp() {
           anioVehiculo: res.data?.year ? String(res.data.year) : prev.anioVehiculo,
           motorVehiculo: res.data?.engine || prev.motorVehiculo,
         }));
-        notify(`✓ Vehículo ${res.data.make} ${res.data.model} (${res.data.year}) autocompletado vía Boostr`, 'success');
+        notify(
+          `✓ Vehículo ${res.data.make} ${res.data.model} (${res.data.year}) autocompletado vía Boostr`,
+          'success'
+        );
       }
     } catch {
       notify('No se pudo obtener datos de Boostr, puedes completarlos manualmente', 'info');
@@ -176,7 +256,7 @@ export default function MesaCotizacionWsp() {
       return;
     }
     if (proveedoresSeleccionados.length === 0) {
-      notify('Selecciona al menos un proveedor especialista con WhatsApp', 'error');
+      notify('Agrega y selecciona al menos un proveedor de WhatsApp antes de enviar', 'error');
       return;
     }
     try {
@@ -190,9 +270,25 @@ export default function MesaCotizacionWsp() {
 
       if (res.success && res.data) {
         notify(
-          `📲 Solicitud #${res.data.codigoSolicitud} enviada por WhatsApp a ${res.data.proveedoresContactados.length} proveedor(es) especialista(s)`,
+          `📲 Solicitud #${res.data.codigoSolicitud} enviada por WhatsApp a ${res.data.proveedoresContactados.length} proveedor(es)`,
           'success'
         );
+        setFormSolicitud({
+          clienteNombre: '',
+          clienteTelefono: '',
+          patente: '',
+          vin: '',
+          marcaVehiculo: '',
+          modeloVehiculo: '',
+          anioVehiculo: '',
+          motorVehiculo: '',
+          categoriaRepuesto: 'General',
+          repuestoBuscado: '',
+          codigoReferencia: '',
+          notasAdicionales: '',
+          margenPct: 30,
+          escalamientoOrigenId: null,
+        });
         setMostrarNueva(false);
         await cargarMesaWsp();
       }
@@ -203,7 +299,7 @@ export default function MesaCotizacionWsp() {
     }
   };
 
-  const abrirSimuladorRespuesta = (sol: SolicitudCotizacionWsp) => {
+  const abrirReceptorRespuesta = (sol: SolicitudCotizacionWsp) => {
     if (respondiendoSolId === sol.id) {
       setRespondiendoSolId(null);
       return;
@@ -212,11 +308,9 @@ export default function MesaCotizacionWsp() {
     setRespondiendoSolId(sol.id);
     setFormRespuestaWsp({
       proveedorId: primerProv,
-      mensajeOriginalWsp: `Hola jefe sí tenemos disponible ${sol.repuestoBuscado.toLowerCase()} marca Valeo coreano original en $145.000 neto entrega inmediata en mesón, te mando foto.`,
-      transcripcionAudio:
-        'Audio 0:08s — "Sí mano, tengo el Valeo coreano nuevo acá en mesón a 145 mil más IVA, pasa a retirarlo cuando quieras."',
-      fotoUrl:
-        'https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?auto=format&fit=crop&w=640&q=80',
+      mensajeOriginalWsp: '',
+      transcripcionAudio: '',
+      fotoUrl: '',
       garantia: '6 meses',
     });
   };
@@ -232,7 +326,7 @@ export default function MesaCotizacionWsp() {
         const of = res.data.oferta;
         if (of.tieneStock && of.precioCostoNeto > 0) {
           notify(
-            `🤖 IA extrajo oferta de ${of.proveedorNombre}: ${of.fabricante} (${of.origen}) · Costo ${fmtCLP(of.precioCostoNeto)} → Venta FRP ${fmtCLP(of.precioVentaFrpNeto)} neto`,
+            `✓ Oferta registrada de ${of.proveedorNombre}: ${of.fabricante} (${of.origen}) · Costo ${fmtCLP(of.precioCostoNeto)} → Venta FRP ${fmtCLP(of.precioVentaFrpNeto)} neto`,
             'success'
           );
         } else {
@@ -268,8 +362,8 @@ export default function MesaCotizacionWsp() {
 
       if (res.success && res.data) {
         const extras: string[] = [];
-        if (res.data.inventarioCreadoId) extras.push('publicado en Firebase + Cola Delta WooCommerce');
-        if (res.data.conocimientoCreadoId) extras.push('guardado en Conocimiento Aprendido IA');
+        if (res.data.inventarioCreadoId) extras.push('publicado en Catálogo + WooCommerce');
+        if (res.data.conocimientoCreadoId) extras.push('guardado en Conocimiento IA');
         notify(
           `🏆 Oferta adjudicada (${res.data.skuPublicoFrp})${extras.length ? ' · ' + extras.join(' y ') : ''}`,
           'success'
@@ -296,34 +390,28 @@ export default function MesaCotizacionWsp() {
 
   return (
     <div className={styles.container}>
-      {/* Cabecera */}
+      {/* Cabecera limpia sin módulo de simulación */}
       <div className={styles.topBar}>
         <div>
           <h1 className={styles.title}>
-            📲 Mesa de Cotización en Vivo por WhatsApp (Etapa 3 · Meta Cloud API)
+            📲 Mesa de Abastecimiento por WhatsApp
           </h1>
           <p className={styles.subtitle}>
-            Cuando un repuesto no está en los nodos Ailoo (`Soluparts` / `Global`) ni en el Portal de Proveedores Locales, FácilRepuestos consulta en vivo por WhatsApp a proveedores reales según la marca del vehículo, extrae precios/fotos/audios con IA y genera la cotización con margen aplicado en 1 clic.
+            Consulta a tus proveedores internos de WhatsApp cuando un repuesto no está disponible en stock propio ni en portales conectados.
           </p>
         </div>
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <span
-            style={{
-              fontSize: '0.76rem',
-              fontWeight: 700,
-              padding: '6px 11px',
-              borderRadius: 999,
-              background: modoMeta === 'meta_cloud_api_live' ? '#dcfce7' : '#e0f2fe',
-              color: modoMeta === 'meta_cloud_api_live' ? '#166534' : '#0369a1',
-              border: '1px solid #bae6fd',
-            }}
-          >
-            {modoMeta === 'meta_cloud_api_live'
-              ? '🟢 Meta WhatsApp Cloud API Activo'
-              : '🧪 Modo Simulación Interactiva Meta WhatsApp'}
-          </span>
-
+          {solicitudes.length > 0 && (
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              onClick={handleLimpiarMesa}
+              title="Llevar todas las solicitudes de la mesa a 0"
+            >
+              🧹 Llevar Mesa a 0
+            </button>
+          )}
           <button
             className="btn btn-primary"
             style={{ background: '#16a34a', borderColor: '#16a34a' }}
@@ -331,19 +419,19 @@ export default function MesaCotizacionWsp() {
           >
             {mostrarNueva
               ? '✕ Cerrar Disparador WhatsApp'
-              : '📲 + Cotizar Repuesto en Vivo por WhatsApp'}
+              : '📲 + Nueva Consulta a Proveedores'}
           </button>
         </div>
       </div>
 
-      {/* KPIs */}
+      {/* KPIs en 0 + Cuadro Proveedores WhatsApp Activos con botón Agregar Nuevos Proveedores */}
       <div className={styles.kpiGrid}>
         <div className={styles.kpiCard}>
           <div className={styles.kpiLabel}>Esperando Respuesta WSP</div>
           <div className={styles.kpiValue} style={{ color: '#d97706' }}>
             {totalEsperando}
           </div>
-          <div className={styles.kpiSub}>Solicitudes enviadas a mesones externos</div>
+          <div className={styles.kpiSub}>Solicitudes enviadas a proveedores</div>
         </div>
 
         <div className={styles.kpiCard}>
@@ -351,7 +439,7 @@ export default function MesaCotizacionWsp() {
           <div className={styles.kpiValue} style={{ color: '#2563eb' }}>
             {totalConOfertas}
           </div>
-          <div className={styles.kpiSub}>Precios y fotos extraídos por IA listos</div>
+          <div className={styles.kpiSub}>Precios confirmados listos</div>
         </div>
 
         <div className={styles.kpiCard}>
@@ -359,26 +447,182 @@ export default function MesaCotizacionWsp() {
           <div className={styles.kpiValue} style={{ color: '#16a34a' }}>
             {totalAdjudicadas}
           </div>
-          <div className={styles.kpiSub}>Inyectadas a Firebase + WooCommerce + IA</div>
+          <div className={styles.kpiSub}>Inyectadas a Inventario & Web</div>
         </div>
 
         <div className={styles.kpiCard}>
-          <div className={styles.kpiLabel}>Proveedores WhatsApp Activos</div>
-          <div className={styles.kpiValue} style={{ color: '#0f172a' }}>
-            {proveedoresWsp.length}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+            <div>
+              <div className={styles.kpiLabel}>Proveedores WhatsApp Activos</div>
+              <div className={styles.kpiValue} style={{ color: '#0f172a' }}>
+                {proveedoresWsp.length}
+              </div>
+              <div className={styles.kpiSub}>Enrutados por marca de vehículo y rubro</div>
+            </div>
           </div>
-          <div className={styles.kpiSub}>Enrutados por marca de vehículo y rubro</div>
+          <div style={{ marginTop: 10 }}>
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              style={{ width: '100%', fontWeight: 700 }}
+              onClick={() => setMostrarGestionProveedores((v) => !v)}
+            >
+              {mostrarGestionProveedores
+                ? '✕ Cerrar Proveedores'
+                : '+ Agregar Nuevos Proveedores'}
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Panel Inline para Agregar y Administrar Proveedores WhatsApp Activos */}
+      {mostrarGestionProveedores && (
+        <div className={styles.panelCard}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ fontWeight: 800, fontSize: '1.02rem', color: '#0f172a' }}>
+              🏪 Agregar Nuevo Proveedor WhatsApp Activo
+            </div>
+            <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+              Estos proveedores recibirán consultas automáticas o manuales desde la Mesa de Abastecimiento WSP
+            </span>
+          </div>
+
+          <form onSubmit={handleAgregarProveedorWsp} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className={styles.formGrid}>
+              <div className={styles.fieldGroup}>
+                <label className={styles.fieldLabel}>Nombre del Proveedor *</label>
+                <input
+                  className={styles.input}
+                  placeholder="Ej. Importadora Repuestos Sur"
+                  value={formProveedorWsp.nombre}
+                  onChange={(e) => setFormProveedorWsp((p) => ({ ...p, nombre: e.target.value }))}
+                  required
+                />
+              </div>
+
+              <div className={styles.fieldGroup}>
+                <label className={styles.fieldLabel}>Teléfono WhatsApp *</label>
+                <input
+                  className={styles.input}
+                  placeholder="+56987654321"
+                  value={formProveedorWsp.telefono}
+                  onChange={(e) => setFormProveedorWsp((p) => ({ ...p, telefono: e.target.value }))}
+                  required
+                />
+              </div>
+
+              <div className={styles.fieldGroup}>
+                <label className={styles.fieldLabel}>Nombre Contacto / Vendedor</label>
+                <input
+                  className={styles.input}
+                  placeholder="Ej. Mesón WhatsApp"
+                  value={formProveedorWsp.contacto}
+                  onChange={(e) => setFormProveedorWsp((p) => ({ ...p, contacto: e.target.value }))}
+                />
+              </div>
+
+              <div className={styles.fieldGroup}>
+                <label className={styles.fieldLabel}>Rubro / Categoría Principal</label>
+                <input
+                  className={styles.input}
+                  placeholder="Ej. Motor, Frenos, Suspensión, General"
+                  value={formProveedorWsp.categoria}
+                  onChange={(e) => setFormProveedorWsp((p) => ({ ...p, categoria: e.target.value }))}
+                />
+              </div>
+
+              <div className={styles.fieldGroup}>
+                <label className={styles.fieldLabel}>Marcas que trabaja (separadas por coma)</label>
+                <input
+                  className={styles.input}
+                  placeholder="Ej. HYUNDAI, KIA, TOYOTA, JAC, CHERY"
+                  value={formProveedorWsp.marcas}
+                  onChange={(e) => setFormProveedorWsp((p) => ({ ...p, marcas: e.target.value }))}
+                />
+              </div>
+
+              <div className={styles.fieldGroup}>
+                <label className={styles.fieldLabel}>Margen Comercial FRP (%)</label>
+                <input
+                  type="number"
+                  className={styles.input}
+                  value={formProveedorWsp.margenPct}
+                  onChange={(e) =>
+                    setFormProveedorWsp((p) => ({ ...p, margenPct: Number(e.target.value) || 30 }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                style={{ background: '#16a34a', borderColor: '#16a34a' }}
+                disabled={guardandoProveedor}
+              >
+                {guardandoProveedor ? 'Guardando...' : '✓ Guardar Proveedor WhatsApp'}
+              </button>
+            </div>
+          </form>
+
+          {/* Listado de Proveedores WhatsApp actualmente activos */}
+          <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 12, marginTop: 4 }}>
+            <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: 8 }}>
+              Proveedores WhatsApp Registrados ({proveedoresWsp.length}):
+            </div>
+            {proveedoresWsp.length === 0 ? (
+              <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                No hay proveedores de WhatsApp registrados aún. Agrega tus proveedores reales arriba.
+              </div>
+            ) : (
+              <div className={styles.provGrid}>
+                {proveedoresWsp.map((prov) => (
+                  <div key={prov.id} className={styles.provCheckCard}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+                      <strong style={{ fontSize: '0.84rem', color: '#0f172a' }}>{prov.nombre}</strong>
+                      <button
+                        type="button"
+                        onClick={() => handleEliminarProveedorWsp(prov)}
+                        style={{
+                          border: 'none',
+                          background: '#fee2e2',
+                          color: '#b91c1c',
+                          borderRadius: 6,
+                          padding: '2px 7px',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                        }}
+                        title="Eliminar proveedor"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: '#475569' }}>
+                      📞 {prov.telefono} · {prov.contacto || 'Ventas WhatsApp'}
+                    </div>
+                    {(prov.marcas || []).length > 0 && (
+                      <div style={{ fontSize: '0.71rem', color: '#64748b' }}>
+                        🚗 {(prov.marcas || []).join(', ')}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Panel para Disparar Nueva Solicitud Multidifusión por WhatsApp */}
       {mostrarNueva && (
         <form onSubmit={handleCrearSolicitudWsp} className={styles.panelCard}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <div style={{ fontWeight: 800, fontSize: '1.02rem', color: '#0f172a' }}>
-              🚀 Disparar Consulta Multidifusión a Proveedores por WhatsApp (Meta API)
+              🚀 Enviar Consulta a Proveedores por WhatsApp
             </div>
-            <span style={{ fontSize: '0.78rem', color: '#475569' }}>
+            <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
               Filtra automáticamente a los proveedores que trabajan la marca del vehículo
             </span>
           </div>
@@ -389,18 +633,18 @@ export default function MesaCotizacionWsp() {
               <div style={{ display: 'flex', gap: 6 }}>
                 <input
                   className={styles.input}
-                  style={{ flex: 1, textTransform: 'uppercase', fontWeight: 700 }}
                   value={formSolicitud.patente}
                   onChange={(e) =>
                     setFormSolicitud((p) => ({ ...p, patente: e.target.value.toUpperCase() }))
                   }
                   placeholder="Ej. JPKR42"
+                  style={{ fontWeight: 700 }}
                 />
                 <button
                   type="button"
                   className="btn btn-sm btn-outline"
-                  disabled={buscandoBoostr}
                   onClick={handleBuscarPatenteBoostr}
+                  disabled={buscandoBoostr}
                 >
                   {buscandoBoostr ? '...' : '🔍 Boostr'}
                 </button>
@@ -412,10 +656,13 @@ export default function MesaCotizacionWsp() {
               <input
                 className={styles.input}
                 value={formSolicitud.marcaVehiculo}
+                placeholder="Ej. HYUNDAI"
                 onChange={(e) =>
-                  setFormSolicitud((p) => ({ ...p, marcaVehiculo: e.target.value.toUpperCase() }))
+                  setFormSolicitud((p) => ({
+                    ...p,
+                    marcaVehiculo: e.target.value.toUpperCase(),
+                  }))
                 }
-                placeholder="HYUNDAI, TOYOTA, PEUGEOT..."
               />
             </div>
 
@@ -424,8 +671,12 @@ export default function MesaCotizacionWsp() {
               <input
                 className={styles.input}
                 value={formSolicitud.modeloVehiculo}
+                placeholder="Ej. PORTER"
                 onChange={(e) =>
-                  setFormSolicitud((p) => ({ ...p, modeloVehiculo: e.target.value.toUpperCase() }))
+                  setFormSolicitud((p) => ({
+                    ...p,
+                    modeloVehiculo: e.target.value.toUpperCase(),
+                  }))
                 }
               />
             </div>
@@ -433,9 +684,9 @@ export default function MesaCotizacionWsp() {
             <div className={styles.fieldGroup}>
               <label className={styles.fieldLabel}>Año</label>
               <input
-                type="number"
                 className={styles.input}
                 value={formSolicitud.anioVehiculo}
+                placeholder="Ej. 2019"
                 onChange={(e) =>
                   setFormSolicitud((p) => ({ ...p, anioVehiculo: e.target.value }))
                 }
@@ -447,6 +698,7 @@ export default function MesaCotizacionWsp() {
               <input
                 className={styles.input}
                 value={formSolicitud.motorVehiculo}
+                placeholder="Ej. 2.5 CRDI"
                 onChange={(e) =>
                   setFormSolicitud((p) => ({ ...p, motorVehiculo: e.target.value }))
                 }
@@ -475,7 +727,7 @@ export default function MesaCotizacionWsp() {
                 onChange={(e) =>
                   setFormSolicitud((p) => ({ ...p, repuestoBuscado: e.target.value }))
                 }
-                placeholder="Ej. KIT EMBRAGUE + VOLANTE BIMASA HYUNDAI PORTER 2.5"
+                placeholder="Escribe el repuesto a consultar..."
               />
             </div>
 
@@ -504,53 +756,60 @@ export default function MesaCotizacionWsp() {
 
           <div className={styles.fieldGroup}>
             <label className={styles.fieldLabel}>
-              Proveedores Especialistas con WhatsApp ({proveedoresSeleccionados.length} seleccionados para marca{' '}
-              <strong>{formSolicitud.marcaVehiculo || 'TODAS'}</strong>)
+              Proveedores con WhatsApp ({proveedoresSeleccionados.length} seleccionados)
             </label>
-            <div className={styles.provGrid}>
-              {proveedoresWsp.map((prov) => {
-                const activo = proveedoresSeleccionados.includes(prov.id!);
-                const coincideMarca = (prov.marcas || [])
-                  .map((m) => m.toUpperCase())
-                  .includes(formSolicitud.marcaVehiculo.trim().toUpperCase());
+            {proveedoresWsp.length === 0 ? (
+              <div style={{ fontSize: '0.82rem', color: '#b91c1c', padding: '8px 0' }}>
+                Aún no tienes proveedores de WhatsApp activos. Haz clic en <strong>"+ Agregar Nuevos Proveedores"</strong> arriba para registrarlos.
+              </div>
+            ) : (
+              <div className={styles.provGrid}>
+                {proveedoresWsp.map((prov) => {
+                  const activo = proveedoresSeleccionados.includes(prov.id!);
+                  const coincideMarca =
+                    formSolicitud.marcaVehiculo.trim().length > 0 &&
+                    (prov.marcas || [])
+                      .map((m) => m.toUpperCase())
+                      .includes(formSolicitud.marcaVehiculo.trim().toUpperCase());
 
-                return (
-                  <div
-                    key={prov.id}
-                    onClick={() => toggleProveedorSeleccionado(prov.id!)}
-                    className={`${styles.provCheckCard} ${activo ? styles.provCheckCardActive : ''}`}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <strong style={{ fontSize: '0.84rem', color: '#0f172a' }}>
-                        {activo ? '☑️' : '⬜'} {prov.nombre}
-                      </strong>
-                      {coincideMarca && (
-                        <span
-                          style={{
-                            fontSize: '0.68rem',
-                            background: '#dcfce7',
-                            color: '#166534',
-                            padding: '2px 7px',
-                            borderRadius: 999,
-                            fontWeight: 700,
-                          }}
-                        >
-                          Match {formSolicitud.marcaVehiculo}
-                        </span>
+                  return (
+                    <div
+                      key={prov.id}
+                      onClick={() => toggleProveedorSeleccionado(prov.id!)}
+                      className={`${styles.provCheckCard} ${activo ? styles.provCheckCardActive : ''}`}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <strong style={{ fontSize: '0.84rem', color: '#0f172a' }}>
+                          {activo ? '☑️' : '⬜'} {prov.nombre}
+                        </strong>
+                        {coincideMarca && (
+                          <span
+                            style={{
+                              fontSize: '0.68rem',
+                              background: '#dcfce7',
+                              color: '#166534',
+                              padding: '2px 7px',
+                              borderRadius: 999,
+                              fontWeight: 700,
+                            }}
+                          >
+                            Match {formSolicitud.marcaVehiculo}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#475569' }}>
+                        📞 {prov.telefono} · {prov.contacto || 'Ventas WhatsApp'}
+                      </div>
+                      {(prov.marcas || []).length > 0 && (
+                        <div style={{ fontSize: '0.71rem', color: '#64748b' }}>
+                          🚗 {(prov.marcas || []).join(', ')}
+                        </div>
                       )}
                     </div>
-                    <div style={{ fontSize: '0.75rem', color: '#475569' }}>
-                      📞 {prov.telefono} · {prov.contacto || 'Mesón WhatsApp'}
-                    </div>
-                    {(prov.marcas || []).length > 0 && (
-                      <div style={{ fontSize: '0.71rem', color: '#64748b' }}>
-                        🚗 {(prov.marcas || []).join(', ')}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
@@ -565,7 +824,7 @@ export default function MesaCotizacionWsp() {
               type="submit"
               className="btn btn-primary"
               style={{ background: '#16a34a', borderColor: '#16a34a' }}
-              disabled={enviandoSolicitud}
+              disabled={enviandoSolicitud || proveedoresSeleccionados.length === 0}
             >
               {enviandoSolicitud
                 ? 'Enviando por WhatsApp...'
@@ -616,7 +875,7 @@ export default function MesaCotizacionWsp() {
               checked={publicarEnInventario}
               onChange={(e) => setPublicarEnInventario(e.target.checked)}
             />
-            📦 Al adjudicar: publicar en Firebase `inventario` + Cola WooCommerce (Etapa 2)
+            📦 Al adjudicar: publicar en Inventario + Cola WooCommerce
           </label>
           <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: 600 }}>
             <input
@@ -624,7 +883,7 @@ export default function MesaCotizacionWsp() {
               checked={guardarConocimientoIa}
               onChange={(e) => setGuardarConocimientoIa(e.target.checked)}
             />
-            🧠 Al adjudicar: enseñar al Agente IA (Etapa 1)
+            🧠 Al adjudicar: guardar aprendizaje para Repuestín
           </label>
         </div>
       </div>
@@ -632,7 +891,20 @@ export default function MesaCotizacionWsp() {
       {/* Listado de Solicitudes en Vivo */}
       {loading ? (
         <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>
-          Cargando Mesa de Cotización en Vivo por WhatsApp...
+          Cargando Mesa de Abastecimiento por WhatsApp...
+        </div>
+      ) : solicitudesFiltradas.length === 0 ? (
+        <div
+          style={{
+            padding: 36,
+            textAlign: 'center',
+            background: '#ffffff',
+            borderRadius: 12,
+            border: '1px solid #e2e8f0',
+            color: '#64748b',
+          }}
+        >
+          No hay solicitudes activas en la Mesa de Abastecimiento (0 pendientes).
         </div>
       ) : (
         <div className={styles.solicitudesList}>
@@ -653,15 +925,17 @@ export default function MesaCotizacionWsp() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span className={styles.badgeCode}>#{sol.codigoSolicitud}</span>
-                      <span className={styles.badgeVehicle}>
-                        🚗 {vehiculoLabel} {sol.patente ? `(${sol.patente})` : ''}
-                      </span>
+                      {vehiculoLabel && (
+                        <span className={styles.badgeVehicle}>
+                          🚗 {vehiculoLabel} {sol.patente ? `(${sol.patente})` : ''}
+                        </span>
+                      )}
                       {sol.estado === 'esperando_respuestas' && (
                         <span className={styles.badgeStatusWait}>⏳ Esperando respuestas WhatsApp</span>
                       )}
                       {sol.estado === 'con_ofertas' && (
                         <span className={styles.badgeStatusOffers}>
-                          💡 {sol.ofertasRecibidas.length} Oferta(s) recibida(s) en vivo
+                          💡 {sol.ofertasRecibidas.length} Oferta(s) recibida(s)
                         </span>
                       )}
                       {sol.estado === 'adjudicada' && (
@@ -698,7 +972,7 @@ export default function MesaCotizacionWsp() {
                     )}
                   </div>
 
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                     <button
                       type="button"
                       className="btn btn-sm btn-outline"
@@ -707,19 +981,28 @@ export default function MesaCotizacionWsp() {
                       }
                     >
                       {verMensajesId === sol.id
-                        ? 'Ocultar Mensajes Enviados'
-                        : `📤 Ver WhatsApp Enviados (${sol.proveedoresContactados.length})`}
+                        ? 'Ocultar Mensajes'
+                        : `📤 Mensajes (${sol.proveedoresContactados.length})`}
                     </button>
 
                     <button
                       type="button"
                       className="btn btn-sm btn-primary"
                       style={{ background: '#0284c7', borderColor: '#0284c7' }}
-                      onClick={() => abrirSimuladorRespuesta(sol)}
+                      onClick={() => abrirReceptorRespuesta(sol)}
                     >
                       {respondiendoSolId === sol.id
-                        ? '✕ Cerrar Receptor WSP'
-                        : '💬 + Simular / Ingresar Respuesta Proveedor WSP'}
+                        ? '✕ Cerrar'
+                        : '💬 + Ingresar Oferta Proveedor'}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline"
+                      onClick={() => handleEliminarSolicitud(sol.id)}
+                      title="Quitar solicitud"
+                    >
+                      ✕
                     </button>
                   </div>
                 </div>
@@ -755,7 +1038,7 @@ export default function MesaCotizacionWsp() {
                     }}
                   >
                     <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#334155' }}>
-                      📤 Mensajes salientes despachados vía Meta WhatsApp API:
+                      📤 Mensajes enviados a proveedores:
                     </div>
                     {sol.proveedoresContactados.map((c) => (
                       <pre
@@ -777,7 +1060,7 @@ export default function MesaCotizacionWsp() {
                   </div>
                 )}
 
-                {/* Simulador / Receptor de Respuesta en Vivo de Proveedor por WhatsApp */}
+                {/* Registro manual de Oferta Recibida de Proveedor */}
                 {respondiendoSolId === sol.id && (
                   <div
                     style={{
@@ -790,42 +1073,9 @@ export default function MesaCotizacionWsp() {
                       gap: 10,
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-                      <strong style={{ fontSize: '0.88rem', color: '#0369a1' }}>
-                        🤖 Receptor WhatsApp + Extractor IA en Vivo (Detecta precio neto/IVA, marca, origen y disponibilidad)
-                      </strong>
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline"
-                          onClick={() =>
-                            setFormRespuestaWsp((p) => ({
-                              ...p,
-                              mensajeOriginalWsp:
-                                'Hola jefe sí me queda en mesón marca AISIN japonés nuevo en $138.000 neto entrega inmediata, te mando foto.',
-                              transcripcionAudio:
-                                'Audio 0:07s — "Amigo el Aisin japonés original lo tengo acá en mesón a 138 mil más IVA retiro inmediato."',
-                            }))
-                          }
-                        >
-                          ⚡ Plantilla Japón ($138.000 neto)
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline"
-                          onClick={() =>
-                            setFormRespuestaWsp((p) => ({
-                              ...p,
-                              mensajeOriginalWsp:
-                                'Hola! Tenemos alternativo coreano marca Sangsin en 75 mil más IVA para despacho hoy mismo.',
-                              transcripcionAudio: '',
-                            }))
-                          }
-                        >
-                          ⚡ Plantilla Corea ("75 mil + IVA")
-                        </button>
-                      </div>
-                    </div>
+                    <strong style={{ fontSize: '0.88rem', color: '#0369a1' }}>
+                      💬 Registrar Oferta de Proveedor WhatsApp
+                    </strong>
 
                     <div className={styles.formGrid}>
                       <div className={styles.fieldGroup}>
@@ -847,7 +1097,7 @@ export default function MesaCotizacionWsp() {
 
                       <div className={styles.fieldGroup} style={{ gridColumn: 'span 2' }}>
                         <label className={styles.fieldLabel}>
-                          Foto del Repuesto enviada por WhatsApp (URL)
+                          Foto del Repuesto (URL opcional)
                         </label>
                         <input
                           className={styles.input}
@@ -861,33 +1111,18 @@ export default function MesaCotizacionWsp() {
                     </div>
 
                     <div className={styles.formGrid}>
-                      <div className={styles.fieldGroup}>
+                      <div className={styles.fieldGroup} style={{ gridColumn: 'span 2' }}>
                         <label className={styles.fieldLabel}>
-                          Mensaje de Texto libre recibido por WhatsApp
+                          Mensaje / Oferta del Proveedor (indica precio neto, marca y origen)
                         </label>
                         <textarea
                           className={styles.textarea}
+                          placeholder="Ej: Disponible marca Valeo coreano en $145.000 neto entrega inmediata"
                           value={formRespuestaWsp.mensajeOriginalWsp}
                           onChange={(e) =>
                             setFormRespuestaWsp((p) => ({
                               ...p,
                               mensajeOriginalWsp: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-
-                      <div className={styles.fieldGroup}>
-                        <label className={styles.fieldLabel}>
-                          Transcripción de Audio de WhatsApp (Opcional)
-                        </label>
-                        <textarea
-                          className={styles.textarea}
-                          value={formRespuestaWsp.transcripcionAudio}
-                          onChange={(e) =>
-                            setFormRespuestaWsp((p) => ({
-                              ...p,
-                              transcripcionAudio: e.target.value,
                             }))
                           }
                         />
@@ -909,8 +1144,8 @@ export default function MesaCotizacionWsp() {
                         onClick={() => handleRecibirRespuestaWsp(sol.id)}
                       >
                         {enviandoRespuesta
-                          ? 'Extrayendo con IA...'
-                          : '🤖 Procesar Respuesta WhatsApp y Calcular Precio FRP'}
+                          ? 'Procesando...'
+                          : '✓ Guardar Oferta y Calcular Precio FRP'}
                       </button>
                     </div>
                   </div>
@@ -932,7 +1167,7 @@ export default function MesaCotizacionWsp() {
                               🏪 {of.proveedorNombre}
                             </div>
                             <div style={{ fontSize: '0.73rem', color: '#64748b' }}>
-                              📞 {of.telefonoProveedor} · Confianza IA: {Math.round((of.confianzaIa || 0.9) * 100)}%
+                              📞 {of.telefonoProveedor}
                             </div>
                           </div>
 
@@ -941,17 +1176,10 @@ export default function MesaCotizacionWsp() {
                           )}
                         </div>
 
-                        {/* Burbuja de mensaje original de WhatsApp */}
                         {of.mensajeOriginalWsp && (
                           <div className={styles.wspBubble}>“{of.mensajeOriginalWsp}”</div>
                         )}
 
-                        {/* Transcripción de nota de voz */}
-                        {of.transcripcionAudio && (
-                          <div className={styles.audioBubble}>🎙️ {of.transcripcionAudio}</div>
-                        )}
-
-                        {/* Foto real adjunta por el proveedor */}
                         {of.fotoUrl && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                             <img
@@ -966,12 +1194,11 @@ export default function MesaCotizacionWsp() {
                               }}
                             />
                             <span style={{ fontSize: '0.75rem', color: '#0369a1', fontWeight: 600 }}>
-                              📸 Foto de mesón verificada
+                              📸 Foto verificada
                             </span>
                           </div>
                         )}
 
-                        {/* Ficha estructurada extraída por IA */}
                         <div className={styles.extractedGrid}>
                           <div>
                             <div style={{ fontSize: '0.68rem', color: '#64748b' }}>FABRICANTE / ORIGEN</div>
@@ -987,11 +1214,10 @@ export default function MesaCotizacionWsp() {
                           </div>
                         </div>
 
-                        {/* Bloque de Costo Proveedor vs Precio Venta FácilRepuestos */}
                         <div className={styles.priceBox}>
                           <div>
                             <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
-                              Costo Mesón (Neto)
+                              Costo Proveedor (Neto)
                             </div>
                             <div style={{ fontSize: '0.92rem', fontWeight: 700 }}>
                               {fmtCLP(of.precioCostoNeto)}
@@ -1023,17 +1249,16 @@ export default function MesaCotizacionWsp() {
                           onClick={() => handleAdjudicarOferta(sol, of)}
                         >
                           {adjudicandoOfertaId === of.id
-                            ? 'Adjudicando y sincronizando...'
+                            ? 'Adjudicando...'
                             : of.ganadora
-                            ? '↻ Volver a Adjudicar / Actualizar Ficha'
-                            : '🏆 Adjudicar Oferta + Publicar en Catálogo + Enviar a Cliente'}
+                            ? '↻ Volver a Adjudicar'
+                            : '🏆 Adjudicar Oferta + Publicar en Catálogo'}
                         </button>
                       </div>
                     ))}
                   </div>
                 )}
 
-                {/* Resumen de Cotización Ganadora Lista para el Cliente Final */}
                 {sol.estado === 'adjudicada' && sol.mensajeCotizacionCliente && (
                   <div className={styles.quoteResultBox}>
                     <div
@@ -1046,48 +1271,18 @@ export default function MesaCotizacionWsp() {
                       }}
                     >
                       <div style={{ fontWeight: 800, fontSize: '0.86rem', color: '#14532d' }}>
-                        ✅ Cotización Final Generada para el Cliente ({sol.skuPublicoGenerado})
+                        ✅ Cotización Final Generada ({sol.skuPublicoGenerado})
                       </div>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {sol.inventarioCreadoId && (
-                          <span
-                            style={{
-                              fontSize: '0.73rem',
-                              background: '#dcfce7',
-                              color: '#166534',
-                              padding: '3px 8px',
-                              borderRadius: 6,
-                              fontWeight: 700,
-                            }}
-                          >
-                            📦 En Firebase `inventario` (`needsWooSync: true`)
-                          </span>
-                        )}
-                        {sol.conocimientoCreadoId && (
-                          <span
-                            style={{
-                              fontSize: '0.73rem',
-                              background: '#dbeafe',
-                              color: '#1e40af',
-                              padding: '3px 8px',
-                              borderRadius: 6,
-                              fontWeight: 700,
-                            }}
-                          >
-                            🧠 Aprendido por el Agente IA
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline"
-                          onClick={() => {
-                            navigator.clipboard.writeText(sol.mensajeCotizacionCliente || '');
-                            notify('✓ Mensaje de cotización copiado al portapapeles', 'success');
-                          }}
-                        >
-                          📋 Copiar Mensaje Cliente
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline"
+                        onClick={() => {
+                          navigator.clipboard.writeText(sol.mensajeCotizacionCliente || '');
+                          notify('✓ Mensaje de cotización copiado al portapapeles', 'success');
+                        }}
+                      >
+                        📋 Copiar Mensaje Cliente
+                      </button>
                     </div>
                     <pre
                       style={{

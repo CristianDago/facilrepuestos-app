@@ -154,7 +154,7 @@ export default function MainLayout() {
         </div>
 
         <nav>
-          {/* 1. RUBRO PRINCIPAL: REPUESTOS & OMNICANAL */}
+          {/* 1. RUBRO PRINCIPAL: REPUESTOS & OMNICANAL (3 CANALES DE VENTA + MESA WSP) */}
           <div className="nav-section">
             <div className="nav-section-label">Comercio & Omnicanal</div>
             <NavLink
@@ -168,6 +168,15 @@ export default function MainLayout() {
               <span className="nav-icon">◈</span> Centro de Mando
             </NavLink>
             <NavLink
+              to="/ventas-web"
+              onClick={closeSidebar}
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+            >
+              <span className="nav-icon">🌐</span> Ventas Web WordPress
+            </NavLink>
+            <NavLink
               to="/agente-omnicanal"
               onClick={closeSidebar}
               className={({ isActive }) =>
@@ -176,6 +185,15 @@ export default function MainLayout() {
             >
               <span className="nav-icon">🤖</span> Repuestín WhatsApp
               <span className={styles.navLivePill}>LIVE</span>
+            </NavLink>
+            <NavLink
+              to="/ventas-pos-canal"
+              onClick={closeSidebar}
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+            >
+              <span className="nav-icon">🏪</span> Ventas POS Olivares 224
             </NavLink>
             <NavLink
               to="/mesa-wsp"
@@ -188,17 +206,27 @@ export default function MainLayout() {
             </NavLink>
           </div>
 
-          {/* 2. CATÁLOGO, STOCK, PROVEEDORES Y POS INTERNO */}
+          {/* 2. CATÁLOGO, STOCK, ERP & TIENDAS Y POS INTERNO */}
           <div className="nav-section">
             <div className="nav-section-label">Catálogo & Bodegas</div>
             <NavLink
               to="/inventario"
+              end
               onClick={closeSidebar}
               className={({ isActive }) =>
                 `nav-item ${isActive ? "active" : ""}`
               }
             >
               <span className="nav-icon">📦</span> Inventario & Web
+            </NavLink>
+            <NavLink
+              to="/inventario-erp"
+              onClick={closeSidebar}
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+            >
+              <span className="nav-icon">🏢</span> ERP & Tiendas
             </NavLink>
             <NavLink
               to="/proveedores"

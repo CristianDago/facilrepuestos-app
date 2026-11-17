@@ -15,6 +15,7 @@ import {
   type SesionAgenteOmnicanal,
   type SolicitudCotizacionWsp,
 } from '../../types';
+import type { ResumenCanalesVentaResponse } from '../VentasCanales/VentasCanalesOmnicanal';
 import styles from './Dashboard.module.css';
 
 interface RespuestaSesionesOmnicanal {
@@ -52,6 +53,7 @@ export default function Dashboard() {
   );
   const [escalamientos, setEscalamientos] = useState<EscalamientoIA[]>([]);
   const [nodosAiloo, setNodosAiloo] = useState<NodoAiloo[]>([]);
+  const [resumenCanales, setResumenCanales] = useState<ResumenCanalesVentaResponse | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
@@ -68,6 +70,7 @@ export default function Dashboard() {
         mesaRes,
         escRes,
         nodosRes,
+        canalesRes,
         cotsRes,
         ordsRes,
         vehsRes,
@@ -77,6 +80,7 @@ export default function Dashboard() {
         api.get<ApiResponse<RespuestaMesaWsp>>('/mesa-wsp/solicitudes').catch(() => null),
         api.get<ApiResponse<EscalamientoIA[]>>('/escalamientos').catch(() => null),
         api.get<ApiResponse<NodoAiloo[]>>('/escalamientos/nodos').catch(() => null),
+        api.get<ApiResponse<ResumenCanalesVentaResponse>>('/woocommerce/canales-venta').catch(() => null),
         cotizacionesService.getAll().catch(() => null),
         ordenesService.getAll().catch(() => null),
         vehiculosService.getAll().catch(() => null),
@@ -91,6 +95,7 @@ export default function Dashboard() {
       }
       if (escRes?.success && escRes.data) setEscalamientos(escRes.data);
       if (nodosRes?.success && nodosRes.data) setNodosAiloo(nodosRes.data);
+      if (canalesRes?.success && canalesRes.data) setResumenCanales(canalesRes.data);
       if (cotsRes?.success && cotsRes.data) setCotizaciones(cotsRes.data);
       if (ordsRes?.success && ordsRes.data) setOrdenes(ordsRes.data);
       if (vehsRes?.success && vehsRes.data) setVehiculos(vehsRes.data);
@@ -281,6 +286,187 @@ export default function Dashboard() {
               >
                 🌐 Ver facilrepuestos.cl ↗
               </a>
+            </div>
+          </div>
+
+          {/* ── RELACIÓN DE LOS 3 CANALES DE VENTA (EN CONJUNTO Y POR SEPARADO) ── */}
+          <div
+            style={{
+              background: '#ffffff',
+              border: '1px solid #e2e8f0',
+              borderRadius: 14,
+              padding: 18,
+              marginBottom: 18,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 14,
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: 12,
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontSize: '0.75rem',
+                    fontWeight: 800,
+                    color: '#64748b',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  📊 Consolidado de los 3 Canales de Venta (En Conjunto y por Separado)
+                </div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0f172a', marginTop: 2 }}>
+                  Total 3 Canales: {fmtCLP(resumenCanales?.enConjunto.totalVentasConIva || 0)}{' '}
+                  <span style={{ fontSize: '0.84rem', fontWeight: 600, color: '#64748b' }}>
+                    IVA inc. · {resumenCanales?.enConjunto.totalOperaciones || 0} ventas totales · Ticket Promedio:{' '}
+                    {fmtCLP(resumenCanales?.enConjunto.ticketPromedioConIva || 0)}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-sm btn-outline"
+                onClick={() => navigate('/ventas-canales')}
+              >
+                Ver Detalle Completo 3 Canales →
+              </button>
+            </div>
+
+            {/* Tarjetas de los 3 Canales por Separado: 1. WordPress Directo -> 2. Repuestín WSP -> 3. POS Enrique Olivares 224 */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(265px, 1fr))',
+                gap: 12,
+              }}
+            >
+              {/* 1. WordPress / Web Directo */}
+              <div
+                onClick={() => navigate('/ventas-web')}
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: 12,
+                  padding: 14,
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      background: '#dbeafe',
+                      color: '#1d4ed8',
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                    }}
+                  >
+                    1. 🌐 WEB WORDPRESS (DIRECTO)
+                  </span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#2563eb' }}>
+                    {resumenCanales?.canales.webDirecto.participacionPct || 0}%
+                  </span>
+                </div>
+                <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#0f172a', marginTop: 8 }}>
+                  {fmtCLP(resumenCanales?.canales.webDirecto.totalVentasConIva || 0)}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: 2 }}>
+                  Compras directas en <strong>facilrepuestos.cl</strong> (sin pasar por Repuestín)
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#1e293b', marginTop: 8, fontWeight: 700 }}>
+                  {resumenCanales?.canales.webDirecto.totalPedidos || 0} pedidos web ·{' '}
+                  {resumenCanales?.canales.webDirecto.unidadesVendidas || 0} un.
+                </div>
+              </div>
+
+              {/* 2. Repuestín WhatsApp */}
+              <div
+                onClick={() => navigate('/agente-omnicanal')}
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #bbf7d0',
+                  borderRadius: 12,
+                  padding: 14,
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      background: '#dcfce7',
+                      color: '#15803d',
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                    }}
+                  >
+                    2. 🤖 REPUESTÍN WHATSAPP
+                  </span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#16a34a' }}>
+                    {resumenCanales?.canales.repuestinWsp.participacionPct || 0}%
+                  </span>
+                </div>
+                <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#0f172a', marginTop: 8 }}>
+                  {fmtCLP(resumenCanales?.canales.repuestinWsp.totalVentasConIva || 0)}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: 2 }}>
+                  Ventas y carros cerrados por <strong>Repuestín (+56 9 2110 9851)</strong>
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#1e293b', marginTop: 8, fontWeight: 700 }}>
+                  {resumenCanales?.canales.repuestinWsp.totalPedidos || 0} órdenes WSP ·{' '}
+                  {sesionesWsp.length} conversaciones activas
+                </div>
+              </div>
+
+              {/* 3. POS Enrique Olivares 224 */}
+              <div
+                onClick={() => navigate('/ventas-pos-canal')}
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #fed7aa',
+                  borderRadius: 12,
+                  padding: 14,
+                  cursor: 'pointer',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span
+                    style={{
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      background: '#ffedd5',
+                      color: '#c2410c',
+                      padding: '2px 8px',
+                      borderRadius: 999,
+                    }}
+                  >
+                    3. 🏪 POS ENRIQUE OLIVARES 224
+                  </span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#ea580c' }}>
+                    {resumenCanales?.canales.posOlivares.participacionPct || 0}%
+                  </span>
+                </div>
+                <div style={{ fontSize: '1.35rem', fontWeight: 900, color: '#0f172a', marginTop: 8 }}>
+                  {fmtCLP(resumenCanales?.canales.posOlivares.totalVentasConIva || 0)}
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: 2 }}>
+                  Ventas presenciales en mesón <strong>Enrique Olivares 224, La Florida</strong>
+                </div>
+                <div style={{ fontSize: '0.75rem', color: '#1e293b', marginTop: 8, fontWeight: 700 }}>
+                  {resumenCanales?.canales.posOlivares.totalTickets || 0} tickets POS ·{' '}
+                  {resumenCanales?.canales.posOlivares.unidadesVendidas || 0} un.
+                </div>
+              </div>
             </div>
           </div>
 

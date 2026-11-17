@@ -1,18 +1,51 @@
 import { useState, useEffect } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAppStore } from "../store/useAppStore";
 import { useAuth } from "../contexts/AuthContext";
 import { useCitasNotificaciones } from "../hooks/useCitasNotificaciones";
+import { inventarioService } from "../services/inventario";
+import type { ItemInventario } from "../types";
 import styles from './MainLayout.module.css';
 
 export default function MainLayout() {
-  const { notification, clearNotification, vehiculos } = useAppStore();
+  const {
+    notification,
+    clearNotification,
+    vehiculos,
+    inventario,
+    setInventario,
+  } = useAppStore();
   const { user, logout } = useAuth();
   const { citasNuevas } = useCitasNotificaciones();
-  const [searchValue, setSearchValue]   = useState("");
-  const [searchResults, setSearchResults] = useState<typeof vehiculos>([]);
-  const [sidebarOpen, setSidebarOpen]   = useState(false);
+  const [searchValue, setSearchValue] = useState("");
+  const [searchVehiculos, setSearchVehiculos] = useState<typeof vehiculos>([]);
+  const [searchRepuestos, setSearchRepuestos] = useState<ItemInventario[]>([]);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [tallerExpanded, setTallerExpanded] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Si estamos en una ruta de taller, asegurar que la sección Taller esté desplegada
+  useEffect(() => {
+    const rutasTaller = ['/cotizaciones', '/ordenes', '/vehiculos', '/mantenimiento', '/calendario'];
+    if (rutasTaller.some((r) => location.pathname.startsWith(r))) {
+      setTallerExpanded(true);
+    }
+  }, [location.pathname]);
+
+  // Cargar inventario en memoria si está vacío para alimentar el buscador global de repuestos
+  useEffect(() => {
+    if (inventario.length === 0) {
+      inventarioService
+        .getAll()
+        .then((res) => {
+          if (res.success && res.data) setInventario(res.data);
+        })
+        .catch(() => {
+          // silencioso si aún no carga
+        });
+    }
+  }, [inventario.length, setInventario]);
 
   const handleLogout = async () => {
     await logout();
@@ -22,7 +55,6 @@ export default function MainLayout() {
   // ─── SIDEBAR MÓVIL ───────────────────────────────────────
   const closeSidebar = () => setSidebarOpen(false);
 
-  // Cerrar el drawer si la ventana vuelve a tamaño desktop
   useEffect(() => {
     const handleResize = () => {
       if (window.innerWidth > 860) setSidebarOpen(false);
@@ -31,23 +63,48 @@ export default function MainLayout() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // ─── BÚSQUEDA GLOBAL ─────────────────────────────────────
+  // ─── BÚSQUEDA GLOBAL OMNICANAL (REPUESTOS + PATENTES) ────
   const handleSearch = (value: string) => {
-    setSearchValue(value.toUpperCase());
-    if (value.length < 3) {
-      setSearchResults([]);
+    setSearchValue(value);
+    const trimmed = value.trim();
+    if (trimmed.length < 2) {
+      setSearchVehiculos([]);
+      setSearchRepuestos([]);
       return;
     }
-    const q = value.toLowerCase();
-    const results = vehiculos
+    const q = trimmed.toLowerCase();
+
+    // 1. Buscar Repuestos por SKU público, código OEM, nombre o marca/modelo compatible
+    const repResults = inventario
+      .filter((item) => {
+        const sku = (item.skuPublicoFrp || item.codigo || "").toLowerCase();
+        const oem = (item.codigoProducto || "").toLowerCase();
+        const nom = (item.nombre || "").toLowerCase();
+        const fab = (item.fabricante || "").toLowerCase();
+        const marcas = (item.marcasCompatibles || []).join(" ").toLowerCase();
+        return (
+          sku.includes(q) ||
+          oem.includes(q) ||
+          nom.includes(q) ||
+          fab.includes(q) ||
+          marcas.includes(q)
+        );
+      })
+      .slice(0, 5);
+
+    // 2. Buscar Vehículos por patente, marca/modelo o propietario
+    const vehResults = vehiculos
       .filter(
         (v) =>
           v.patente.toLowerCase().includes(q) ||
           v.make?.toLowerCase().includes(q) ||
+          v.model?.toLowerCase().includes(q) ||
           v.owner?.toLowerCase().includes(q)
       )
-      .slice(0, 6);
-    setSearchResults(results);
+      .slice(0, 4);
+
+    setSearchRepuestos(repResults);
+    setSearchVehiculos(vehResults);
   };
 
   const navState = (v: (typeof vehiculos)[0]) => ({
@@ -64,16 +121,18 @@ export default function MainLayout() {
 
   const closeSearch = () => {
     setSearchValue("");
-    setSearchResults([]);
+    setSearchVehiculos([]);
+    setSearchRepuestos([]);
   };
 
-  // Auto-cierre de notificación — solo se dispara una vez por notificación,
-  // no en cada render (antes era un setTimeout suelto en el cuerpo del componente)
   useEffect(() => {
     if (!notification) return;
     const timer = setTimeout(() => clearNotification(), 3800);
     return () => clearTimeout(timer);
   }, [notification, clearNotification]);
+
+  const fmtCLP = (n: number) => '$' + Math.round(n || 0).toLocaleString('es-CL');
+  const hayResultados = searchRepuestos.length > 0 || searchVehiculos.length > 0;
 
   return (
     <div className={styles.rootWrapper}>
@@ -95,8 +154,9 @@ export default function MainLayout() {
         </div>
 
         <nav>
+          {/* 1. RUBRO PRINCIPAL: REPUESTOS & OMNICANAL */}
           <div className="nav-section">
-            <div className="nav-section-label">Principal</div>
+            <div className="nav-section-label">Comercio & Omnicanal</div>
             <NavLink
               to="/"
               end
@@ -105,43 +165,50 @@ export default function MainLayout() {
                 `nav-item ${isActive ? "active" : ""}`
               }
             >
-              <span className="nav-icon">◈</span> Dashboard
+              <span className="nav-icon">◈</span> Centro de Mando
+            </NavLink>
+            <NavLink
+              to="/agente-omnicanal"
+              onClick={closeSidebar}
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+            >
+              <span className="nav-icon">🤖</span> Repuestín WhatsApp
+              <span className={styles.navLivePill}>LIVE</span>
+            </NavLink>
+            <NavLink
+              to="/mesa-wsp"
+              onClick={closeSidebar}
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+            >
+              <span className="nav-icon">📲</span> Mesa Abastecimiento WSP
+            </NavLink>
+            <NavLink
+              to="/escalamientos-ia"
+              onClick={closeSidebar}
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+            >
+              <span className="nav-icon">🧠</span> Escalamientos & IA
+            </NavLink>
+            <NavLink
+              to="/pos"
+              onClick={closeSidebar}
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+            >
+              <span className="nav-icon">🛒</span> Punto de Venta (POS)
             </NavLink>
           </div>
 
+          {/* 2. CATÁLOGO, STOCK Y PROVEEDORES */}
           <div className="nav-section">
-            <div className="nav-section-label">Gestión</div>
-            <NavLink
-              to="/cotizaciones"
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `nav-item ${isActive ? "active" : ""}`
-              }
-            >
-              <span className="nav-icon">✦</span> Cotizaciones
-            </NavLink>
-            <NavLink
-              to="/ordenes"
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `nav-item ${isActive ? "active" : ""}`
-              }
-            >
-              <span className="nav-icon">🔧</span> Órdenes de Trabajo
-            </NavLink>
-          </div>
-
-          <div className="nav-section">
-            <div className="nav-section-label">Datos</div>
-            <NavLink
-              to="/vehiculos"
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `nav-item ${isActive ? "active" : ""}`
-              }
-            >
-              <span className="nav-icon">🚗</span> Vehículos
-            </NavLink>
+            <div className="nav-section-label">Catálogo & Bodegas</div>
             <NavLink
               to="/inventario"
               onClick={closeSidebar}
@@ -149,7 +216,7 @@ export default function MainLayout() {
                 `nav-item ${isActive ? "active" : ""}`
               }
             >
-              <span className="nav-icon">📦</span> Inventario
+              <span className="nav-icon">📦</span> Inventario & Web
             </NavLink>
             <NavLink
               to="/proveedores"
@@ -158,7 +225,7 @@ export default function MainLayout() {
                 `nav-item ${isActive ? "active" : ""}`
               }
             >
-              <span className="nav-icon">🏭</span> Proveedores
+              <span className="nav-icon">🏭</span> Proveedores & Ailoo
             </NavLink>
             <NavLink
               to="/proveedor"
@@ -169,32 +236,85 @@ export default function MainLayout() {
             >
               <span className="nav-icon">🏪</span> Portal Proveedor
             </NavLink>
+          </div>
+
+          {/* 3. MÓDULO TALLER & AUTOS (CONSERVADO 100% INTACTO) */}
+          <div className="nav-section">
+            <button
+              type="button"
+              className={styles.navSectionToggle}
+              onClick={() => setTallerExpanded((prev) => !prev)}
+            >
+              <span>Módulo Taller & Autos</span>
+              <span className={styles.navSectionArrow}>
+                {tallerExpanded ? "▾" : "▸"}
+              </span>
+            </button>
+            {tallerExpanded && (
+              <>
+                <NavLink
+                  to="/vehiculos"
+                  onClick={closeSidebar}
+                  className={({ isActive }) =>
+                    `nav-item ${isActive ? "active" : ""}`
+                  }
+                >
+                  <span className="nav-icon">🚗</span> Padrón Vehículos
+                </NavLink>
+                <NavLink
+                  to="/cotizaciones"
+                  onClick={closeSidebar}
+                  className={({ isActive }) =>
+                    `nav-item ${isActive ? "active" : ""}`
+                  }
+                >
+                  <span className="nav-icon">✦</span> Cotizaciones Taller
+                </NavLink>
+                <NavLink
+                  to="/ordenes"
+                  onClick={closeSidebar}
+                  className={({ isActive }) =>
+                    `nav-item ${isActive ? "active" : ""}`
+                  }
+                >
+                  <span className="nav-icon">🔧</span> Órdenes de Trabajo
+                </NavLink>
+                <NavLink
+                  to="/mantenimiento"
+                  onClick={closeSidebar}
+                  className={({ isActive }) =>
+                    `nav-item ${isActive ? "active" : ""}`
+                  }
+                >
+                  <span className="nav-icon">🛠</span> Planes Mantenimiento
+                </NavLink>
+                <NavLink
+                  to="/calendario"
+                  onClick={closeSidebar}
+                  className={({ isActive }) =>
+                    `nav-item ${isActive ? "active" : ""}`
+                  }
+                >
+                  <span className="nav-icon">📅</span> Calendario Taller
+                  {citasNuevas > 0 && (
+                    <span className={styles.navBadge}>{citasNuevas}</span>
+                  )}
+                </NavLink>
+              </>
+            )}
+          </div>
+
+          {/* 4. ADMINISTRACIÓN & SISTEMA */}
+          <div className="nav-section">
+            <div className="nav-section-label">Administración</div>
             <NavLink
-              to="/agente-omnicanal"
+              to="/estadisticas"
               onClick={closeSidebar}
               className={({ isActive }) =>
                 `nav-item ${isActive ? "active" : ""}`
               }
             >
-              <span className="nav-icon">🤖</span> Agente WhatsApp & CRM
-            </NavLink>
-            <NavLink
-              to="/escalamientos-ia"
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `nav-item ${isActive ? "active" : ""}`
-              }
-            >
-              <span className="nav-icon">🧠</span> Escalamientos IA
-            </NavLink>
-            <NavLink
-              to="/mesa-wsp"
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `nav-item ${isActive ? "active" : ""}`
-              }
-            >
-              <span className="nav-icon">📲</span> Mesa Cotización WSP
+              <span className="nav-icon">📊</span> Estadísticas
             </NavLink>
             <NavLink
               to="/costos-fijos"
@@ -205,27 +325,6 @@ export default function MainLayout() {
             >
               <span className="nav-icon">💡</span> Costos Fijos
             </NavLink>
-            <NavLink
-              to="/mantenimiento"
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `nav-item ${isActive ? "active" : ""}`
-              }
-            >
-              <span className="nav-icon">🔧</span> Mantenimiento
-            </NavLink>
-            <NavLink
-              to="/estadisticas"
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `nav-item ${isActive ? "active" : ""}`
-              }
-            >
-              <span className="nav-icon">📊</span> Estadísticas
-            </NavLink>
-          </div>
-          <div className="nav-section">
-            <div className="nav-section-label">Sistema</div>
             <NavLink
               to="/trabajadores"
               onClick={closeSidebar}
@@ -244,21 +343,11 @@ export default function MainLayout() {
             >
               <span className="nav-icon">⚙</span> Configuración
             </NavLink>
-            <NavLink
-              to="/calendario"
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `nav-item ${isActive ? "active" : ""}`
-              }
-            >
-              <span className="nav-icon">📅</span> Calendario
-              {citasNuevas > 0 && <span className={styles.navBadge}>{citasNuevas}</span>}
-            </NavLink>
           </div>
         </nav>
 
         <div className="sidebar-bottom">
-          <div className="sidebar-version">Fácil Repuestos v3.0 · React</div>
+          <div className="sidebar-version">FácilRepuestos ERP · Omnicanal v3.5</div>
         </div>
       </aside>
 
@@ -289,71 +378,148 @@ export default function MainLayout() {
             <div className="search-wrap">
               <input
                 className="header-search-input"
-                placeholder="Buscar patente, cliente..."
+                placeholder="Buscar repuesto, SKU (FRP-...), marca/modelo o patente..."
                 value={searchValue}
-                maxLength={20}
+                maxLength={50}
                 onChange={(e) => handleSearch(e.target.value)}
                 autoComplete="off"
               />
-              {searchResults.length > 0 && (
-                <div className="search-results">
-                  {searchResults.map((v) => (
-                    <div key={v.patente} className="search-result-item">
-                      {/* Info del vehículo */}
-                      <div
-                        className={styles.searchResultInfo}
-                        onClick={() => {
-                          closeSearch();
-                          navigate(`/vehiculos/${v.patente}`);
-                        }}
-                      >
-                        <div className="sr-plate">{v.patente}</div>
-                        <div className="sr-car">
-                          {v.make} {v.model} {v.year ? `· ${v.year}` : ""}{" "}
-                          {v.owner ? `· ${v.owner}` : ""}
-                        </div>
+              {hayResultados && (
+                <div className={`search-results ${styles.omniSearchDropdown}`}>
+                  {searchRepuestos.length > 0 && (
+                    <div className={styles.searchGroupBlock}>
+                      <div className={styles.searchGroupHeader}>
+                        📦 Repuestos en Catálogo ({searchRepuestos.length})
                       </div>
-                      {/* Acciones rápidas */}
-                      <div className={styles.searchResultActions}>
-                        <button
-                          className={styles.searchQuickBtn}
-                          onClick={() => {
-                            closeSearch();
-                            navigate("/cotizaciones/nueva", {
-                              state: navState(v),
-                            });
-                          }}
-                        >
-                          + Cot.
-                        </button>
-                        <button
-                          className={styles.searchQuickBtn}
-                          onClick={() => {
-                            closeSearch();
-                            navigate("/ordenes/nueva", { state: navState(v) });
-                          }}
-                        >
-                          + OT
-                        </button>
-                      </div>
+                      {searchRepuestos.map((item) => {
+                        const precioConIva = Math.round((item.precioVenta || 0) * 1.19);
+                        return (
+                          <div key={item.id || item.codigo} className="search-result-item">
+                            <div
+                              className={styles.searchResultInfo}
+                              onClick={() => {
+                                closeSearch();
+                                navigate("/inventario");
+                              }}
+                            >
+                              <div className={styles.srSkuRow}>
+                                <span className={styles.srSkuBadge}>
+                                  {item.skuPublicoFrp || item.codigo}
+                                </span>
+                                <span
+                                  className={
+                                    (item.stock || 0) > 0
+                                      ? styles.srStockOk
+                                      : styles.srStockZero
+                                  }
+                                >
+                                  Stock: {item.stock || 0}
+                                </span>
+                                <span className={styles.srPriceTag}>
+                                  {fmtCLP(precioConIva)} IVA inc.
+                                </span>
+                              </div>
+                              <div className="sr-car">{item.nombre}</div>
+                            </div>
+                            <div className={styles.searchResultActions}>
+                              <button
+                                className={styles.searchQuickBtn}
+                                onClick={() => {
+                                  closeSearch();
+                                  navigate("/pos");
+                                }}
+                              >
+                                POS
+                              </button>
+                              <button
+                                className={styles.searchQuickBtn}
+                                onClick={() => {
+                                  closeSearch();
+                                  navigate("/inventario");
+                                }}
+                              >
+                                Ficha
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  ))}
+                  )}
+
+                  {searchVehiculos.length > 0 && (
+                    <div className={styles.searchGroupBlock}>
+                      <div className={styles.searchGroupHeader}>
+                        🚗 Vehículos & Patentes ({searchVehiculos.length})
+                      </div>
+                      {searchVehiculos.map((v) => (
+                        <div key={v.patente} className="search-result-item">
+                          <div
+                            className={styles.searchResultInfo}
+                            onClick={() => {
+                              closeSearch();
+                              navigate(`/vehiculos/${v.patente}`);
+                            }}
+                          >
+                            <div className="sr-plate">{v.patente}</div>
+                            <div className="sr-car">
+                              {v.make} {v.model} {v.year ? `· ${v.year}` : ""}{" "}
+                              {v.owner ? `· ${v.owner}` : ""}
+                            </div>
+                          </div>
+                          <div className={styles.searchResultActions}>
+                            <button
+                              className={styles.searchQuickBtn}
+                              onClick={() => {
+                                closeSearch();
+                                navigate("/cotizaciones/nueva", {
+                                  state: navState(v),
+                                });
+                              }}
+                            >
+                              + Cot.
+                            </button>
+                            <button
+                              className={styles.searchQuickBtn}
+                              onClick={() => {
+                                closeSearch();
+                                navigate("/ordenes/nueva", { state: navState(v) });
+                              }}
+                            >
+                              + OT
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+
             <button
               className="btn btn-primary btn-sm"
-              onClick={() => navigate("/cotizaciones/nueva")}
+              onClick={() => navigate("/pos")}
+              title="Abrir Punto de Venta de Repuestos"
             >
-              + Cotización
+              🛒 Venta POS
             </button>
             <button
               className="btn btn-dark btn-sm"
-              onClick={() => navigate("/ordenes/nueva")}
+              onClick={() => navigate("/agente-omnicanal")}
+              title="Abrir monitor de Repuestín WhatsApp"
             >
-              + OT
+              🤖 Repuestín WSP
+            </button>
+            <button
+              className={`btn btn-sm ${styles.headerTallerBtn}`}
+              onClick={() => navigate("/mesa-wsp")}
+              title="Abrir Mesa de Abastecimiento WhatsApp"
+            >
+              📲 Mesa WSP
             </button>
           </div>
+
           <div className={`header-right ${styles.headerRight}`}>
             {user && (
               <span className={styles.headerUserName}>
@@ -388,7 +554,7 @@ export default function MainLayout() {
       )}
 
       {/* ── CERRAR SEARCH AL CLICK AFUERA ───────────────── */}
-      {searchResults.length > 0 && (
+      {hayResultados && (
         <div
           className={styles.searchBackdrop}
           onClick={closeSearch}

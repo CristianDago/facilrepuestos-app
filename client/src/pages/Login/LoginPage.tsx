@@ -50,7 +50,7 @@ function LoginAdmin({ onBack }: { onBack: () => void }) {
           type="email"
           value={email}
           onChange={e => setEmail(e.target.value)}
-          placeholder="admin@drmotors.cl"
+          placeholder="admin@facilrepuestos.cl"
           required
           autoFocus
         />
@@ -236,42 +236,50 @@ export default function LoginPage() {
 
             <div className={styles.options}>
               <button className={`${styles.option} ${styles.optionAdmin}`} onClick={() => setVista('admin')}>
-                <span className={styles.optionIcon}>🛠</span>
+                <span className={styles.optionIcon}>◈</span>
                 <div>
-                  <span className={styles.optionTitle}>Administración</span>
-                  <span className={styles.optionDesc}>Acceso completo al sistema</span>
-                </div>
-              </button>
-
-              <button className={styles.option} onClick={() => setVista('mecanico')}>
-                <span className={styles.optionIcon}>🔧</span>
-                <div>
-                  <span className={styles.optionTitle}>Mecánico</span>
-                  <span className={styles.optionDesc}>Ver órdenes activas asignadas</span>
-                </div>
-              </button>
-
-              <button className={styles.option} onClick={() => navigate('/cliente')}>
-                <span className={styles.optionIcon}>🚗</span>
-                <div>
-                  <span className={styles.optionTitle}>Consulta tu Vehículo</span>
-                  <span className={styles.optionDesc}>Ingresa tu patente y ve el historial</span>
-                </div>
-              </button>
-
-              <button className={styles.option} onClick={() => navigate('/taller')}>
-                <span className={styles.optionIcon}>🖥</span>
-                <div>
-                  <span className={styles.optionTitle}>Panel del Taller</span>
-                  <span className={styles.optionDesc}>Vista general para pantalla del taller</span>
+                  <span className={styles.optionTitle}>Administración & Omnicanal</span>
+                  <span className={styles.optionDesc}>Centro de Mando Repuestos, Repuestín WSP, POS y Taller</span>
                 </div>
               </button>
 
               <button className={styles.option} onClick={() => setVista('proveedor')}>
                 <span className={styles.optionIcon}>📦</span>
                 <div>
-                  <span className={styles.optionTitle}>Proveedores</span>
-                  <span className={styles.optionDesc}>Sube tus repuestos al inventario</span>
+                  <span className={styles.optionTitle}>Portal Proveedores & Bodegas</span>
+                  <span className={styles.optionDesc}>Catálogo de repuestos, POS mostrador y consultas IA</span>
+                </div>
+              </button>
+
+              <button className={styles.option} onClick={() => navigate('/repuestin')}>
+                <span className={styles.optionIcon}>🤖</span>
+                <div>
+                  <span className={styles.optionTitle}>Repuestín · Cotizador WhatsApp</span>
+                  <span className={styles.optionDesc}>Acceso rápido al asistente de repuestos por patente</span>
+                </div>
+              </button>
+
+              <button className={styles.option} onClick={() => setVista('mecanico')}>
+                <span className={styles.optionIcon}>🔧</span>
+                <div>
+                  <span className={styles.optionTitle}>Módulo Taller · Mecánicos</span>
+                  <span className={styles.optionDesc}>Órdenes de trabajo y calendario de taller</span>
+                </div>
+              </button>
+
+              <button className={styles.option} onClick={() => navigate('/cliente')}>
+                <span className={styles.optionIcon}>🚗</span>
+                <div>
+                  <span className={styles.optionTitle}>Consulta tu Vehículo (Taller)</span>
+                  <span className={styles.optionDesc}>Ingresa tu patente y revisa el estado de servicio</span>
+                </div>
+              </button>
+
+              <button className={styles.option} onClick={() => navigate('/taller')}>
+                <span className={styles.optionIcon}>🖥</span>
+                <div>
+                  <span className={styles.optionTitle}>Pantalla de Taller</span>
+                  <span className={styles.optionDesc}>Tablero en vivo de órdenes en proceso</span>
                 </div>
               </button>
             </div>

@@ -47,9 +47,130 @@
   line-height: 1.3;
 }
 
-/* ── BÚSQUEDA GLOBAL ────────────────────────────────────── */
+/* ── PILL LIVE Y SECCIÓN COLAPSABLE TALLER ──────────────── */
+.navLivePill {
+  margin-left: auto;
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
 
-/* Área clickeable del resultado (info del vehículo) */
+.navSectionToggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  border: none;
+  padding: 0.45rem 1.2rem;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: #7c93b2;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.navSectionToggle:hover {
+  color: #fff;
+}
+
+.navSectionArrow {
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+/* ── BÚSQUEDA GLOBAL OMNICANAL ──────────────────────────── */
+.omniSearchDropdown {
+  max-height: 430px;
+  overflow-y: auto;
+  min-width: 360px;
+}
+
+.searchGroupBlock {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.searchGroupBlock:last-child {
+  border-bottom: none;
+}
+
+.searchGroupHeader {
+  padding: 6px 12px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  background: #f1f5f9;
+  color: #334155;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.srSkuRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+
+.srSkuBadge {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 800;
+  font-size: 0.76rem;
+  letter-spacing: 0.5px;
+  background: #0f172a;
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.srStockOk {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #059669;
+  background: #ecfdf5;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.srStockZero {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #dc2626;
+  background: #fef2f2;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.srPriceTag {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--red);
+}
+
+.headerTallerBtn {
+  background: #1e293b;
+  color: #e2e8f0;
+  border: 1px solid #334155;
+}
+
+.headerTallerBtn:hover {
+  background: #334155;
+  color: #fff;
+}
+
+/* Área clickeable del resultado */
 .searchResultInfo {
   flex: 1;
   cursor: pointer;
@@ -63,7 +184,7 @@
   flex-shrink: 0;
 }
 
-/* Botones rápidos "+ Cot." / "+ OT" dentro del resultado */
+/* Botones rápidos dentro del resultado */
 .searchQuickBtn {
   font-family: 'Barlow Condensed', sans-serif;
   font-size: .65rem;

@@ -194,6 +194,457 @@ async function prepararCategoriasWooCommerce(items = []) {
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// JERARQUÍA DE COMPATIBILIDAD VEHICULAR EN "MARCAS DE PRODUCTOS" (OPCIÓN A)
+// Nivel 1 (Marca Principal): SUZUKI, JAC, TOYOTA, CHERY, GREAT WALL, HAVAL...
+// Nivel 2 (Sub-marca Modelo): JAC S3, SUZUKI SWIFT, GREAT WALL WINGLE 5...
+// Nivel 3 (Rango de Años):    JAC S3 (2016 - 2023), MG GT NEW (2021+)...
+// ═══════════════════════════════════════════════════════════════════════════
+
+const MARCAS_VEHICULOS_CONOCIDAS = [
+  'GREAT WALL', 'LAND ROVER', 'MERCEDES-BENZ', 'ALFA ROMEO', 'SSANGYONG',
+  'CHANGAN', 'CHANGLIN', 'DONGFENG', 'CHEVROLET', 'MITSUBISHI', 'VOLKSWAGEN',
+  'PEUGEOT', 'CITROËN', 'CITROEN', 'HYUNDAI', 'RENAULT', 'TOYOTA', 'SUZUKI',
+  'SUBARU', 'NISSAN', 'CHERY', 'HAVAL', 'MAZDA', 'HONDA', 'MAXUS', 'FOTON',
+  'DODGE', 'VOLVO', 'LEXUS', 'ISUZU', 'MAHINDRA', 'GEELY', 'DFSK', 'FORD',
+  'JEEP', 'FIAT', 'AUDI', 'OPEL', 'MINI', 'JAC', 'KIA', 'MG', 'BYD', 'DFM',
+  'RAM', 'BMW', 'ZNA',
+];
+
+function normalizarNombreMarcaAuto(raw) {
+  const m = String(raw || '').trim().toUpperCase();
+  if (!m || m === 'OTRO' || m === 'GENERAL' || m === 'UNIVERSAL') return '';
+  if (m === 'CITROEN') return 'CITROËN';
+  if (m === 'VW') return 'VOLKSWAGEN';
+  if (m === 'GREATWALL') return 'GREAT WALL';
+  return m;
+}
+
+function normalizarNombreModeloAuto(marca, modeloRaw) {
+  let mod = String(modeloRaw || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, ' ');
+  if (!mod || mod === 'TODOS' || mod === 'GENERAL') return '';
+  // Si el modelo ya empieza con el nombre de la marca, quitar el prefijo repetido
+  if (marca && mod.startsWith(`${marca} `)) {
+    mod = mod.slice(marca.length).trim();
+  }
+  return mod;
+}
+
+export function formatearRangoAniosCompatibilidad(anioDesdeRaw, anioHastaRaw, nombreProducto = '') {
+  let d = Number(anioDesdeRaw) || null;
+  let h = Number(anioHastaRaw) || null;
+  if (d && (d < 1970 || d > 2035)) d = null;
+  if (h && (h < 1970 || h > 2035)) h = null;
+
+  // Si no vienen explícitos en los campos numéricos, intentar extraer del título del producto
+  if (!d && !h && nombreProducto) {
+    const txt = String(nombreProducto).toUpperCase();
+    const mRango = txt.match(/\b(19\d{2}|20\d{2})\s*(?:-|AL|A|\/)\s*(19\d{2}|20\d{2})\b/);
+    if (mRango) {
+      d = Number(mRango[1]);
+      h = Number(mRango[2]);
+    } else {
+      const mDesde = txt.match(/\b(?:DESDE|AÑO)\s+(19\d{2}|20\d{2})\b/) || txt.match(/\b(19\d{2}|20\d{2})\s*\+/);
+      if (mDesde) {
+        d = Number(mDesde[1]);
+      } else {
+        const mHasta = txt.match(/\bHASTA\s+(19\d{2}|20\d{2})\b/);
+        if (mHasta) {
+          h = Number(mHasta[1]);
+        }
+      }
+    }
+  }
+
+  if (d && h && d > h) {
+    const tmp = d;
+    d = h;
+    h = tmp;
+  }
+
+  let etiquetaRango = '';
+  if (d && h) {
+    etiquetaRango = d === h ? `${d}` : `${d} - ${h}`;
+  } else if (d && !h) {
+    etiquetaRango = `${d} en adelante`;
+  } else if (!d && h) {
+    etiquetaRango = `Hasta ${h}`;
+  }
+
+  // Expandir años individuales (ej. 2016..2023) para atributo de filtro por año puntual
+  const aniosIndividuales = [];
+  if (d) {
+    const fin = h || Math.min(new Date().getFullYear() + 1, d + 6);
+    for (let y = d; y <= Math.min(fin, d + 20); y++) {
+      aniosIndividuales.push(String(y));
+    }
+  } else if (h) {
+    aniosIndividuales.push(String(h));
+  }
+
+  return {
+    anioDesde: d,
+    anioHasta: h,
+    etiquetaRango,
+    aniosIndividuales,
+  };
+}
+
+/**
+ * Extrae toda la estructura de compatibilidades vehiculares de un ítem:
+ * - `marcas`: `["JAC", "SUZUKI", ...]`
+ * - `modelosJerarquicos`: `[{ marca: "JAC", modelo: "S3", etiquetaModelo: "JAC S3", etiquetaRango: "2016 - 2023", etiquetaCompleta: "JAC S3 (2016 - 2023)" }]`
+ * - `rutasJerarquicasBrand`: arreglos de 1, 2 o 3 niveles `[Marca, Marca Modelo, Marca Modelo (Años)]`
+ */
+export function extraerCompatibilidadesVehiculoDeItem(item = {}) {
+  const rangoGlobal = formatearRangoAniosCompatibilidad(
+    item.anioDesde,
+    item.anioHasta,
+    item.nombre || ''
+  );
+
+  const marcasSet = new Set();
+  const entradasMap = new Map(); // `${marca}::${modelo}` -> { marca, modelo, anioDesde, anioHasta }
+
+  // 1. Si tiene `compatibilidadesVehiculo` detalladas (desde BigQuery v_agente_catalogo)
+  if (Array.isArray(item.compatibilidadesVehiculo)) {
+    for (const c of item.compatibilidadesVehiculo) {
+      const m = normalizarNombreMarcaAuto(c?.marca);
+      if (!m) continue;
+      marcasSet.add(m);
+      const mod = normalizarNombreModeloAuto(m, c?.modelo);
+      if (mod) {
+        const k = `${m}::${mod}`;
+        entradasMap.set(k, {
+          marca: m,
+          modelo: mod,
+          anioDesde: Number(c.anioDesde) || rangoGlobal.anioDesde,
+          anioHasta: Number(c.anioHasta) || rangoGlobal.anioHasta,
+        });
+      }
+    }
+  }
+
+  // 2. Incorporar `marcasCompatibles` y `modelosCompatibles`
+  if (Array.isArray(item.marcasCompatibles)) {
+    for (const mRaw of item.marcasCompatibles) {
+      const m = normalizarNombreMarcaAuto(mRaw);
+      if (m) marcasSet.add(m);
+    }
+  }
+
+  if (item.modelosCompatibles && typeof item.modelosCompatibles === 'object' && !Array.isArray(item.modelosCompatibles)) {
+    for (const [mRaw, listaMods] of Object.entries(item.modelosCompatibles)) {
+      const m = normalizarNombreMarcaAuto(mRaw);
+      if (!m) continue;
+      marcasSet.add(m);
+      if (Array.isArray(listaMods)) {
+        for (const modRaw of listaMods) {
+          const mod = normalizarNombreModeloAuto(m, modRaw);
+          if (!mod) continue;
+          const k = `${m}::${mod}`;
+          if (!entradasMap.has(k)) {
+            entradasMap.set(k, {
+              marca: m,
+              modelo: mod,
+              anioDesde: rangoGlobal.anioDesde,
+              anioHasta: rangoGlobal.anioHasta,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // 3. Fallback: extraer marca y modelo desde el título ("... PARA GREAT WALL WINGLE 5", "... PARA JAC S3")
+  if (marcasSet.size === 0 && item.nombre) {
+    const upper = String(item.nombre).toUpperCase();
+    for (const marcaConocida of MARCAS_VEHICULOS_CONOCIDAS) {
+      const regex = new RegExp(`\\b${marcaConocida.replace('-', '[\\s-]')}\\b`, 'i');
+      if (regex.test(upper)) {
+        const mNorm = normalizarNombreMarcaAuto(marcaConocida);
+        if (mNorm) {
+          marcasSet.add(mNorm);
+          const idx = upper.indexOf(marcaConocida);
+          if (idx >= 0) {
+            const post = upper
+              .slice(idx + marcaConocida.length)
+              .replace(/^[\s,-]+/, '')
+              .replace(/\b(?:DESDE|HASTA|AÑO|MOTOR|\d{4}).*$/i, '')
+              .trim();
+            const primerModelo = post.split(/[,/]/)[0]?.trim() || '';
+            const mod = normalizarNombreModeloAuto(mNorm, primerModelo.split(/\s+/).slice(0, 2).join(' '));
+            if (mod && mod.length >= 2) {
+              entradasMap.set(`${mNorm}::${mod}`, {
+                marca: mNorm,
+                modelo: mod,
+                anioDesde: rangoGlobal.anioDesde,
+                anioHasta: rangoGlobal.anioHasta,
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+
+  const marcas = Array.from(marcasSet).sort();
+  const modelosJerarquicos = [];
+  const rutasJerarquicasBrand = [];
+  const aniosIndividualesSet = new Set(rangoGlobal.aniosIndividuales);
+  const rangosTextoSet = new Set();
+  if (rangoGlobal.etiquetaRango) rangosTextoSet.add(rangoGlobal.etiquetaRango);
+
+  const marcasConModelo = new Set();
+
+  for (const entry of entradasMap.values()) {
+    marcasConModelo.add(entry.marca);
+    const infoRango = formatearRangoAniosCompatibilidad(
+      entry.anioDesde,
+      entry.anioHasta,
+      item.nombre || ''
+    );
+    infoRango.aniosIndividuales.forEach((y) => aniosIndividualesSet.add(y));
+    if (infoRango.etiquetaRango) rangosTextoSet.add(infoRango.etiquetaRango);
+
+    const etiquetaModelo = `${entry.marca} ${entry.modelo}`;
+    const etiquetaCompleta = infoRango.etiquetaRango
+      ? `${etiquetaModelo} (${infoRango.etiquetaRango})`
+      : etiquetaModelo;
+
+    modelosJerarquicos.push({
+      marca: entry.marca,
+      modelo: entry.modelo,
+      etiquetaModelo,
+      anioDesde: infoRango.anioDesde,
+      anioHasta: infoRango.anioHasta,
+      etiquetaRango: infoRango.etiquetaRango,
+      etiquetaCompleta,
+    });
+
+    if (infoRango.etiquetaRango) {
+      rutasJerarquicasBrand.push([entry.marca, etiquetaModelo, etiquetaCompleta]);
+    } else {
+      rutasJerarquicasBrand.push([entry.marca, etiquetaModelo]);
+    }
+  }
+
+  // Si una marca no tenía modelo específico pero sí está en `marcas`, agregar ruta de Nivel 1 (o con rango general)
+  for (const m of marcas) {
+    if (!marcasConModelo.has(m)) {
+      if (rangoGlobal.etiquetaRango) {
+        rutasJerarquicasBrand.push([m, `${m} (${rangoGlobal.etiquetaRango})`]);
+      } else {
+        rutasJerarquicasBrand.push([m]);
+      }
+    }
+  }
+
+  return {
+    marcas,
+    modelosJerarquicos,
+    rutasJerarquicasBrand,
+    rangosTexto: Array.from(rangosTextoSet),
+    aniosIndividuales: Array.from(aniosIndividualesSet).sort(),
+  };
+}
+
+/**
+ * Trae y crea en WooCommerce (`Productos -> Marcas`, endpoint `/products/brands`)
+ * la jerarquía de 3 niveles de compatibilidad:
+ *   Nivel 1 (Marca Principal): `JAC`, `SUZUKI`, `TOYOTA`...
+ *   Nivel 2 (Modelo hijo): `JAC S3`, `SUZUKI SWIFT`...
+ *   Nivel 3 (Rango de años hijo del modelo): `JAC S3 (2016 - 2023)`...
+ * Devuelve una función `obtenerBrandsYAtributosItem(item)` lista para inyectar en `construirPayload`.
+ */
+async function prepararMarcasVehiculoWooCommerce(items = []) {
+  const existentes = [];
+  let endpointMarcasDisponible = true;
+  let page = 1;
+
+  while (endpointMarcasDisponible) {
+    try {
+      const lote = await wcFetch(`/products/brands?per_page=100&page=${page}`);
+      if (!Array.isArray(lote) || !lote.length) break;
+      existentes.push(...lote);
+      if (lote.length < 100) break;
+      page++;
+    } catch (err) {
+      console.warn('[woo-brands] Aviso consultando /products/brands:', err.message);
+      endpointMarcasDisponible = false;
+      break;
+    }
+  }
+
+  const porPadreYNombre = new Map();
+  const porNombreRaiz = new Map();
+  const porNombreCualquiera = new Map();
+
+  const indexarBrand = (b) => {
+    if (!b || !b.id || !b.name) return;
+    const n = normCat(b.name);
+    const parentId = Number(b.parent || 0);
+    porPadreYNombre.set(`${parentId}::${n}`, b.id);
+    if (parentId === 0) {
+      porNombreRaiz.set(n, b.id);
+    }
+    if (!porNombreCualquiera.has(n)) {
+      porNombreCualquiera.set(n, b.id);
+    }
+  };
+
+  for (const b of existentes) {
+    indexarBrand(b);
+  }
+
+  let creadasCount = 0;
+
+  const asegurarRutaBrand = async (rutaNombres) => {
+    if (!endpointMarcasDisponible) return [];
+    let parentId = 0;
+    const ids = [];
+    for (const nombreOriginal of rutaNombres) {
+      const n = normCat(nombreOriginal);
+      if (!n) continue;
+      let id =
+        porPadreYNombre.get(`${parentId}::${n}`) ||
+        (parentId === 0 ? porNombreRaiz.get(n) : null);
+
+      if (!id) {
+        try {
+          const creada = await wcFetch('/products/brands', {
+            method: 'POST',
+            body: JSON.stringify({
+              name: nombreOriginal,
+              ...(parentId ? { parent: parentId } : {}),
+              description:
+                parentId === 0
+                  ? `Repuestos compatibles con vehículos ${nombreOriginal}`
+                  : `Repuestos compatibles con ${nombreOriginal}`,
+            }),
+          });
+          if (creada?.id) {
+            indexarBrand(creada);
+            id = creada.id;
+            creadasCount++;
+          }
+        } catch (err) {
+          // Si ya existía con el mismo slug en otro nivel, intentar recuperar de porNombreCualquiera
+          id = porNombreCualquiera.get(n) || null;
+          if (!id) {
+            console.warn('[woo-brands] No se pudo crear marca compatible', nombreOriginal, ':', err.message);
+          }
+        }
+      }
+
+      if (id) {
+        ids.push(id);
+        parentId = id;
+      }
+    }
+    return [...new Set(ids)];
+  };
+
+  const cacheRutasBrand = new Map();
+  for (const item of items) {
+    const compat = extraerCompatibilidadesVehiculoDeItem(item);
+    for (const ruta of compat.rutasJerarquicasBrand) {
+      const clave = ruta.join(' > ');
+      if (!cacheRutasBrand.has(clave)) {
+        const ids = await asegurarRutaBrand(ruta);
+        cacheRutasBrand.set(clave, ids);
+      }
+    }
+  }
+
+  const resolverParaItem = (item) => {
+    const compat = extraerCompatibilidadesVehiculoDeItem(item);
+    const idsSet = new Set();
+    for (const ruta of compat.rutasJerarquicasBrand) {
+      const clave = ruta.join(' > ');
+      const ids = cacheRutasBrand.get(clave) || [];
+      ids.forEach((id) => idsSet.add(id));
+    }
+
+    const brands = Array.from(idsSet).map((id) => ({ id }));
+
+    // Construir también atributos estructurados para filtros de barra lateral y ficha técnica
+    const attributes = [];
+    if (compat.marcas.length > 0) {
+      attributes.push({
+        name: 'Marca Vehículo',
+        visible: true,
+        variation: false,
+        options: compat.marcas,
+      });
+    }
+    if (compat.modelosJerarquicos.length > 0) {
+      attributes.push({
+        name: 'Modelo Compatible',
+        visible: true,
+        variation: false,
+        options: Array.from(new Set(compat.modelosJerarquicos.map((m) => m.etiquetaModelo))),
+      });
+      const compatConAnios = Array.from(
+        new Set(compat.modelosJerarquicos.map((m) => m.etiquetaCompleta))
+      );
+      if (compatConAnios.length > 0) {
+        attributes.push({
+          name: 'Compatibilidad (Marca / Modelo / Años)',
+          visible: true,
+          variation: false,
+          options: compatConAnios,
+        });
+      }
+    }
+    if (compat.rangosTexto.length > 0) {
+      attributes.push({
+        name: 'Rango de Años',
+        visible: true,
+        variation: false,
+        options: compat.rangosTexto,
+      });
+    }
+    if (compat.aniosIndividuales.length > 0) {
+      attributes.push({
+        name: 'Año Vehículo',
+        visible: true,
+        variation: false,
+        options: compat.aniosIndividuales,
+      });
+    }
+
+    // Dejar el fabricante de origen (ej. MANN-FILTER, KYB) solo como atributo técnico secundario
+    const fab = String(item.fabricante || item.marcaRepuesto || '').trim().toUpperCase();
+    if (fab) {
+      attributes.push({
+        name: 'Fabricante Repuesto',
+        visible: true,
+        variation: false,
+        options: [fab],
+      });
+    }
+
+    return {
+      brands,
+      attributes,
+      compat,
+    };
+  };
+
+  resolverParaItem.estadisticas = {
+    endpointMarcasDisponible,
+    marcasExistentesEnWoo: existentes.length,
+    marcasNuevasCreadasEnWoo: creadasCount,
+    totalRutasAseguradas: cacheRutasBrand.size,
+  };
+
+  return resolverParaItem;
+}
+
 /**
  * Resuelve el SKU público de FácilRepuestos para un ítem de inventario,
  * priorizando `skuPublicoFrp` (`FRP-SOL-...`, `FRP-GLB-...`, `FRP-LOC-...`)
@@ -369,12 +820,24 @@ function descripcionDeItem(item) {
 // en WordPress (WooCommerce solo modifica los campos que se le mandan, deja el resto igual).
 // `puedeAgregarImagen` es true si el producto es nuevo, o si ya existe pero todavía no tiene
 // ninguna foto en WooCommerce — así se rellenan huecos sin pisar fotos puestas a mano.
-function construirPayload(id, item, obtenerCategoriasItem, esNuevo, puedeAgregarImagen, mapaMediaWoo = null) {
+function construirPayload(
+  id,
+  item,
+  obtenerCategoriasItem,
+  esNuevo,
+  puedeAgregarImagen,
+  mapaMediaWoo = null,
+  obtenerMarcasCompatibilidadItem = null
+) {
   const disponible = Math.max(0, Math.floor((item.stock || 0) - (item.stockReservado || 0)));
   const rutaCategorias = resolverRutaCategoriasTienda(item);
   const rutaTexto = rutaCategorias.join(' > ');
   const categories = typeof obtenerCategoriasItem === 'function' ? obtenerCategoriasItem(item) : [];
   const tallaInfo = clasificarTallaLogisticaRepuesto(item);
+  const infoCompatWoo =
+    typeof obtenerMarcasCompatibilidadItem === 'function'
+      ? obtenerMarcasCompatibilidadItem(item)
+      : null;
 
   const payload = {
     name: item.nombre,
@@ -390,6 +853,8 @@ function construirPayload(id, item, obtenerCategoriasItem, esNuevo, puedeAgregar
       height: String(item.dimensionesCm?.alto || tallaInfo.dimensionesCm.alto || 18),
     },
     categories,
+    ...(infoCompatWoo?.brands?.length ? { brands: infoCompatWoo.brands } : {}),
+    ...(infoCompatWoo?.attributes?.length ? { attributes: infoCompatWoo.attributes } : {}),
     meta_data: [
       { key: '_drmotors_inventario_id', value: id },
       { key: '_frp_origen_datos', value: String(item.origenDatos || 'proveedor_local') },
@@ -397,6 +862,12 @@ function construirPayload(id, item, obtenerCategoriasItem, esNuevo, puedeAgregar
       { key: '_frp_categoria_jerarquia', value: rutaTexto },
       { key: '_frp_categoria_ruta', value: rutaTexto },
       { key: '_frp_talla_logistica', value: String(item.tallaLogistica || tallaInfo.tallaLogistica || 'S') },
+      ...(infoCompatWoo?.compat?.marcas?.length
+        ? [{ key: '_frp_marcas_compatibles', value: infoCompatWoo.compat.marcas.join(', ') }]
+        : []),
+      ...(infoCompatWoo?.compat?.rangosTexto?.length
+        ? [{ key: '_frp_rango_anios', value: infoCompatWoo.compat.rangosTexto.join(', ') }]
+        : []),
     ],
   };
 
@@ -603,6 +1074,7 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true, ma
 
   // Modo WooCommerce REST API Live
   const obtenerCategoriasItem = await prepararCategoriasWooCommerce(items);
+  const obtenerMarcasCompatibilidadItem = await prepararMarcasVehiculoWooCommerce(items);
   const existentes            = await obtenerProductosExistentes();
 
   // Cargar mapa de URL de imagen -> media_id de WordPress para reutilizar adjuntos sin duplicar disco
@@ -641,7 +1113,15 @@ export async function sincronizarInventarioConWooCommerce({ soloDelta = true, ma
 
     const esNuevo = !idExistente;
     const puedeAgregarImagen = esNuevo || !existente?.tieneImagen;
-    const payload = construirPayload(item.id, item, obtenerCategoriasItem, esNuevo, puedeAgregarImagen, mapaMediaWoo);
+    const payload = construirPayload(
+      item.id,
+      item,
+      obtenerCategoriasItem,
+      esNuevo,
+      puedeAgregarImagen,
+      mapaMediaWoo,
+      obtenerMarcasCompatibilidadItem
+    );
     if (idExistente) {
       actualizar.push({ id: idExistente, ...payload });
       metaActualizar.push({ docId: item.id, sku, wooId: idExistente, item });
@@ -1140,3 +1620,186 @@ export async function obtenerPedidosWooCommerceRecientes({ maxPedidos = 60 } = {
     return { configurado: true, pedidos: [], error: err.message };
   }
 }
+
+/**
+ * Construye el resumen del árbol de compatibilidad vehicular (Nivel 1 Marca -> Nivel 2 Modelo -> Nivel 3 Rango Años)
+ * a partir del inventario actual en Firestore (alimentado por BigQuery `v_agente_catalogo` y tiendas locales).
+ */
+export async function obtenerResumenMarcasCompatibilidadInventario() {
+  const snap = await db.collection('inventario').get();
+  const items = snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((i) => !i.ocultarEnTienda);
+
+  const marcasMap = new Map(); // marca -> { nombre, count, modelos: Map<modeloLabel, { nombre, count, rangos: Map<rangoLabel, number> }> }
+  let itemsConCompatibilidad = 0;
+
+  for (const item of items) {
+    const compat = extraerCompatibilidadesVehiculoDeItem(item);
+    if (compat.marcas.length > 0) {
+      itemsConCompatibilidad++;
+    }
+
+    for (const m of compat.marcas) {
+      if (!marcasMap.has(m)) {
+        marcasMap.set(m, { nombre: m, count: 0, modelos: new Map() });
+      }
+      marcasMap.get(m).count += 1;
+    }
+
+    for (const mod of compat.modelosJerarquicos) {
+      let mEntry = marcasMap.get(mod.marca);
+      if (!mEntry) {
+        mEntry = { nombre: mod.marca, count: 1, modelos: new Map() };
+        marcasMap.set(mod.marca, mEntry);
+      }
+      let modEntry = mEntry.modelos.get(mod.etiquetaModelo);
+      if (!modEntry) {
+        modEntry = {
+          nombre: mod.etiquetaModelo,
+          modeloCorto: mod.modelo,
+          count: 0,
+          rangos: new Map(),
+        };
+        mEntry.modelos.set(mod.etiquetaModelo, modEntry);
+      }
+      modEntry.count += 1;
+      if (mod.etiquetaRango) {
+        modEntry.rangos.set(
+          mod.etiquetaCompleta,
+          (modEntry.rangos.get(mod.etiquetaCompleta) || 0) + 1
+        );
+      }
+    }
+  }
+
+  let totalModelos = 0;
+  let totalRangosAnios = 0;
+
+  const arbolMarcas = Array.from(marcasMap.values())
+    .sort((a, b) => b.count - a.count || a.nombre.localeCompare(b.nombre))
+    .map((m) => {
+      const modelos = Array.from(m.modelos.values())
+        .sort((a, b) => b.count - a.count || a.nombre.localeCompare(b.nombre))
+        .map((mod) => {
+          totalModelos += 1;
+          const rangos = Array.from(mod.rangos.entries())
+            .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+            .map(([etiqueta, count]) => {
+              totalRangosAnios += 1;
+              return { nombre: etiqueta, count };
+            });
+          return {
+            nombre: mod.nombre,
+            modeloCorto: mod.modeloCorto,
+            count: mod.count,
+            rangos,
+          };
+        });
+      return {
+        nombre: m.nombre,
+        count: m.count,
+        modelos,
+      };
+    });
+
+  return {
+    totalProductosVisibles: items.length,
+    productosConCompatibilidad: itemsConCompatibilidad,
+    totalMarcasVehiculo: arbolMarcas.length,
+    totalModelosVehiculo: totalModelos,
+    totalRangosAnios,
+    arbolMarcas,
+  };
+}
+
+/**
+ * Sincroniza hacia WooCommerce (`Productos -> Marcas`) la jerarquía completa de 3 niveles:
+ *   Nivel 1 (Marca Principal): `SUZUKI`, `JAC`, `TOYOTA`, `CHERY`, `GREAT WALL`, `HAVAL`...
+ *   Nivel 2 (Sub-marca Modelo): `JAC S3`, `SUZUKI SWIFT`...
+ *   Nivel 3 (Sub-marca Rango de Años): `JAC S3 (2016 - 2023)`...
+ * Y opcionalmente actualiza un lote de productos en WooCommerce (o encola todos con `needsWooSync: true`)
+ * para dejar asignados `brands` y `attributes` (100% dedicado a compatibilidad vehicular).
+ */
+export async function sincronizarMarcasCompatibilidadWooCommerce({
+  encolarProductos = true,
+  sincronizarLoteInmediato = true,
+  maxProductosLote = 150,
+} = {}) {
+  const snap = await db.collection('inventario').get();
+  const items = snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((i) => !i.ocultarEnTienda);
+
+  const resumen = await obtenerResumenMarcasCompatibilidadInventario();
+  const configured = isWooConfigured();
+
+  let estadisticasTaxonomia = {
+    endpointMarcasDisponible: false,
+    marcasExistentesEnWoo: 0,
+    marcasNuevasCreadasEnWoo: 0,
+    totalRutasAseguradas: 0,
+  };
+
+  if (configured) {
+    const resolver = await prepararMarcasVehiculoWooCommerce(items);
+    if (resolver.estadisticas) {
+      estadisticasTaxonomia = resolver.estadisticas;
+    }
+  }
+
+  let encoladosCount = 0;
+  if (encolarProductos) {
+    const BATCH_LIMIT = 400;
+    let batch = db.batch();
+    let ops = 0;
+    for (const item of items) {
+      const compat = extraerCompatibilidadesVehiculoDeItem(item);
+      if (compat.marcas.length === 0) continue;
+      batch.update(db.collection('inventario').doc(item.id), {
+        needsWooSync: true,
+        wooSyncMotivo: 'enriquecimiento_compatibilidad_ia',
+      });
+      ops++;
+      encoladosCount++;
+      if (ops >= BATCH_LIMIT) {
+        await batch.commit();
+        batch = db.batch();
+        ops = 0;
+      }
+    }
+    if (ops > 0) {
+      await batch.commit();
+    }
+  }
+
+  let resultadoLote = null;
+  if (sincronizarLoteInmediato && configured) {
+    resultadoLote = await sincronizarInventarioConWooCommerce({
+      soloDelta: true,
+      maxItems: Math.max(25, Math.min(400, Number(maxProductosLote) || 150)),
+    });
+  }
+
+  return {
+    modoConexion: configured ? 'woocommerce_rest_live' : 'simulacion_local',
+    resumenCatalogo: {
+      totalProductosVisibles: resumen.totalProductosVisibles,
+      productosConCompatibilidad: resumen.productosConCompatibilidad,
+      totalMarcasVehiculo: resumen.totalMarcasVehiculo,
+      totalModelosVehiculo: resumen.totalModelosVehiculo,
+      totalRangosAnios: resumen.totalRangosAnios,
+    },
+    taxonomiaMarcasWoo: estadisticasTaxonomia,
+    productosEncoladosParaAsignacion: encoladosCount,
+    loteSincronizado: resultadoLote
+      ? {
+          procesados: resultadoLote.procesados,
+          actualizados: resultadoLote.actualizados,
+          creados: resultadoLote.creados,
+          pendientesRestantes: resultadoLote.pendientesRestantes,
+        }
+      : null,
+  };
+}
+

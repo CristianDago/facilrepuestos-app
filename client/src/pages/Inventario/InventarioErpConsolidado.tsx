@@ -110,6 +110,8 @@ export default function InventarioErpConsolidado() {
   const [subcategoriaActiva, setSubcategoriaActiva] = useState<string>('');
   const [subcategoriaHijaActiva, setSubcategoriaHijaActiva] = useState<string>('');
   const [filtroMarcaAuto, setFiltroMarcaAuto] = useState<string>('');
+  const [filtroModeloAuto, setFiltroModeloAuto] = useState<string>('');
+  const [filtroRangoAnioAuto, setFiltroRangoAnioAuto] = useState<string>('');
   const [filtroEstadoWoo, setFiltroEstadoWoo] = useState<
     'todos' | 'publicados_woo' | 'con_stock' | 'stock_bajo' | 'pendientes_sync'
   >('todos');
@@ -120,6 +122,7 @@ export default function InventarioErpConsolidado() {
   const [mostrarGuiaOrden, setMostrarGuiaOrden] = useState(false);
   const [sincronizandoWoo, setSincronizandoWoo] = useState(false);
   const [sincronizandoAiloo, setSincronizandoAiloo] = useState(false);
+  const [sincronizandoMarcasWoo, setSincronizandoMarcasWoo] = useState(false);
 
   const cargarTodo = async () => {
     setLoading(true);
@@ -255,17 +258,99 @@ export default function InventarioErpConsolidado() {
     return { porCat, porSub, porHija };
   }, [itemsPorTiendas]);
 
-  // Marcas de vehículo disponibles
-  const marcasAutoOpciones = useMemo(() => {
-    const mMap = new Map<string, number>();
-    for (const it of itemsPorTiendas) {
-      for (const m of it.marcasCompatibles || []) {
-        const up = String(m || '').trim().toUpperCase();
-        if (up) mMap.set(up, (mMap.get(up) || 0) + 1);
+  // Helper para formatear el rango de años de un ítem (desde campos o desde título)
+  const obtenerRangoAniosItem = (it: ItemInventario): string => {
+    let d = Number(it.anioDesde) || null;
+    let h = Number(it.anioHasta) || null;
+    if (d && (d < 1970 || d > 2035)) d = null;
+    if (h && (h < 1970 || h > 2035)) h = null;
+
+    if (!d && !h && it.nombre) {
+      const txt = it.nombre.toUpperCase();
+      const mRango = txt.match(/\b(19\d{2}|20\d{2})\s*(?:-|AL|A|\/)\s*(19\d{2}|20\d{2})\b/);
+      if (mRango) {
+        d = Number(mRango[1]);
+        h = Number(mRango[2]);
+      } else {
+        const mDesde =
+          txt.match(/\b(?:DESDE|AÑO)\s+(19\d{2}|20\d{2})\b/) ||
+          txt.match(/\b(19\d{2}|20\d{2})\s*\+/);
+        if (mDesde) d = Number(mDesde[1]);
+        else {
+          const mHasta = txt.match(/\bHASTA\s+(19\d{2}|20\d{2})\b/);
+          if (mHasta) h = Number(mHasta[1]);
+        }
       }
     }
-    return Array.from(mMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    if (d && h) return d === h ? `${d}` : `${d} - ${h}`;
+    if (d && !h) return `${d} en adelante`;
+    if (!d && h) return `Hasta ${h}`;
+    return '';
+  };
+
+  // Árbol de 3 Niveles de Compatibilidad Vehicular (Marca -> Modelo -> Rango Años)
+  const arbolCompatibilidadAuto = useMemo(() => {
+    const porMarca = new Map<string, number>();
+    const porModelo = new Map<string, number>(); // `${marca}::${modelo}` -> count
+    const porRango = new Map<string, number>(); // `${marca}::${modelo}::${rango}` -> count
+
+    for (const it of itemsPorTiendas) {
+      const rango = obtenerRangoAniosItem(it);
+      const marcas = (it.marcasCompatibles || []).map((m) => String(m || '').trim().toUpperCase()).filter(Boolean);
+      for (const m of marcas) {
+        porMarca.set(m, (porMarca.get(m) || 0) + 1);
+      }
+
+      const modelosObj = it.modelosCompatibles || {};
+      if (modelosObj && typeof modelosObj === 'object' && !Array.isArray(modelosObj)) {
+        for (const [mRaw, mods] of Object.entries(modelosObj)) {
+          const m = String(mRaw || '').trim().toUpperCase();
+          if (!m || !Array.isArray(mods)) continue;
+          for (const modRaw of mods) {
+            let mod = String(modRaw || '').trim().toUpperCase();
+            if (!mod) continue;
+            if (mod.startsWith(`${m} `)) mod = mod.slice(m.length).trim();
+            const keyMod = `${m}::${mod}`;
+            porModelo.set(keyMod, (porModelo.get(keyMod) || 0) + 1);
+            if (rango) {
+              const keyRango = `${m}::${mod}::${rango}`;
+              porRango.set(keyRango, (porRango.get(keyRango) || 0) + 1);
+            }
+          }
+        }
+      }
+    }
+
+    const marcasOrdenadas = Array.from(porMarca.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    return { marcasOrdenadas, porMarca, porModelo, porRango };
   }, [itemsPorTiendas]);
+
+  // Marcas de vehículo disponibles
+  const marcasAutoOpciones = arbolCompatibilidadAuto.marcasOrdenadas;
+
+  const modelosDeMarcaActiva = useMemo(() => {
+    if (!filtroMarcaAuto) return [];
+    const pref = `${filtroMarcaAuto}::`;
+    const lista: Array<[string, number]> = [];
+    for (const [k, count] of arbolCompatibilidadAuto.porModelo.entries()) {
+      if (k.startsWith(pref)) {
+        lista.push([k.slice(pref.length), count]);
+      }
+    }
+    return lista.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [filtroMarcaAuto, arbolCompatibilidadAuto]);
+
+  const rangosDeModeloActivo = useMemo(() => {
+    if (!filtroMarcaAuto || !filtroModeloAuto) return [];
+    const pref = `${filtroMarcaAuto}::${filtroModeloAuto}::`;
+    const lista: Array<[string, number]> = [];
+    for (const [k, count] of arbolCompatibilidadAuto.porRango.entries()) {
+      if (k.startsWith(pref)) {
+        lista.push([k.slice(pref.length), count]);
+      }
+    }
+    return lista.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [filtroMarcaAuto, filtroModeloAuto, arbolCompatibilidadAuto]);
 
   // Filtrado completo + Ordenamiento recomendado estilo WooCommerce
   const itemsFiltradosYOrdenados = useMemo(() => {
@@ -298,6 +383,21 @@ export default function InventarioErpConsolidado() {
         !(it.marcasCompatibles || []).some((m) => m.toUpperCase() === filtroMarcaAuto)
       ) {
         return false;
+      }
+      if (filtroModeloAuto && filtroMarcaAuto) {
+        const modsMarca = (it.modelosCompatibles || {})[filtroMarcaAuto] || [];
+        const matchMod = modsMarca.some((modRaw) => {
+          let mClean = String(modRaw || '').trim().toUpperCase();
+          if (mClean.startsWith(`${filtroMarcaAuto} `)) {
+            mClean = mClean.slice(filtroMarcaAuto.length).trim();
+          }
+          return mClean === filtroModeloAuto;
+        });
+        if (!matchMod) return false;
+      }
+      if (filtroRangoAnioAuto) {
+        const rangoIt = obtenerRangoAniosItem(it);
+        if (rangoIt !== filtroRangoAnioAuto) return false;
       }
 
       if (filtroEstadoWoo === 'publicados_woo' && (it.ocultarEnTienda || disp <= 0)) return false;
@@ -355,6 +455,8 @@ export default function InventarioErpConsolidado() {
     subcategoriaActiva,
     subcategoriaHijaActiva,
     filtroMarcaAuto,
+    filtroModeloAuto,
+    filtroRangoAnioAuto,
     filtroEstadoWoo,
     ordenInventario,
     busqueda,
@@ -403,6 +505,34 @@ export default function InventarioErpConsolidado() {
       notify('Error al sincronizar ERPs Ailoo', 'error');
     } finally {
       setSincronizandoAiloo(false);
+    }
+  };
+
+  const handleSyncMarcasWoo = async () => {
+    setSincronizandoMarcasWoo(true);
+    try {
+      const r = await woocommerceService.syncMarcasCompatibilidad({
+        encolarProductos: true,
+        sincronizarLoteInmediato: true,
+        maxProductosLote: 150,
+      });
+      if (r.success && r.data) {
+        const { resumenCatalogo, taxonomiaMarcasWoo, loteSincronizado } = r.data;
+        const loteTxt = loteSincronizado
+          ? ` · Primer lote asignado: ${loteSincronizado.procesados} productos`
+          : '';
+        notify(
+          `🚗 Marcas de Compatibilidad WooCommerce listas: ${resumenCatalogo.totalMarcasVehiculo} marcas, ${resumenCatalogo.totalModelosVehiculo} modelos y ${resumenCatalogo.totalRangosAnios} rangos de años (${taxonomiaMarcasWoo.marcasNuevasCreadasEnWoo} nuevas creadas en WordPress)${loteTxt}`,
+          'success'
+        );
+        await cargarTodo();
+      } else {
+        notify(r.error || 'Error al sincronizar marcas de compatibilidad', 'error');
+      }
+    } catch {
+      notify('Error al sincronizar marcas y años en WooCommerce', 'error');
+    } finally {
+      setSincronizandoMarcasWoo(false);
     }
   };
 
@@ -473,6 +603,18 @@ export default function InventarioErpConsolidado() {
             disabled={sincronizandoAiloo}
           >
             {sincronizandoAiloo ? 'Sincronizando ERPs...' : '📦 Sync ERPs Ailoo'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm"
+            style={{ background: '#0284c7', color: '#fff', fontWeight: 700 }}
+            onClick={handleSyncMarcasWoo}
+            disabled={sincronizandoMarcasWoo}
+            title="Crea en Productos -> Marcas de WooCommerce la jerarquía Marca de Auto -> Modelo -> Rango de Años (100% dedicado a compatibilidad)"
+          >
+            {sincronizandoMarcasWoo
+              ? 'Sincronizando Marcas/Años...'
+              : '🚗 Poblar Marcas + Modelos + Años en Woo'}
           </button>
           <button
             type="button"
@@ -711,7 +853,12 @@ export default function InventarioErpConsolidado() {
           <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a' }}>
             📂 Categorías y Subcategorías Oficiales WooCommerce (facilrepuestos.cl)
           </div>
-          {(categoriaActiva || subcategoriaActiva || subcategoriaHijaActiva || filtroMarcaAuto) && (
+          {(categoriaActiva ||
+            subcategoriaActiva ||
+            subcategoriaHijaActiva ||
+            filtroMarcaAuto ||
+            filtroModeloAuto ||
+            filtroRangoAnioAuto) && (
             <button
               type="button"
               className="btn btn-sm btn-outline"
@@ -720,9 +867,11 @@ export default function InventarioErpConsolidado() {
                 setSubcategoriaActiva('');
                 setSubcategoriaHijaActiva('');
                 setFiltroMarcaAuto('');
+                setFiltroModeloAuto('');
+                setFiltroRangoAnioAuto('');
               }}
             >
-              ✕ Limpiar Categoría / Marca
+              ✕ Limpiar Categoría / Marca / Modelo
             </button>
           )}
         </div>
@@ -880,6 +1029,218 @@ export default function InventarioErpConsolidado() {
                   }}
                 >
                   {hija} ({count})
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── ÁRBOL DE COMPATIBILIDAD VEHICULAR (MARCA -> MODELO -> RANGO DE AÑOS) ESPEJO DE "PRODUCTOS -> MARCAS" WOOCOMMERCE ── */}
+      <div
+        style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: 14,
+          padding: 16,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+        }}
+      >
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 8,
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a' }}>
+              🚗 Marcas, Modelos y Rangos de Años Compatibles (Espejo `Productos → Marcas` en WooCommerce)
+            </div>
+            <div style={{ fontSize: '0.77rem', color: '#64748b' }}>
+              Jerarquía de 3 niveles: <strong>Marca Principal (ej. SUZUKI, JAC)</strong> ↳ <strong>Modelo (ej.JAC S3)</strong> ↳ <strong>Rango de Años (ej. 2016 - 2023)</strong> · 100% dedicada a compatibilidad vehicular.
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-sm"
+            style={{ background: '#0284c7', color: '#ffffff', fontWeight: 700 }}
+            onClick={handleSyncMarcasWoo}
+            disabled={sincronizandoMarcasWoo}
+          >
+            {sincronizandoMarcasWoo
+              ? 'Subiendo a WordPress...'
+              : '⚡ Cargar Árbol de Marcas + Modelos + Años a WooCommerce'}
+          </button>
+        </div>
+
+        {/* Nivel 1: Marcas de Vehículos Compatibles */}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => {
+              setFiltroMarcaAuto('');
+              setFiltroModeloAuto('');
+              setFiltroRangoAnioAuto('');
+            }}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 999,
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              border: !filtroMarcaAuto ? '2px solid #0f172a' : '1px solid #cbd5e1',
+              background: !filtroMarcaAuto ? '#0f172a' : '#f8fafc',
+              color: !filtroMarcaAuto ? '#ffffff' : '#334155',
+            }}
+          >
+            Todas las Marcas ({marcasAutoOpciones.length})
+          </button>
+
+          {marcasAutoOpciones.map(([marca, count]) => {
+            const activa = filtroMarcaAuto === marca;
+            return (
+              <button
+                key={marca}
+                type="button"
+                onClick={() => {
+                  setFiltroMarcaAuto(activa ? '' : marca);
+                  setFiltroModeloAuto('');
+                  setFiltroRangoAnioAuto('');
+                }}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 999,
+                  fontSize: '0.78rem',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  border: activa ? '2px solid #0284c7' : '1px solid #cbd5e1',
+                  background: activa ? '#e0f2fe' : '#ffffff',
+                  color: activa ? '#0369a1' : '#1e293b',
+                }}
+              >
+                {marca} ({count})
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Nivel 2: Modelos Compatibles de la Marca Seleccionada */}
+        {filtroMarcaAuto && modelosDeMarcaActiva.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              gap: 6,
+              flexWrap: 'wrap',
+              paddingTop: 8,
+              borderTop: '1px dashed #e2e8f0',
+              alignItems: 'center',
+            }}
+          >
+            <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0369a1' }}>
+              ↳ Modelos {filtroMarcaAuto}:
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setFiltroModeloAuto('');
+                setFiltroRangoAnioAuto('');
+              }}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 8,
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                border: !filtroModeloAuto ? '2px solid #0284c7' : '1px solid #cbd5e1',
+                background: !filtroModeloAuto ? '#e0f2fe' : '#ffffff',
+                color: !filtroModeloAuto ? '#0369a1' : '#475569',
+              }}
+            >
+              Todos los modelos
+            </button>
+            {modelosDeMarcaActiva.map(([mod, count]) => {
+              const activo = filtroModeloAuto === mod;
+              return (
+                <button
+                  key={mod}
+                  type="button"
+                  onClick={() => {
+                    setFiltroModeloAuto(activo ? '' : mod);
+                    setFiltroRangoAnioAuto('');
+                  }}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 8,
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    border: activo ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                    background: activo ? '#dbeafe' : '#ffffff',
+                    color: activo ? '#1d4ed8' : '#334155',
+                  }}
+                >
+                  {filtroMarcaAuto} {mod} ({count})
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Nivel 3: Rangos de Años del Modelo Seleccionado */}
+        {filtroMarcaAuto && filtroModeloAuto && rangosDeModeloActivo.length > 0 && (
+          <div
+            style={{
+              display: 'flex',
+              gap: 6,
+              flexWrap: 'wrap',
+              paddingTop: 6,
+              alignItems: 'center',
+            }}
+          >
+            <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#0f766e' }}>
+              ↳ Rangos de Años ({filtroMarcaAuto} {filtroModeloAuto}):
+            </span>
+            <button
+              type="button"
+              onClick={() => setFiltroRangoAnioAuto('')}
+              style={{
+                padding: '4px 10px',
+                borderRadius: 6,
+                fontSize: '0.74rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                border: !filtroRangoAnioAuto ? '2px solid #0d9488' : '1px solid #cbd5e1',
+                background: !filtroRangoAnioAuto ? '#ccfbf1' : '#ffffff',
+                color: !filtroRangoAnioAuto ? '#0f766e' : '#475569',
+              }}
+            >
+              Todos los años
+            </button>
+            {rangosDeModeloActivo.map(([rango, count]) => {
+              const activo = filtroRangoAnioAuto === rango;
+              return (
+                <button
+                  key={rango}
+                  type="button"
+                  onClick={() => setFiltroRangoAnioAuto(activo ? '' : rango)}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: 6,
+                    fontSize: '0.74rem',
+                    fontWeight: 800,
+                    cursor: 'pointer',
+                    border: activo ? '2px solid #0d9488' : '1px solid #cbd5e1',
+                    background: activo ? '#ccfbf1' : '#f8fafc',
+                    color: activo ? '#0f766e' : '#334155',
+                  }}
+                >
+                  📅 {filtroMarcaAuto} {filtroModeloAuto} ({rango}) · {count}
                 </button>
               );
             })}

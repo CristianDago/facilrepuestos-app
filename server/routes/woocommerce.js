@@ -7,6 +7,8 @@ import {
   obtenerEstadoColaWooCommerce,
   exportarCatalogoCSV,
   obtenerPedidosWooCommerceRecientes,
+  obtenerResumenMarcasCompatibilidadInventario,
+  sincronizarMarcasCompatibilidadWooCommerce,
 } from '../services/woocommerceSync.js';
 import {
   sincronizarCatalogoNodoAiloo,
@@ -406,6 +408,36 @@ router.get('/canales-venta', requireAuth, async (req, res, next) => {
         operacionesUnificadas: operacionesUnificadas.slice(0, 50),
       },
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/woocommerce/marcas-compatibilidad
+// Devuelve el árbol de 3 niveles de compatibilidad vehicular (Marca -> Modelo -> Rango Años) extraído del inventario
+router.get('/marcas-compatibilidad', requireAuth, async (req, res, next) => {
+  try {
+    const resumen = await obtenerResumenMarcasCompatibilidadInventario();
+    res.json({ success: true, data: resumen });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/woocommerce/sync-marcas-compatibilidad
+// Crea toda la jerarquía de 3 niveles en Productos -> Marcas de WooCommerce (Marca -> Modelo -> Rango de Años)
+// y encola/sincroniza los productos para asignarles sus marcas y atributos de compatibilidad.
+router.post('/sync-marcas-compatibilidad', requireSyncAccess, async (req, res, next) => {
+  try {
+    const encolarProductos = req.body?.encolarProductos !== false;
+    const sincronizarLoteInmediato = req.body?.sincronizarLoteInmediato !== false;
+    const maxProductosLote = Number(req.body?.maxProductosLote || 150) || 150;
+    const resultado = await sincronizarMarcasCompatibilidadWooCommerce({
+      encolarProductos,
+      sincronizarLoteInmediato,
+      maxProductosLote,
+    });
+    res.json({ success: true, data: resultado });
   } catch (error) {
     next(error);
   }

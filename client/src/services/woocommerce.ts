@@ -87,6 +87,30 @@ export interface RespuestaIngestaMultiAiloo {
   wooSync?: SyncResultado | null;
 }
 
+export interface RespuestaSyncMarcasCompatibilidad {
+  modoConexion: string;
+  resumenCatalogo: {
+    totalProductosVisibles: number;
+    productosConCompatibilidad: number;
+    totalMarcasVehiculo: number;
+    totalModelosVehiculo: number;
+    totalRangosAnios: number;
+  };
+  taxonomiaMarcasWoo: {
+    endpointMarcasDisponible: boolean;
+    marcasExistentesEnWoo: number;
+    marcasNuevasCreadasEnWoo: number;
+    totalRutasAseguradas: number;
+  };
+  productosEncoladosParaAsignacion: number;
+  loteSincronizado?: {
+    procesados: number;
+    actualizados: number;
+    creados: number;
+    pendientesRestantes: number;
+  } | null;
+}
+
 export const woocommerceService = {
   getStatus: () =>
     api.get<ApiResponse<EstadoColaWooCommerce>>('/woocommerce/status'),
@@ -95,6 +119,20 @@ export const woocommerceService = {
     api.post<ApiResponse<SyncResultado>>('/woocommerce/sync', {
       soloDelta: opciones?.soloDelta !== false,
     }),
+
+  syncMarcasCompatibilidad: (opciones?: {
+    encolarProductos?: boolean;
+    sincronizarLoteInmediato?: boolean;
+    maxProductosLote?: number;
+  }) =>
+    api.post<ApiResponse<RespuestaSyncMarcasCompatibilidad>>(
+      '/woocommerce/sync-marcas-compatibilidad',
+      {
+        encolarProductos: opciones?.encolarProductos !== false,
+        sincronizarLoteInmediato: opciones?.sincronizarLoteInmediato !== false,
+        maxProductosLote: opciones?.maxProductosLote || 150,
+      }
+    ),
 
   syncAilooTodos: (opciones?: { forzar?: boolean; autoSyncWoo?: boolean }) =>
     api.post<ApiResponse<RespuestaIngestaMultiAiloo>>('/woocommerce/sync-ailoo', {

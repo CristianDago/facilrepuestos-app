@@ -567,6 +567,18 @@ async function obtenerCatalogoDesdeOrigenAiloo(nodo) {
             DISTINCT IF(marca IS NOT NULL AND modelo IS NOT NULL, CONCAT(marca, '::', modelo), NULL),
             '||'
           ) AS pares_marca_modelo,
+          STRING_AGG(
+            DISTINCT IF(
+              marca IS NOT NULL AND modelo IS NOT NULL,
+              CONCAT(
+                marca, '::', modelo, '::',
+                IFNULL(CAST(anio_desde AS STRING), ''), '::',
+                IFNULL(CAST(anio_hasta AS STRING), '')
+              ),
+              NULL
+            ),
+            '||'
+          ) AS compatibilidades_marca_modelo_anios,
           STRING_AGG(DISTINCT cilindrada, ',') AS cilindradas_compatibles,
           MIN(anio_desde) AS anio_desde,
           MAX(anio_hasta) AS anio_hasta,
@@ -693,6 +705,64 @@ function normalizarItemAilooAInventario(raw, nodo, docExistente = null) {
     modelosCompatibles[cleanM] = Array.from(new Set([...prev, ...(Array.isArray(lista) ? lista : [])]));
   }
 
+  // Construir compatibilidades detalladas por (Marca, Modelo, AñoDesde, AñoHasta)
+  const compatMap = new Map();
+  const prevCompatList = Array.isArray(docExistente?.compatibilidadesVehiculo)
+    ? docExistente.compatibilidadesVehiculo
+    : [];
+  for (const c of prevCompatList) {
+    if (c && c.marca && c.modelo) {
+      const k = `${String(c.marca).toUpperCase()}::${String(c.modelo).toUpperCase()}`;
+      compatMap.set(k, {
+        marca: String(c.marca).toUpperCase(),
+        modelo: String(c.modelo).toUpperCase(),
+        anioDesde: Number(c.anioDesde) || null,
+        anioHasta: Number(c.anioHasta) || null,
+      });
+    }
+  }
+
+  if (typeof raw.compatibilidades_marca_modelo_anios === 'string' && raw.compatibilidades_marca_modelo_anios.trim()) {
+    for (const entry of raw.compatibilidades_marca_modelo_anios.split('||')) {
+      const [mRaw, modRaw, dRaw, hRaw] = entry.split('::');
+      const m = String(mRaw || '').trim().toUpperCase();
+      const mod = String(modRaw || '').trim().toUpperCase();
+      if (!m || !mod) continue;
+      const d = Number(dRaw) || null;
+      const h = Number(hRaw) || null;
+      const k = `${m}::${mod}`;
+      const prev = compatMap.get(k);
+      if (!prev) {
+        compatMap.set(k, { marca: m, modelo: mod, anioDesde: d, anioHasta: h });
+      } else {
+        compatMap.set(k, {
+          marca: m,
+          modelo: mod,
+          anioDesde: d && prev.anioDesde ? Math.min(d, prev.anioDesde) : (d || prev.anioDesde || null),
+          anioHasta: h && prev.anioHasta ? Math.max(h, prev.anioHasta) : (h || prev.anioHasta || null),
+        });
+      }
+    }
+  }
+
+  // Asegurar que todo modelo en modelosCompatibles tenga también entrada en compatibilidadesVehiculo
+  const defaultDesde = Number(raw.anio_desde || docExistente?.anioDesde) || null;
+  const defaultHasta = Number(raw.anio_hasta || docExistente?.anioHasta) || null;
+  for (const [marca, listaMods] of Object.entries(modelosCompatibles)) {
+    for (const mod of listaMods || []) {
+      const k = `${marca}::${mod}`;
+      if (!compatMap.has(k)) {
+        compatMap.set(k, {
+          marca,
+          modelo: mod,
+          anioDesde: defaultDesde,
+          anioHasta: defaultHasta,
+        });
+      }
+    }
+  }
+  const compatibilidadesVehiculo = Array.from(compatMap.values());
+
   const cilindradasCompatibles = typeof raw.cilindradas_compatibles === 'string' && raw.cilindradas_compatibles.trim()
     ? raw.cilindradas_compatibles.split(',').map(c => c.trim()).filter(Boolean)
     : Array.isArray(docExistente?.cilindradasCompatibles)
@@ -782,6 +852,7 @@ function normalizarItemAilooAInventario(raw, nodo, docExistente = null) {
     ubicacion: String(raw.ubicacion_bodega || docExistente?.ubicacion || `Bodega ${nodo.nombre}`).trim(),
     marcasCompatibles,
     modelosCompatibles,
+    compatibilidadesVehiculo,
     cilindradasCompatibles,
     anioDesde: Number(raw.anio_desde || docExistente?.anioDesde) || null,
     anioHasta: Number(raw.anio_hasta || docExistente?.anioHasta) || null,

@@ -14,8 +14,11 @@ steps:
       - '--platform=managed'
       - '--allow-unauthenticated'
       - '--port=8080'
+      - '--memory=2Gi'
+      - '--cpu=2'
+      - '--timeout=300'
       - '--set-secrets=FIREBASE_SERVICE_ACCOUNT=facilrepuestos-firebase-credentials:latest,BOOSTR_API_KEY=facilrepuestos-boostr-key:latest,GOOGLE_CLIENT_SECRET=facilrepuestos-google-client-secret:latest,WOOCOMMERCE_CONSUMER_KEY=facilrepuestos-woo-consumer-key:latest,WOOCOMMERCE_CONSUMER_SECRET=facilrepuestos-woo-consumer-secret:latest,WOOCOMMERCE_WEBHOOK_SECRET=facilrepuestos-woo-webhook-secret:latest,DRIVE_TOKEN_JSON=facilrepuestos-drive-token:latest'
-      - '--set-env-vars=FIREBASE_PROJECT_ID=facilrepuestos-prod,WOOCOMMERCE_URL=https://facilrepuestos.cl,AILOO_BQ_LIVE=true'
+      - '--set-env-vars=FIREBASE_PROJECT_ID=facilrepuestos-prod,WOOCOMMERCE_URL=https://facilrepuestos.cl,AILOO_BQ_LIVE=true,NODE_OPTIONS=--max-old-space-size=1536'
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -27,8 +30,10 @@ steps:
       - '--platform=managed'
       - '--allow-unauthenticated'
       - '--port=8080'
+      - '--memory=1Gi'
+      - '--timeout=300'
       - '--set-secrets=FIREBASE_SERVICE_ACCOUNT=facilrepuestos-firebase-credentials:latest,BOOSTR_API_KEY=facilrepuestos-boostr-key:latest,GOOGLE_CLIENT_SECRET=facilrepuestos-google-client-secret:latest,WOOCOMMERCE_CONSUMER_KEY=facilrepuestos-woo-consumer-key:latest,WOOCOMMERCE_CONSUMER_SECRET=facilrepuestos-woo-consumer-secret:latest,WOOCOMMERCE_WEBHOOK_SECRET=facilrepuestos-woo-webhook-secret:latest,DRIVE_TOKEN_JSON=facilrepuestos-drive-token:latest'
-      - '--set-env-vars=FIREBASE_PROJECT_ID=facilrepuestos-prod,WOOCOMMERCE_URL=https://facilrepuestos.cl,AILOO_BQ_LIVE=true'
+      - '--set-env-vars=FIREBASE_PROJECT_ID=facilrepuestos-prod,WOOCOMMERCE_URL=https://facilrepuestos.cl,AILOO_BQ_LIVE=true,NODE_OPTIONS=--max-old-space-size=768'
 images:
   - 'gcr.io/$PROJECT_ID/facilrepuestos-api'
 options:

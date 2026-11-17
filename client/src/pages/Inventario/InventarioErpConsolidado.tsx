@@ -511,26 +511,39 @@ export default function InventarioErpConsolidado() {
   const handleSyncMarcasWoo = async () => {
     setSincronizandoMarcasWoo(true);
     try {
-      const r = await woocommerceService.syncMarcasCompatibilidad({
-        encolarProductos: true,
-        sincronizarLoteInmediato: true,
-        maxProductosLote: 150,
-      });
-      if (r.success && r.data) {
-        const { resumenCatalogo, taxonomiaMarcasWoo, loteSincronizado } = r.data;
+      let totalMarcasCreadas = 0;
+      let ultimoResultado: Awaited<ReturnType<typeof woocommerceService.syncMarcasCompatibilidad>>['data'] | null = null;
+
+      // Pase por lotes seguros de 180 términos para no superar memoria ni tiempo de respuesta HTTP
+      for (let pase = 1; pase <= 6; pase++) {
+        const r = await woocommerceService.syncMarcasCompatibilidad({
+          encolarProductos: pase === 1,
+          sincronizarLoteInmediato: true,
+          maxProductosLote: 100,
+          maxCreacionesTaxonomia: 180,
+        });
+        if (!r.success || !r.data) {
+          throw new Error(r.error || 'Error al sincronizar marcas de compatibilidad');
+        }
+        ultimoResultado = r.data;
+        totalMarcasCreadas += r.data.taxonomiaMarcasWoo.marcasNuevasCreadasEnWoo || 0;
+        const pendientesTax = r.data.taxonomiaMarcasWoo.pendientesPorCrearEnWoo || 0;
+        if (pendientesTax <= 0) break;
+      }
+
+      if (ultimoResultado) {
+        const { resumenCatalogo, loteSincronizado } = ultimoResultado;
         const loteTxt = loteSincronizado
-          ? ` · Primer lote asignado: ${loteSincronizado.procesados} productos`
+          ? ` · Lote asignado: ${loteSincronizado.procesados} productos (restantes en cola: ${loteSincronizado.pendientesRestantes})`
           : '';
         notify(
-          `🚗 Marcas de Compatibilidad WooCommerce listas: ${resumenCatalogo.totalMarcasVehiculo} marcas, ${resumenCatalogo.totalModelosVehiculo} modelos y ${resumenCatalogo.totalRangosAnios} rangos de años (${taxonomiaMarcasWoo.marcasNuevasCreadasEnWoo} nuevas creadas en WordPress)${loteTxt}`,
+          `🚗 Marcas de Compatibilidad WooCommerce listas: ${resumenCatalogo.totalMarcasVehiculo} marcas, ${resumenCatalogo.totalModelosVehiculo} modelos y ${resumenCatalogo.totalRangosAnios} rangos de años (${totalMarcasCreadas} nuevas creadas en WordPress)${loteTxt}`,
           'success'
         );
         await cargarTodo();
-      } else {
-        notify(r.error || 'Error al sincronizar marcas de compatibilidad', 'error');
       }
-    } catch {
-      notify('Error al sincronizar marcas y años en WooCommerce', 'error');
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Error al sincronizar marcas y años en WooCommerce', 'error');
     } finally {
       setSincronizandoMarcasWoo(false);
     }
@@ -539,14 +552,29 @@ export default function InventarioErpConsolidado() {
   const handleSyncWoo = async () => {
     setSincronizandoWoo(true);
     try {
-      const r = await woocommerceService.sync({ soloDelta: true });
-      if (r.success && r.data) {
-        notify(
-          `✓ Sincronización WooCommerce completada (${r.data.creados} creados, ${r.data.actualizados} actualizados)`,
-          'success'
-        );
-        await cargarTodo();
+      let totalCreados = 0;
+      let totalActualizados = 0;
+      let pendientesRestantes = 0;
+
+      // Procesar hasta 3 lotes de 150 productos por clic (~450 productos por clic sin timeout)
+      for (let lote = 1; lote <= 3; lote++) {
+        const r = await woocommerceService.sync({ soloDelta: true, maxItems: 150 });
+        if (!r.success || !r.data) {
+          throw new Error(r.error || 'Error en lote de sincronización WooCommerce');
+        }
+        totalCreados += r.data.creados || 0;
+        totalActualizados += r.data.actualizados || 0;
+        pendientesRestantes = r.data.pendientesRestantes || 0;
+        if (pendientesRestantes <= 0 || (r.data.procesados || 0) === 0) break;
       }
+
+      notify(
+        `✓ Lote WooCommerce completado (+${totalCreados} creados, +${totalActualizados} actualizados${
+          pendientesRestantes > 0 ? ` · quedan ${pendientesRestantes} pendientes en cola` : ' · cola al día'
+        })`,
+        'success'
+      );
+      await cargarTodo();
     } catch {
       notify('Error al sincronizar con WooCommerce', 'error');
     } finally {

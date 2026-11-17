@@ -373,6 +373,13 @@ export function calcularHashCatalogoItem(item = {}) {
       .join(';');
   }
 
+  const compatSerialized = Array.isArray(item.compatibilidadesVehiculo)
+    ? item.compatibilidadesVehiculo
+        .map(c => `${c.marca || ''}:${c.modelo || ''}:${c.anioDesde || ''}-${c.anioHasta || ''}`)
+        .sort()
+        .join('|')
+    : '';
+
   const payload = JSON.stringify({
     skuPublicoFrp: String(item.skuPublicoFrp || item.codigo || '').trim().toUpperCase(),
     nombre: String(item.nombre || '').trim(),
@@ -386,6 +393,7 @@ export function calcularHashCatalogoItem(item = {}) {
     ocultarEnTienda: Boolean(item.ocultarEnTienda),
     marcas,
     modelos: modelosSerialized,
+    compat: compatSerialized,
     anioDesde: item.anioDesde ? Number(item.anioDesde) : null,
     anioHasta: item.anioHasta ? Number(item.anioHasta) : null,
   });
@@ -634,6 +642,7 @@ async function obtenerCatalogoDesdeOrigenAiloo(nodo) {
         });
         return obj;
       });
+      allRawRows.length = 0;
       return {
         modoOrigen: 'bigquery_live',
         vistaOrigen: fullView,

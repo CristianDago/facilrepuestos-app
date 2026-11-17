@@ -431,11 +431,13 @@ router.post('/sync-marcas-compatibilidad', requireSyncAccess, async (req, res, n
   try {
     const encolarProductos = req.body?.encolarProductos !== false;
     const sincronizarLoteInmediato = req.body?.sincronizarLoteInmediato !== false;
-    const maxProductosLote = Number(req.body?.maxProductosLote || 150) || 150;
+    const maxProductosLote = Number(req.body?.maxProductosLote || 100) || 100;
+    const maxCreacionesTaxonomia = Number(req.body?.maxCreacionesTaxonomia || 180) || 180;
     const resultado = await sincronizarMarcasCompatibilidadWooCommerce({
       encolarProductos,
       sincronizarLoteInmediato,
       maxProductosLote,
+      maxCreacionesTaxonomia,
     });
     res.json({ success: true, data: resultado });
   } catch (error) {
@@ -445,11 +447,11 @@ router.post('/sync-marcas-compatibilidad', requireSyncAccess, async (req, res, n
 
 // POST /api/woocommerce/sync
 // Por defecto ejecuta sincronización incremental (`soloDelta: true`), enviando únicamente
-// los productos con `needsWooSync === true`. Si se envía `{ soloDelta: false }`, fuerza catálogo completo.
+// los productos con `needsWooSync === true` en lotes seguros (por defecto 150 por llamada).
 router.post('/sync', requireSyncAccess, async (req, res, next) => {
   try {
     const soloDelta = req.body?.soloDelta !== false && req.query?.soloDelta !== 'false';
-    const maxItems = Number(req.body?.maxItems || req.query?.maxItems || 0) || 0;
+    const maxItems = Math.min(300, Math.max(25, Number(req.body?.maxItems || req.query?.maxItems || 150) || 150));
     const resultado = await sincronizarInventarioConWooCommerce({ soloDelta, maxItems });
     res.json({ success: true, data: resultado });
   } catch (error) {

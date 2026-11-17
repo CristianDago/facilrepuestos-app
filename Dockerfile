@@ -19,6 +19,7 @@ COPY server/ ./
 COPY --from=client-builder /build/client/dist ./public
 
 ENV PORT=8080
+ENV NODE_OPTIONS="--max-old-space-size=1536"
 EXPOSE 8080
 
 CMD ["node", "index.js"]

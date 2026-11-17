@@ -6,6 +6,7 @@ export interface SyncResultado {
   modoConexion?: 'woocommerce_rest_live' | 'simulacion_local_delta';
   total: number;
   procesados?: number;
+  pendientesRestantes?: number;
   creados: number;
   actualizados: number;
   ocultados?: number;
@@ -100,6 +101,7 @@ export interface RespuestaSyncMarcasCompatibilidad {
     endpointMarcasDisponible: boolean;
     marcasExistentesEnWoo: number;
     marcasNuevasCreadasEnWoo: number;
+    pendientesPorCrearEnWoo?: number;
     totalRutasAseguradas: number;
   };
   productosEncoladosParaAsignacion: number;
@@ -115,22 +117,25 @@ export const woocommerceService = {
   getStatus: () =>
     api.get<ApiResponse<EstadoColaWooCommerce>>('/woocommerce/status'),
 
-  sync: (opciones?: { soloDelta?: boolean }) =>
+  sync: (opciones?: { soloDelta?: boolean; maxItems?: number }) =>
     api.post<ApiResponse<SyncResultado>>('/woocommerce/sync', {
       soloDelta: opciones?.soloDelta !== false,
+      maxItems: opciones?.maxItems || 150,
     }),
 
   syncMarcasCompatibilidad: (opciones?: {
     encolarProductos?: boolean;
     sincronizarLoteInmediato?: boolean;
     maxProductosLote?: number;
+    maxCreacionesTaxonomia?: number;
   }) =>
     api.post<ApiResponse<RespuestaSyncMarcasCompatibilidad>>(
       '/woocommerce/sync-marcas-compatibilidad',
       {
         encolarProductos: opciones?.encolarProductos !== false,
         sincronizarLoteInmediato: opciones?.sincronizarLoteInmediato !== false,
-        maxProductosLote: opciones?.maxProductosLote || 150,
+        maxProductosLote: opciones?.maxProductosLote || 100,
+        maxCreacionesTaxonomia: opciones?.maxCreacionesTaxonomia || 180,
       }
     ),
 

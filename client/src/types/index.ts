@@ -1006,7 +1006,14 @@ export interface CandidatoInventarioCascada {
   skuPublicoFrp: string;
   nombre: string;
   fabricante?: string;
-  origen: 'soluparts_ailoo' | 'global_ailoo' | 'portal_proveedor_local' | 'mesa_whatsapp' | 'escalamiento_experto';
+  origen:
+    | 'soluparts_ailoo'
+    | 'global_ailoo'
+    | 'portal_proveedor_local'
+    | 'stock_propio'
+    | 'mesa_whatsapp'
+    | 'escalamiento_experto'
+    | string;
   nodoAilooId?: string | null;
   proveedorId?: string | null;
   proveedorNombre: string;
@@ -1016,6 +1023,9 @@ export interface CandidatoInventarioCascada {
   margenPct: number;
   precioVentaNeto: number;
   precioVentaConIva: number;
+  wooProductId?: number | null;
+  urlProductoWoo?: string;
+  urlAgregarAlCarroWoo?: string;
   subConsultaResumen?: string;
 }
 

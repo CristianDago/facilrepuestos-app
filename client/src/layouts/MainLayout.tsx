@@ -186,27 +186,9 @@ export default function MainLayout() {
             >
               <span className="nav-icon">📲</span> Mesa Abastecimiento WSP
             </NavLink>
-            <NavLink
-              to="/escalamientos-ia"
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `nav-item ${isActive ? "active" : ""}`
-              }
-            >
-              <span className="nav-icon">🧠</span> Escalamientos & IA
-            </NavLink>
-            <NavLink
-              to="/pos"
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `nav-item ${isActive ? "active" : ""}`
-              }
-            >
-              <span className="nav-icon">🛒</span> Punto de Venta (POS)
-            </NavLink>
           </div>
 
-          {/* 2. CATÁLOGO, STOCK Y PROVEEDORES */}
+          {/* 2. CATÁLOGO, STOCK, PROVEEDORES Y POS INTERNO */}
           <div className="nav-section">
             <div className="nav-section-label">Catálogo & Bodegas</div>
             <NavLink
@@ -235,6 +217,15 @@ export default function MainLayout() {
               }
             >
               <span className="nav-icon">🏪</span> Portal Proveedor
+            </NavLink>
+            <NavLink
+              to="/pos"
+              onClick={closeSidebar}
+              className={({ isActive }) =>
+                `nav-item ${isActive ? "active" : ""}`
+              }
+            >
+              <span className="nav-icon">🛒</span> POS Interno / Bodega
             </NavLink>
           </div>
 
@@ -499,24 +490,24 @@ export default function MainLayout() {
 
             <button
               className="btn btn-primary btn-sm"
-              onClick={() => navigate("/pos")}
-              title="Abrir Punto de Venta de Repuestos"
-            >
-              🛒 Venta POS
-            </button>
-            <button
-              className="btn btn-dark btn-sm"
               onClick={() => navigate("/agente-omnicanal")}
-              title="Abrir monitor de Repuestín WhatsApp"
+              title="Abrir monitor en vivo de Repuestín WhatsApp"
             >
               🤖 Repuestín WSP
             </button>
             <button
-              className={`btn btn-sm ${styles.headerTallerBtn}`}
+              className="btn btn-dark btn-sm"
               onClick={() => navigate("/mesa-wsp")}
               title="Abrir Mesa de Abastecimiento WhatsApp"
             >
               📲 Mesa WSP
+            </button>
+            <button
+              className={`btn btn-sm ${styles.headerTallerBtn}`}
+              onClick={() => navigate("/inventario")}
+              title="Abrir Catálogo e Inventario Web"
+            >
+              📦 Catálogo
             </button>
           </div>
 

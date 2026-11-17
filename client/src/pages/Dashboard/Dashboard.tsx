@@ -165,14 +165,6 @@ export default function Dashboard() {
       .slice(0, 6);
   }, [inventario]);
 
-  const escalamientosPendientesList = useMemo(
-    () =>
-      escalamientos
-        .filter((e) => e.estado === 'pendiente' || e.estado === 'en_revision')
-        .slice(0, 5),
-    [escalamientos]
-  );
-
   // ─── MÉTRICAS DE TALLER & AUTOS (CONSERVADAS 100%) ─────────
   const vendidas = cotizaciones.filter((c) => c.estado === 'Aprobada');
   const entregadas = ordenes.filter((o) => o.estado === 'Entregado');
@@ -337,14 +329,14 @@ export default function Dashboard() {
 
             <div
               className={`stat-card ${styles.cardInteractive}`}
-              onClick={() => navigate('/escalamientos-ia')}
+              onClick={() => navigate('/agente-omnicanal')}
             >
               <div className="stat-value">
-                {statsRepuestos.escalamientosPendientes}
+                {statsRepuestos.sesionesConCarrito}
               </div>
-              <div className="stat-label">Escalamientos Técnicos IA</div>
+              <div className="stat-label">Carros Cotizados Activos</div>
               <div className={styles.statSubtext}>
-                {escalamientos.length} consultas procesadas en total
+                {statsRepuestos.pedidosConsolidados} pedidos consolidados listos
               </div>
             </div>
 
@@ -510,46 +502,24 @@ export default function Dashboard() {
                 </table>
               </div>
 
-              {/* Sub-bloque: Alertas de Escalamientos Técnicos IA */}
+              {/* Sub-bloque: Reglas de Atención y Logística Activas en Repuestín */}
               <div className={styles.subSectionDivider}>
                 <div className={styles.subSectionHeader}>
                   <span>
-                    🧠 Alertas de Escalamiento Técnico IA ({escalamientosPendientesList.length} pendientes)
+                    ⏱️ Reglas Operativas Activas en Repuestín WhatsApp (+56 9 2110 9851)
                   </span>
                   <button
                     className={styles.linkActionBtn}
-                    onClick={() => navigate('/escalamientos-ia')}
+                    onClick={() => navigate('/agente-omnicanal')}
                   >
-                    Ver todos →
+                    Abrir Monitor →
                   </button>
                 </div>
-                {escalamientosPendientesList.length > 0 ? (
-                  <div className={styles.compactAlertList}>
-                    {escalamientosPendientesList.slice(0, 3).map((esc) => (
-                      <div
-                        key={esc.id}
-                        className={styles.compactAlertItem}
-                        onClick={() => navigate('/escalamientos-ia')}
-                      >
-                        <div>
-                          <span className={styles.ticketBadge}>{esc.ticketRef}</span>
-                          <strong>
-                            {esc.marcaVehiculo} {esc.modeloVehiculo}{' '}
-                            {esc.anioVehiculo || ''}
-                          </strong>
-                          <div className={styles.cellSubText}>
-                            {esc.motivoEscalamiento || esc.mensajeCliente}
-                          </div>
-                        </div>
-                        <span className="badge badge-pending">Responder →</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className={styles.allClearBox}>
-                    ✓ No hay escalamientos técnicos pendientes. Repuestín está respondiendo con catálogo y reglas aprendidas.
-                  </div>
-                )}
+                <div className={styles.allClearBox}>
+                  ✓ <strong>Espera inteligente 5 seg.</strong> para unir mensajes seguidos ·{' '}
+                  <strong>Retiro Enrique Olivares 224:</strong> Stock propio inmediato, Portal proveedor 1h 30m, Soluparts 15:00 hrs (compras antes de 12:00 mismo día; después de 12:00 al día siguiente) ·{' '}
+                  <strong>Delivery Santiago:</strong> 2 horas (L-V 09:00 a 18:00; compras tras 16:00 hrs al día siguiente).
+                </div>
               </div>
             </div>
 

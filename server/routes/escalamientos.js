@@ -7,14 +7,83 @@ import {
   construirMensajeFinalCliente,
   generarTerminosClave,
   despacharEscalamientoANodoAiloo,
+  consultarRespuestasEscalamientosEnBigQuery,
   sanitizarTextoParaProveedor,
 } from '../services/ailooBridge.js';
 import {
   sincronizarCatalogoNodoAiloo,
   calcularHashCatalogoItem,
 } from '../services/ailooCatalogSync.js';
+import { enviarRespuestaClienteMetaWhatsapp } from './agenteOmnicanal.js';
 
 const router = Router();
+
+/**
+ * Cuando un escalamiento es respondido (ya sea en `portal.soluparts.cl/escalamiento` o en nuestro portal),
+ * inyecta la respuesta en la conversación activa de Repuestín WhatsApp y la envía al teléfono del cliente.
+ */
+async function notificarRespuestaEscalamientoAClienteWsp(esc, updateData) {
+  try {
+    let telefonoDestino = String(esc.clienteTelefono || '').trim();
+    const sesionId = esc.sesionAgenteId || null;
+
+    if (sesionId) {
+      const sesRef = db.collection('sesiones_agente_omnicanal').doc(sesionId);
+      const sesSnap = await sesRef.get();
+      if (sesSnap.exists) {
+        const sesData = sesSnap.data() || {};
+        if (!telefonoDestino && sesData.clienteTelefono) {
+          telefonoDestino = String(sesData.clienteTelefono).trim();
+        }
+        const mensajes = Array.isArray(sesData.mensajes) ? [...sesData.mensajes] : [];
+        mensajes.push({
+          id: `msg-esc-${Date.now()}`,
+          rol: 'agente',
+          autor: 'Repuestín · FácilRepuestos.cl',
+          texto: updateData.mensajeFinalCliente,
+          creadoEn: new Date().toISOString(),
+          origen: 'respuesta_escalamiento_soluparts',
+        });
+
+        const carrito = Array.isArray(sesData.carritoCotizado) ? [...sesData.carritoCotizado] : [];
+        if (updateData.skuPublicoFrp && Number(updateData.precioVentaFrp) > 0) {
+          const neto = Math.round(Number(updateData.precioVentaFrp));
+          const conIva = Math.round(neto * 1.19);
+          if (!carrito.some((c) => c.skuPublicoFrp === updateData.skuPublicoFrp)) {
+            carrito.push({
+              id: updateData.candidatoInventarioId || esc.id || `esc-${Date.now()}`,
+              skuPublicoFrp: updateData.skuPublicoFrp,
+              nombre: updateData.candidatoNombre || esc.candidatoNombre || 'REPUESTO VALIDADO',
+              fabricante: 'OEM VERIFICADO',
+              origen: esc.nodoAilooId === 'soluparts' ? 'soluparts_ailoo' : 'escalamiento_experto',
+              proveedorNombre: 'FácilRepuestos SpA',
+              stock: 2,
+              cantidad: 1,
+              precioVentaNeto: neto,
+              precioVentaConIva: conIva,
+            });
+          }
+        }
+
+        await sesRef.update({
+          mensajes,
+          carritoCotizado: carrito,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    }
+
+    if (telefonoDestino && /\d{8,15}/.test(telefonoDestino.replace(/\D/g, ''))) {
+      return await enviarRespuestaClienteMetaWhatsapp({
+        telefonoDestino,
+        texto: `${updateData.mensajeFinalCliente}\n\n👉 Si deseas confirmarlo, escribe *COMPRAR* por este mismo WhatsApp.`,
+      });
+    }
+  } catch (err) {
+    console.warn('[Escalamientos->WSP] Aviso al notificar al cliente por WhatsApp:', err.message);
+  }
+  return null;
+}
 
 router.use(requireAuth);
 
@@ -137,13 +206,90 @@ router.get('/conocimiento', async (req, res, next) => {
   }
 });
 
+let ultimoAutoSyncBqAt = 0;
+
 // ─── GET /api/escalamientos ─────────────────────────────────────────────
 // Lista los escalamientos técnicos. Si es proveedor, filtra estrictamente los asignados a su proveedorId.
 // REGLA ANTI-BYPASS ETAPA 1: Jamás se incluye el nombre ni el teléfono del cliente final hacia los proveedores;
 // el solicitante es siempre FácilRepuestos SpA y el texto se sanitiza contra teléfonos/emails/nombres propios.
 router.get('/', async (req, res, next) => {
   try {
-    const snap = await db.collection('escalamientos_ia').get();
+    let snap = await db.collection('escalamientos_ia').get();
+
+    // Auto-sincronizar respuestas desde `soluparts-mostrador-prod.soluparts.escalamientos` (cooldown 20s)
+    const nowMs = Date.now();
+    const pendientesAiloo = snap.docs.filter((d) => {
+      const data = d.data();
+      return (
+        data.estado === 'pendiente_mostrador' &&
+        data.ticketRef &&
+        (data.tipoDestino === 'nodo_ailoo' || data.nodoAilooId === 'soluparts')
+      );
+    });
+
+    if (pendientesAiloo.length > 0 && nowMs - ultimoAutoSyncBqAt > 20000) {
+      ultimoAutoSyncBqAt = nowMs;
+      try {
+        const ticketRefs = pendientesAiloo.map((d) => d.data().ticketRef).filter(Boolean);
+        const bqConsulta = await consultarRespuestasEscalamientosEnBigQuery(
+          {
+            id: 'soluparts',
+            projectId: 'soluparts-mostrador-prod',
+            datasetId: 'soluparts',
+            tablaEscalamientos: 'escalamientos',
+          },
+          ticketRefs
+        );
+        if (bqConsulta?.respuestasPorTicket?.size > 0) {
+          let huboCambios = false;
+          for (const docSnap of pendientesAiloo) {
+            const esc = docSnap.data();
+            const matchBq = bqConsulta.respuestasPorTicket.get(String(esc.ticketRef || '').toUpperCase());
+            if (!matchBq || !matchBq.respuestaMostrador) continue;
+
+            const costoBruto = Number(esc.costoBrutoProveedor) || 34500;
+            const margen = Number(esc.margenPorcentajeAplicado) || 30;
+            const precioVentaFrp = calcularPrecioPublicoFrp(costoBruto, margen);
+            const skuPublicoFrp =
+              esc.skuPublicoFrp ||
+              generarSkuPublicoFrp({
+                prefijoSku: 'FRP-SOL',
+                codigoOrigen: esc.candidatoCodigo || 'EXP',
+              });
+            const mensajeFinalCliente = construirMensajeFinalCliente({
+              ...esc,
+              respuestaMostrador: matchBq.respuestaMostrador,
+              skuPublicoFrp,
+              precioVentaFrp,
+            });
+            const nowIso = new Date().toISOString();
+            const updateData = {
+              estado: 'respondido',
+              calceConfirmado: true,
+              respuestaMostrador: matchBq.respuestaMostrador,
+              respuestaExperto: matchBq.respuestaMostrador,
+              respondidoPor: matchBq.respondidoPor || 'Mostrador Soluparts (portal.soluparts.cl)',
+              respondidoEn: matchBq.respondidoEn || nowIso,
+              costoBrutoProveedor: costoBruto,
+              margenPorcentajeAplicado: margen,
+              precioVentaFrp,
+              skuPublicoFrp,
+              mensajeFinalCliente,
+              updatedAt: nowIso,
+            };
+            await db.collection('escalamientos_ia').doc(docSnap.id).update(updateData);
+            await notificarRespuestaEscalamientoAClienteWsp({ id: docSnap.id, ...esc }, updateData);
+            huboCambios = true;
+          }
+          if (huboCambios) {
+            snap = await db.collection('escalamientos_ia').get();
+          }
+        }
+      } catch (autoErr) {
+        console.warn('[Escalamientos AutoSync BQ] Aviso:', autoErr.message);
+      }
+    }
+
     let items = snap.docs.map((doc) => {
       const raw = doc.data();
       // Eliminar cualquier campo de identidad del cliente final y sanitizar texto técnico
@@ -534,12 +680,19 @@ router.post('/:id/responder', async (req, res, next) => {
       inventarioActualizado = true;
     }
 
+    // 3. Notificar automáticamente al cliente por WhatsApp y actualizar su sesión en Repuestín
+    const envioWhatsapp = await notificarRespuestaEscalamientoAClienteWsp(
+      { id, ...esc },
+      updateEscalamiento
+    );
+
     res.json({
       success: true,
       data: {
         escalamiento: { id, ...esc, ...updateEscalamiento },
         reglaConocimiento: reglaCreada,
         inventarioActualizado,
+        envioWhatsapp,
       },
     });
   } catch (err) {
@@ -548,16 +701,23 @@ router.post('/:id/responder', async (req, res, next) => {
 });
 
 // ─── POST /api/escalamientos/nodos/:id/sync ─────────────────────────────
-// Sincroniza las respuestas que los expertos de Soluparts o Global dieron en sus propios portales
-// (`soluparts_ailoo.escalamientos` / `global_ailoo.escalamientos`) hacia FácilRepuestos.
+// Sincroniza las respuestas reales que los expertos de Soluparts dieron en `portal.soluparts.cl/escalamiento`
+// (tabla BigQuery `soluparts-mostrador-prod.soluparts.escalamientos`) hacia nuestro portal y responde por WSP al cliente.
 router.post('/nodos/:id/sync', requireAdmin, async (req, res, next) => {
   try {
     const { id: nodoId } = req.params;
     const nodoSnap = await db.collection('nodos_ailoo').doc(nodoId).get();
-    if (!nodoSnap.exists) {
-      return res.status(404).json({ success: false, error: `Nodo Ailoo '${nodoId}' no existe` });
-    }
-    const nodo = { id: nodoSnap.id, ...nodoSnap.data() };
+    const nodo = nodoSnap.exists
+      ? { id: nodoSnap.id, ...nodoSnap.data() }
+      : {
+          id: nodoId,
+          nombre: nodoId === 'soluparts' ? 'Soluparts' : nodoId.toUpperCase(),
+          projectId: `${nodoId}-mostrador-prod`,
+          datasetId: nodoId === 'soluparts' ? 'soluparts' : `${nodoId}_ailoo`,
+          tablaEscalamientos: 'escalamientos',
+          prefijoSku: nodoId === 'soluparts' ? 'FRP-SOL' : 'FRP-GLB',
+          margenPct: nodoId === 'soluparts' ? 0 : 28,
+        };
     const now = new Date().toISOString();
 
     // Buscar escalamientos pendientes para este nodo
@@ -566,18 +726,36 @@ router.post('/nodos/:id/sync', requireAdmin, async (req, res, next) => {
       .map((d) => ({ id: d.id, ...d.data() }))
       .filter((e) => e.tipoDestino === 'nodo_ailoo' && e.nodoAilooId === nodoId && e.estado === 'pendiente');
 
+    const ticketRefs = pendientesNodo
+      .flatMap((e) => [e.ticketRef, e.id])
+      .filter(Boolean);
+
+    // Consultar en BigQuery (`soluparts-mostrador-prod.soluparts.escalamientos`) cuáles ya fueron respondidos en portal.soluparts.cl/escalamiento
+    const filasRespondidasBq = await consultarRespuestasEscalamientosEnBigQuery(nodo, ticketRefs);
+    const porIdBq = new Map();
+    for (const row of filasRespondidasBq) {
+      if (row.id) porIdBq.set(String(row.id), row);
+      if (row.session_id) porIdBq.set(String(row.session_id).replace(/^frp-/, ''), row);
+    }
+
     const resueltos = [];
 
     for (const esc of pendientesNodo) {
-      const costoSimulado = esc.nodoAilooId === 'soluparts' ? 48000 : 35000;
-      const codigoSug = esc.candidatoCodigo || `${nodo.id.slice(0, 3).toUpperCase()}-${Math.floor(10000 + Math.random() * 89999)}`;
+      const filaBq = porIdBq.get(String(esc.ticketRef || '')) || porIdBq.get(String(esc.id || ''));
+      if (!filaBq || !filaBq.respuesta_mostrador) {
+        continue;
+      }
+
+      const costoBase = Number(esc.precioCostoProveedor) || 0;
+      const codigoSug = esc.candidatoCodigo || '';
       const nombreSug =
         esc.candidatoNombre ||
         `REPUESTO COMPATIBLE ${esc.marcaVehiculo} ${esc.modeloVehiculo} ${esc.anioVehiculo || ''}`.trim();
-      const respuestaExperta = `Validado en mostrador ${nodo.nombre} (${nodo.datasetId}): Compatible con ${esc.marcaVehiculo} ${esc.modeloVehiculo} ${esc.anioVehiculo || ''} motor ${esc.motorVehiculo || 'estándar'}. Código confirmado: ${codigoSug}.`;
+      const respuestaExperta = String(filaBq.respuesta_mostrador).trim();
+      const margenEfectivo = nodo.id === 'soluparts' ? 0 : Number(nodo.margenPct || 0);
 
-      const precioVentaFrp = calcularPrecioPublicoFrp(costoSimulado, nodo.margenPct);
-      const skuPublicoFrp = generarSkuPublicoFrp(nodo.prefijoSku, codigoSug);
+      const precioVentaFrp = calcularPrecioPublicoFrp(costoBase, margenEfectivo);
+      const skuPublicoFrp = codigoSug ? generarSkuPublicoFrp(nodo.prefijoSku || 'FRP-SOL', codigoSug) : '';
       const mensajeFinalCliente = construirMensajeFinalCliente({
         respuestaTecnica: respuestaExperta,
         nombreRepuesto: nombreSug,
@@ -591,12 +769,13 @@ router.post('/nodos/:id/sync', requireAdmin, async (req, res, next) => {
       const updateData = {
         estado: 'respondido',
         respuestaMostrador: respuestaExperta,
-        respondidoPor: `Mostrador ${nodo.nombre} (${nodo.datasetId})`,
-        respondidoEn: now,
+        respuestaExperto: respuestaExperta,
+        respondidoPor: filaBq.respondido_por || `Mostrador ${nodo.nombre}`,
+        respondidoEn: filaBq.respondido_en || now,
         candidatoCodigo: codigoSug,
         candidatoNombre: nombreSug,
-        precioCostoProveedor: costoSimulado,
-        margenAplicadoPct: nodo.margenPct,
+        precioCostoProveedor: costoBase,
+        margenAplicadoPct: margenEfectivo,
         precioVentaFrp,
         skuPublicoFrp,
         mensajeFinalCliente,
@@ -635,26 +814,32 @@ router.post('/nodos/:id/sync', requireAdmin, async (req, res, next) => {
         categoriaRepuesto: 'GENERAL',
         skuProveedor: codigoSug,
         skuPublicoFrp,
-        precioCostoRef: costoSimulado,
+        precioCostoRef: costoBase,
         precioVentaFrpRef: precioVentaFrp,
-        validadoPor: `Mostrador ${nodo.nombre} (${nodo.datasetId})`,
+        validadoPor: filaBq.respondido_por || `Mostrador ${nodo.nombre}`,
         activo: true,
         creadoEn: now,
       });
 
+      // Enviar la respuesta directamente al WhatsApp del cliente y a su sesión activa en Repuestín
+      await notificarRespuestaEscalamientoAClienteWsp(esc, updateData);
+
       resueltos.push({ id: esc.id, ticketRef: esc.ticketRef, skuPublicoFrp, precioVentaFrp });
     }
 
-    await db.collection('nodos_ailoo').doc(nodoId).update({
-      ultimaSync: now,
-      updatedAt: now,
-    });
+    if (nodoSnap.exists) {
+      await db.collection('nodos_ailoo').doc(nodoId).update({
+        ultimaSync: now,
+        updatedAt: now,
+      });
+    }
 
     res.json({
       success: true,
       data: {
         nodoId,
-        dataset: `${nodo.datasetId}`,
+        dataset: `${nodo.projectId}.${nodo.datasetId}.escalamientos`,
+        pendientesConsultados: pendientesNodo.length,
         sincronizados: resueltos.length,
         resueltos,
         ultimaSync: now,

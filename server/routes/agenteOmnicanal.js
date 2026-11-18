@@ -35,6 +35,9 @@ import { requireAuth } from '../middleware/auth.js';
 import {
   generarTerminosClave,
   despacharEscalamientoANodoAiloo,
+  consultarRespuestasEscalamientosEnBigQuery,
+  calcularPrecioPublicoFrp,
+  construirMensajeFinalCliente,
   sanitizarTextoParaProveedor,
   sanitizarMensajeHaciaClienteFinal,
 } from '../services/ailooBridge.js';
@@ -1157,8 +1160,56 @@ async function verificarRespuestasEnVivoDeProveedores(sesion) {
     try {
       const snap = await db.collection(COLECCION_ESCALAMIENTOS).doc(escInfo.id).get();
       if (snap.exists) {
-        const data = snap.data();
-        if (data.estado === 'respondido' && data.respuestaExperto) {
+        let data = snap.data();
+
+        // Si sigue pendiente en nuestro Firestore y pertenece a un nodo Ailoo (ej. Soluparts),
+        // consultamos en vivo la tabla `soluparts.escalamientos` de BigQuery por si ya respondieron en portal.soluparts.cl/escalamiento
+        if (data.estado !== 'respondido' && data.ticketRef && (data.nodoAilooId || data.tipoDestino === 'nodo_ailoo')) {
+          try {
+            const bqRes = await consultarRespuestasEscalamientosEnBigQuery(
+              {
+                id: data.nodoAilooId || 'soluparts',
+                projectId: 'soluparts-mostrador-prod',
+                datasetId: 'soluparts',
+                tablaEscalamientos: 'escalamientos',
+              },
+              [data.ticketRef]
+            );
+            const matchBq = bqRes?.respuestasPorTicket?.get(String(data.ticketRef).toUpperCase());
+            if (matchBq && matchBq.respuestaMostrador) {
+              const costoBruto = Number(data.costoBrutoProveedor) || 34500;
+              const margen = Number(data.margenPorcentajeAplicado) || 30;
+              const precioVentaFrp = calcularPrecioPublicoFrp(costoBruto, margen);
+              const skuFrp = data.skuPublicoFrp || escInfo.candidatoSku || `FRP-SOL-${data.ticketRef}`;
+              const mensajeFinalCliente = construirMensajeFinalCliente({
+                ...data,
+                respuestaMostrador: matchBq.respuestaMostrador,
+                skuPublicoFrp: skuFrp,
+                precioVentaFrp,
+              });
+              const nowIso = new Date().toISOString();
+              const patchBq = {
+                estado: 'respondido',
+                calceConfirmado: true,
+                respuestaMostrador: matchBq.respuestaMostrador,
+                respuestaExperto: matchBq.respuestaMostrador,
+                respondidoPor: matchBq.respondidoPor || 'Mostrador Soluparts (portal.soluparts.cl)',
+                respondidoEn: matchBq.respondidoEn || nowIso,
+                skuPublicoFrp: skuFrp,
+                precioVentaFrp,
+                mensajeFinalCliente,
+                updatedAt: nowIso,
+              };
+              await db.collection(COLECCION_ESCALAMIENTOS).doc(escInfo.id).update(patchBq);
+              data = { ...data, ...patchBq };
+            }
+          } catch {
+            // No bloquear si BigQuery demora
+          }
+        }
+
+        const textoRespuestaExperto = data.respuestaExperto || data.respuestaMostrador || '';
+        if (data.estado === 'respondido' && textoRespuestaExperto) {
           const precioNeto = Number(data.precioVentaFrp || data.precioConfirmado || 45000);
           const precioConIva = Math.round(precioNeto * 1.19);
           actualizaciones.push({
@@ -1167,7 +1218,7 @@ async function verificarRespuestasEnVivoDeProveedores(sesion) {
             proveedorNombre: 'Mesa Técnica FácilRepuestos',
             repuesto: data.candidatoNombre || 'Repuesto validado por especialista',
             skuPublicoFrp: data.skuPublicoFrp || escInfo.candidatoSku || `FRP-EXP-${data.ticketRef}`,
-            explicacion: sanitizarMensajeHaciaClienteFinal(data.respuestaExperto || data.respuestaMostrador || ''),
+            explicacion: sanitizarMensajeHaciaClienteFinal(textoRespuestaExperto),
             precioVentaNeto: precioNeto,
             precioVentaConIva: precioConIva,
           });
@@ -2321,13 +2372,19 @@ async function ejecutarCascadaAgenteOmnicanal({
       const nuevoEsc = {
         ticketRef,
         sesionAgenteId: sesion.id,
+        clienteTelefono: sesion.clienteTelefono || '',
+        clienteNombre: sesion.clienteNombre || '',
         solicitante: 'FácilRepuestos SpA (Mesa Técnica)',
         canalOrigen: sesion.canal === 'web_cliente' ? 'web' : 'whatsapp',
         estado: 'pendiente',
         prioridad: 'alta',
         tipoDestino: esNodoAiloo ? 'nodo_ailoo' : 'proveedor_local',
         nodoAilooId: esNodoAiloo ? nodoAilooId : null,
-        datasetDestino: esNodoAiloo ? `${nodoAilooId}_ailoo.escalamientos` : null,
+        datasetDestino: esNodoAiloo
+          ? nodoAilooId === 'soluparts'
+            ? 'soluparts-mostrador-prod.soluparts.escalamientos'
+            : `${nodoAilooId}_ailoo.escalamientos`
+          : null,
         proveedorId: !esNodoAiloo ? mejorCandidato?.proveedorId || 'prov-demo-001' : null,
         proveedorNombre: esNodoAiloo
           ? nodoAilooId === 'global'
@@ -2344,8 +2401,10 @@ async function ejecutarCascadaAgenteOmnicanal({
         transcripcionAudio: audioSanitizado,
         fotoMuestraUrl: fotoUrl || '',
         motivoEscalamiento: motivoSanitizado,
+        candidatoInventarioId: mejorCandidato?.id || null,
         candidatoCodigo: mejorCandidato?.codigoInterno || '',
         candidatoNombre: mejorCandidato?.nombre || resumenRepuesto,
+        precioCostoProveedor: Number(mejorCandidato?.precioCostoProveedor || 0),
         creadoEn: now,
         actualizadoEn: now,
       };
@@ -2354,7 +2413,15 @@ async function ejecutarCascadaAgenteOmnicanal({
 
       if (esNodoAiloo) {
         await despacharEscalamientoANodoAiloo(
-          { id: nodoAilooId, datasetId: `${nodoAilooId}_ailoo` },
+          {
+            id: nodoAilooId,
+            projectId:
+              nodoAilooId === 'soluparts'
+                ? 'soluparts-mostrador-prod'
+                : `${nodoAilooId}-mostrador-prod`,
+            datasetId: nodoAilooId === 'soluparts' ? 'soluparts' : `${nodoAilooId}_ailoo`,
+            tablaEscalamientos: 'escalamientos',
+          },
           { id: escRef.id, ...nuevoEsc }
         ).catch(() => null);
       }

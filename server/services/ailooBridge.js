@@ -147,11 +147,20 @@ export function generarTerminosClave({
 
 /**
  * Despacha un escalamiento técnico hacia la tabla `{projectId}.{datasetId}.escalamientos`
- * del proveedor Ailoo (ej. `soluparts_ailoo.escalamientos` o `global_ailoo.escalamientos`).
- * Enmascara siempre el teléfono del cliente usando `ticketRef` (`FRP-ESC-...`).
+ * del proveedor Ailoo (ej. `soluparts-mostrador-prod.soluparts.escalamientos` que alimenta `portal.soluparts.cl/escalamiento`).
+ * Enmascara siempre el teléfono del cliente usando `ticketRef` (`FRP-ESC-...` / `ESC-...`).
  */
 export async function despacharEscalamientoANodoAiloo(nodo, escalamiento) {
-  const targetTable = `${nodo.projectId}.${nodo.datasetId}.${nodo.tablaEscalamientos || 'escalamientos'}`;
+  const projectId =
+    nodo?.projectId ||
+    (nodo?.id === 'soluparts' ? 'soluparts-mostrador-prod' : `${nodo?.id || 'soluparts'}-mostrador-prod`);
+  const datasetId =
+    nodo?.datasetId === 'soluparts_ailoo' || (!nodo?.datasetId && nodo?.id === 'soluparts')
+      ? 'soluparts'
+      : nodo?.datasetId || 'soluparts';
+  const tableId = nodo?.tablaEscalamientos || 'escalamientos';
+  const targetTable = `${projectId}.${datasetId}.${tableId}`;
+
   const audioLimpio = sanitizarTextoParaProveedor(escalamiento.transcripcionAudio || '');
   const mensajeLimpio = sanitizarTextoParaProveedor(escalamiento.mensajeCliente || '');
   const motivoLimpio = sanitizarTextoParaProveedor(escalamiento.motivoEscalamiento || '');
@@ -170,12 +179,13 @@ export async function despacharEscalamientoANodoAiloo(nodo, escalamiento) {
     .filter(Boolean)
     .join(' | ');
 
+  const refCode = escalamiento.ticketRef || escalamiento.id;
   const bqRow = {
-    id: escalamiento.id || escalamiento.ticketRef,
-    session_id: `frp-${escalamiento.ticketRef}`,
+    id: refCode,
+    session_id: `frp-${refCode}`,
     canal: 'facilrepuestos_b2b',
     // NUNCA viaja teléfono ni nombre del cliente final hacia Soluparts/Global; el solicitante es FácilRepuestos
-    telefono: `FÁCILREPUESTOS (${escalamiento.ticketRef})`,
+    telefono: `FÁCILREPUESTOS (${refCode})`,
     mensaje_cliente: mensajeLimpio,
     motivo: motivoLimpio,
     respuesta_agente: escalamiento.respuestaAgentePreliminar || '',
@@ -190,13 +200,13 @@ export async function despacharEscalamientoANodoAiloo(nodo, escalamiento) {
   if (process.env.AILOO_BQ_LIVE === 'true') {
     try {
       const auth = new google.auth.GoogleAuth({
-        scopes: ['https://www.googleapis.com/auth/bigquery'],
+        scopes: ['https://www.googleapis.com/auth/bigquery', 'https://www.googleapis.com/auth/cloud-platform'],
       });
       const bigquery = google.bigquery({ version: 'v2', auth });
       await bigquery.tabledata.insertAll({
-        projectId: nodo.projectId,
-        datasetId: nodo.datasetId,
-        tableId: nodo.tablaEscalamientos || 'escalamientos',
+        projectId,
+        datasetId,
+        tableId,
         requestBody: {
           rows: [{ insertId: bqRow.id, json: bqRow }],
         },
@@ -218,4 +228,74 @@ export async function despacharEscalamientoANodoAiloo(nodo, escalamiento) {
     targetTable,
     bqRow,
   };
+}
+
+/**
+ * Consulta en BigQuery (`soluparts-mostrador-prod.soluparts.escalamientos`) si los tickets enviados
+ * desde FácilRepuestos ya fueron respondidos por el mostrador en `portal.soluparts.cl/escalamiento`.
+ */
+export async function consultarRespuestasEscalamientosEnBigQuery(nodo, ticketRefs = []) {
+  if (process.env.AILOO_BQ_LIVE !== 'true' || !Array.isArray(ticketRefs) || ticketRefs.length === 0) {
+    return [];
+  }
+
+  const projectId =
+    nodo?.projectId ||
+    (nodo?.id === 'soluparts' ? 'soluparts-mostrador-prod' : `${nodo?.id || 'soluparts'}-mostrador-prod`);
+  const datasetId =
+    nodo?.datasetId === 'soluparts_ailoo' || (!nodo?.datasetId && nodo?.id === 'soluparts')
+      ? 'soluparts'
+      : nodo?.datasetId || 'soluparts';
+  const tableId = nodo?.tablaEscalamientos || 'escalamientos';
+  const fullTable = `${projectId}.${datasetId}.${tableId}`;
+
+  try {
+    const auth = new google.auth.GoogleAuth({
+      scopes: ['https://www.googleapis.com/auth/bigquery', 'https://www.googleapis.com/auth/cloud-platform'],
+    });
+    const bigquery = google.bigquery({ version: 'v2', auth });
+    const bqJobProjectId = process.env.FIREBASE_PROJECT_ID || 'facilrepuestos-prod';
+
+    const idsLimpios = ticketRefs
+      .map((t) => String(t || '').replace(/[^a-zA-Z0-9_-]/g, ''))
+      .filter(Boolean);
+    if (idsLimpios.length === 0) return [];
+
+    const inList = idsLimpios.map((id) => `'${id}'`).join(', ');
+    const query = `
+      SELECT
+        CAST(id AS STRING) AS id,
+        CAST(session_id AS STRING) AS session_id,
+        CAST(estado AS STRING) AS estado,
+        CAST(respuesta_mostrador AS STRING) AS respuesta_mostrador,
+        CAST(respondido_por AS STRING) AS respondido_por,
+        CAST(respondido_en AS STRING) AS respondido_en
+      FROM \`${fullTable}\`
+      WHERE (CAST(id AS STRING) IN (${inList}) OR CAST(session_id AS STRING) IN (${idsLimpios.map((id) => `'frp-${id}'`).join(', ')}))
+        AND (LOWER(IFNULL(estado, '')) = 'respondido' OR (respuesta_mostrador IS NOT NULL AND TRIM(respuesta_mostrador) != ''))
+    `;
+
+    const res = await bigquery.jobs.query({
+      projectId: bqJobProjectId,
+      requestBody: {
+        query,
+        useLegacySql: false,
+        location: 'southamerica-west1',
+        timeoutMs: 15000,
+      },
+    });
+
+    const fields = res.data.schema?.fields || [];
+    const rows = (res.data.rows || []).map((r) => {
+      const obj = {};
+      r.f.forEach((cell, i) => {
+        obj[fields[i]?.name || `col_${i}`] = cell.v;
+      });
+      return obj;
+    });
+    return rows;
+  } catch (err) {
+    console.warn(`[AilooBridge] Aviso consultando respuestas en ${fullTable}:`, err.message);
+    return [];
+  }
 }

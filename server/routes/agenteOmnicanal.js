@@ -2374,7 +2374,7 @@ async function ejecutarCascadaAgenteOmnicanal({
         sesionAgenteId: sesion.id,
         clienteTelefono: sesion.clienteTelefono || '',
         clienteNombre: sesion.clienteNombre || '',
-        solicitante: 'FácilRepuestos SpA (Mesa Técnica)',
+        solicitante: 'Consulta Técnica Mostrador',
         canalOrigen: sesion.canal === 'web_cliente' ? 'web' : 'whatsapp',
         estado: 'pendiente',
         prioridad: 'alta',

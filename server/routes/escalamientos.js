@@ -297,7 +297,7 @@ router.get('/', async (req, res, next) => {
       return {
         id: doc.id,
         ...safeData,
-        solicitante: 'FácilRepuestos SpA (Mesa Técnica)',
+        solicitante: 'Consulta Técnica Mostrador',
         mensajeCliente: sanitizarTextoParaProveedor(raw.mensajeCliente || ''),
         motivoEscalamiento: sanitizarTextoParaProveedor(raw.motivoEscalamiento || ''),
         transcripcionAudio: sanitizarTextoParaProveedor(raw.transcripcionAudio || ''),
@@ -357,7 +357,7 @@ router.post('/', async (req, res, next) => {
 
     const existingSnap = await db.collection('escalamientos_ia').get();
     const nextNum = 1001 + existingSnap.size;
-    const ticketRef = `FRP-ESC-${nextNum}`;
+    const ticketRef = `ESC-${nextNum}`;
     const now = new Date().toISOString();
 
     let resolvedProveedorId = proveedorId || 'prov-demo-001';
@@ -407,7 +407,7 @@ router.post('/', async (req, res, next) => {
     const docData = {
       ticketRef,
       sessionId: `${canalOrigen}-${Date.now().toString(36)}`,
-      solicitante: 'FácilRepuestos SpA (Mesa Técnica)',
+      solicitante: 'Consulta Técnica Mostrador',
       canalOrigen,
       tipoDestino,
       proveedorId: resolvedProveedorId,

@@ -898,6 +898,15 @@ export interface EscalamientoIA {
   respuestaAgentePreliminar?: string;
   transcripcionAudio?: string;
   imagenUrl?: string;
+  fotoMuestraUrl?: string;
+  pistaGemini?: string;
+  historialConversacion?: Array<{
+    hora: string;
+    rol: 'cliente' | 'agente';
+    autor: string;
+    texto: string;
+    envioFoto?: boolean;
+  }>;
   candidatoInventarioId?: string | null;
   candidatoCodigo?: string;
   candidatoNombre?: string;

@@ -468,3 +468,275 @@
   padding: 3px 8px;
   border-radius: 6px;
 }
+
+/* ─── Tarjetas Estilo Portal Escalamiento (Con Foto y Sin Foto) ─── */
+.soluSectionHeader {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin: 6px 0 2px;
+}
+
+.soluSectionTitle {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.soluSectionSub {
+  font-size: 0.86rem;
+  color: #64748b;
+}
+
+.soluDarkCard {
+  background: #141821;
+  border: 1px solid #262d3d;
+  border-radius: 14px;
+  padding: 22px;
+  color: #e2e8f0;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.soluPhotoGrid {
+  display: grid;
+  grid-template-columns: 310px 1fr;
+  gap: 22px;
+  align-items: stretch;
+}
+
+@media (max-width: 860px) {
+  .soluPhotoGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.soluPhotoBox {
+  background: #0b0e14;
+  border: 1px solid #1e2533;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 280px;
+}
+
+.soluPhotoImg {
+  width: 100%;
+  max-height: 380px;
+  object-fit: contain;
+  display: block;
+}
+
+.soluRightCol {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.soluMetaTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.soluMetaLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.soluBadgeTeal {
+  background: rgba(14, 165, 233, 0.16);
+  color: #7dd3fc;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.soluBadgeSku {
+  background: #232a38;
+  color: #e2e8f0;
+  border: 1px solid #333d52;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.soluTimeText {
+  font-size: 0.83rem;
+  color: #94a3b8;
+}
+
+.soluRefBadge {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  background: #1c2230;
+  border: 1px solid #2d364a;
+  padding: 2px 9px;
+  border-radius: 6px;
+}
+
+.soluProductDesc {
+  font-size: 0.94rem;
+  color: #cbd5e1;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.soluQuotedQuestion {
+  font-size: 1.18rem;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1.4;
+  margin: 2px 0;
+}
+
+.soluGeminiHint {
+  font-size: 0.87rem;
+  color: #94a3b8;
+  line-height: 1.45;
+}
+
+.soluChatBox {
+  background: #0e121a;
+  border: 1px solid #222938;
+  border-radius: 10px;
+  padding: 13px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.soluChatHeader {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-bottom: 2px;
+}
+
+.soluChatLine {
+  font-size: 0.87rem;
+  line-height: 1.45;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+}
+
+.soluChatHour {
+  color: #64748b;
+  font-size: 0.8rem;
+  margin-right: 6px;
+}
+
+.soluChatAuthorCliente {
+  color: #f8fafc;
+  font-weight: 800;
+  margin-right: 6px;
+}
+
+.soluChatAuthorAgente {
+  color: #4ade80;
+  font-weight: 800;
+  margin-right: 6px;
+}
+
+.soluQuickPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.soluQuickPillBtn {
+  background: transparent;
+  color: #cbd5e1;
+  border: 1px solid #333d52;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.83rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.soluQuickPillBtn:hover {
+  background: #1e2636;
+  color: #ffffff;
+  border-color: #64748b;
+}
+
+.soluReplyLabel {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  margin-bottom: 4px;
+}
+
+.soluDarkTextarea {
+  width: 100%;
+  min-height: 78px;
+  background: #0b0e14;
+  border: 1px solid #2b3448;
+  border-radius: 8px;
+  padding: 11px 13px;
+  color: #f8fafc;
+  font-size: 0.92rem;
+  resize: vertical;
+  outline: none;
+}
+
+.soluDarkTextarea:focus {
+  border-color: #38bdf8;
+}
+
+.soluFooterRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.soluSendBtn {
+  background: #7dd3fc;
+  color: #0f172a;
+  font-weight: 800;
+  font-size: 0.9rem;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.soluSendBtn:hover:not(:disabled) {
+  background: #38bdf8;
+}
+
+.soluSendBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.soluAdvToggle {
+  background: transparent;
+  border: none;
+  color: #7dd3fc;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}

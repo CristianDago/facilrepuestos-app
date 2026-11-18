@@ -37,8 +37,11 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
   const [filtroOrigen, setFiltroOrigen] = useState<string>('todos');
   const [busquedaConocimiento, setBusquedaConocimiento] = useState('');
 
-  // Escalamiento expandido para responder
+  // Escalamiento expandido para configuración avanzada de ficha/inventario
   const [respondiendoId, setRespondiendoId] = useState<string | null>(null);
+  // Borradores inline por cada tarjeta (estilo portal.soluparts.cl/escalamiento)
+  const [respuestasInline, setRespuestasInline] = useState<Record<string, string>>({});
+  const [enviandoInlineId, setEnviandoInlineId] = useState<string | null>(null);
   const [formRespuesta, setFormRespuesta] = useState({
     respuestaMostrador: '',
     tipoAprendizaje: 'compatibilidad' as TipoAprendizajeIA,
@@ -72,6 +75,7 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
     mensajeCliente: 'Necesito kit de embrague para Hyundai Porter 2.5 2018 caja sexta, ¿le sirve el de 240mm o lleva bimasa?',
     motivoEscalamiento: 'Confirmar diámetro de disco (240mm vs 250mm) y volante para Porter 2.5 D4CB 2018 caja 6 velocidades',
     transcripcionAudio: '',
+    imagenUrl: '',
     candidatoCodigo: 'SOL-78120',
     candidatoNombre: 'KIT EMBRAGUE HYUNDAI H100 / PORTER 2.5 CRDI',
     prioridad: 'alta' as 'alta' | 'media' | 'baja',
@@ -176,41 +180,82 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
     }));
   };
 
-  const handleEnviarRespuesta = async (escId: string) => {
-    if (!formRespuesta.respuestaMostrador.trim()) {
+  const handleEnviarRespuesta = async (esc: EscalamientoIA, textoOverride?: string) => {
+    const escId = esc.id;
+    const textoFinal = (
+      textoOverride ??
+      respuestasInline[escId] ??
+      (respondiendoId === escId ? formRespuesta.respuestaMostrador : '')
+    ).trim();
+
+    if (!textoFinal) {
       notify('Escribe la validación o respuesta técnica antes de confirmar', 'error');
       return;
     }
     try {
       setEnviandoRespuesta(true);
+      setEnviandoInlineId(escId);
+      const itemCandidato = misRepuestos.find((i) => i.id === esc.candidatoInventarioId);
+      const usandoAvanzado = respondiendoId === escId;
+
+      const payload = usandoAvanzado
+        ? {
+            ...formRespuesta,
+            respuestaMostrador: textoFinal,
+            anioDesde: formRespuesta.anioDesde ? Number(formRespuesta.anioDesde) : null,
+            anioHasta: formRespuesta.anioHasta ? Number(formRespuesta.anioHasta) : null,
+            precioCostoProveedor: Number(formRespuesta.precioCostoProveedor) || 0,
+          }
+        : {
+            respuestaMostrador: textoFinal,
+            tipoAprendizaje: 'compatibilidad' as TipoAprendizajeIA,
+            inventarioId: esc.candidatoInventarioId || '',
+            skuProveedor: itemCandidato?.codigo || esc.candidatoCodigo || '',
+            nombreRepuesto: itemCandidato?.nombre || esc.candidatoNombre || '',
+            precioCostoProveedor:
+              itemCandidato?.precioCompra ||
+              itemCandidato?.precioLista ||
+              esc.precioCostoProveedor ||
+              25000,
+            marcaVehiculo: esc.marcaVehiculo || '',
+            modeloVehiculo: esc.modeloVehiculo || '',
+            anioDesde: esc.anioVehiculo ? Number(esc.anioVehiculo) - 2 : null,
+            anioHasta: esc.anioVehiculo ? Number(esc.anioVehiculo) + 2 : null,
+            motor: esc.motorVehiculo || '',
+            categoriaRepuesto: itemCandidato?.categoria || 'MOTOR',
+            actualizarFichaInventario: Boolean(esc.candidatoInventarioId || esProveedor),
+            guardarConocimiento: true,
+          };
+
       const res = await api.post<
         ApiResponse<{
           escalamiento: EscalamientoIA;
           reglaConocimiento: ReglaConocimientoAprendido | null;
           inventarioActualizado: boolean;
         }>
-      >(`/escalamientos/${escId}/responder`, {
-        ...formRespuesta,
-        anioDesde: formRespuesta.anioDesde ? Number(formRespuesta.anioDesde) : null,
-        anioHasta: formRespuesta.anioHasta ? Number(formRespuesta.anioHasta) : null,
-        precioCostoProveedor: Number(formRespuesta.precioCostoProveedor) || 0,
-      });
+      >(`/escalamientos/${escId}/responder`, payload);
 
       if (res.success && res.data) {
         const msgExtra = res.data.inventarioActualizado
           ? ' + Ficha de inventario actualizada con la compatibilidad'
           : '';
         notify(
-          `✓ Respuesta validada, conocimiento aprendido guardado${msgExtra}`,
+          `✓ Respuesta enviada al cliente y guardada en conocimiento aprendido${msgExtra}`,
           'success'
         );
         setRespondiendoId(null);
+        setRespuestasInline((prev) => {
+          const next = { ...prev };
+          delete next[escId];
+          return next;
+        });
         await cargarTodo();
       }
     } catch (err) {
       notify((err as Error).message || 'Error al responder escalamiento', 'error');
     } finally {
       setEnviandoRespuesta(false);
+      setEnviandoInlineId(null);
     }
   };
 
@@ -357,6 +402,7 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
         mensajeCliente: nuevoEsc.mensajeCliente,
         motivoEscalamiento: nuevoEsc.motivoEscalamiento,
         transcripcionAudio: nuevoEsc.transcripcionAudio,
+        imagenUrl: nuevoEsc.imagenUrl,
         candidatoCodigo: nuevoEsc.candidatoCodigo,
         candidatoNombre: nuevoEsc.candidatoNombre,
         prioridad: nuevoEsc.prioridad,
@@ -808,6 +854,20 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
                 }
               />
             </div>
+
+            <div className={styles.fieldGroup}>
+              <label className={styles.fieldLabel}>
+                📷 URL de Foto del Cliente (Opcional — si se incluye, se muestra como tarjeta con foto)
+              </label>
+              <input
+                className={styles.input}
+                placeholder="https://... (dejar vacío para escalamiento sin foto)"
+                value={nuevoEsc.imagenUrl}
+                onChange={(e) =>
+                  setNuevoEsc((prev) => ({ ...prev, imagenUrl: e.target.value }))
+                }
+              />
+            </div>
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
@@ -931,7 +991,7 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
         )}
       </div>
 
-      {/* CONTENIDO PESTAÑA 1: BANDEJA DE ESCALAMIENTOS */}
+      {/* CONTENIDO PESTAÑA 1: BANDEJA DE ESCALAMIENTOS (ESTILO PORTAL ESCALAMIENTO CON FOTO Y SIN FOTO) */}
       {loading ? (
         <div style={{ padding: 32, textAlign: 'center', color: '#64748b' }}>
           Cargando escalamientos y base de conocimiento...
@@ -954,208 +1014,384 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
           <div className={styles.cardsList}>
             {escalamientosFiltrados.map((esc) => {
               const abierto = respondiendoId === esc.id;
+              const fotoUrl = (esc.imagenUrl || esc.fotoMuestraUrl || '').trim();
+              const tieneFoto = Boolean(fotoUrl);
+              const refNeutral = String(esc.ticketRef || esc.id).replace(/^FRP-/i, '');
+              const skuLimpio = String(esc.candidatoCodigo || refNeutral)
+                .replace(/^FRP-(?:SOL|GLB|LOC|WSP|EXP)-/i, '')
+                .trim();
+
+              // Calcular tiempo relativo ("hace X min" / "hace X h")
+              const tiempoRelativo = (() => {
+                const diffMs = Math.max(0, Date.now() - new Date(esc.creadoEn).getTime());
+                const mins = Math.floor(diffMs / 60000);
+                if (mins < 2) return 'hace instantes';
+                if (mins < 60) return `hace ${mins} min`;
+                const hrs = Math.floor(mins / 60);
+                if (hrs < 24) return `hace ${hrs} h`;
+                const dias = Math.floor(hrs / 24);
+                return `hace ${dias} d`;
+              })();
+
+              const vehiculoPartes = [
+                esc.marcaVehiculo && esc.marcaVehiculo !== 'POR CONFIRMAR' ? esc.marcaVehiculo : '',
+                esc.modeloVehiculo || '',
+                esc.anioVehiculo ? String(esc.anioVehiculo) : '',
+                esc.motorVehiculo || '',
+                esc.patente ? `(Patente ${esc.patente})` : '',
+              ].filter(Boolean);
+
+              const descripcionProducto = [
+                esc.candidatoNombre || 'REPUESTO EN CONSULTA DE COMPATIBILIDAD',
+                vehiculoPartes.length > 0 ? `para ${vehiculoPartes.join(' ')}` : '',
+              ]
+                .filter(Boolean)
+                .join(' ');
+
+              const conversacionTurnos =
+                Array.isArray(esc.historialConversacion) && esc.historialConversacion.length > 0
+                  ? esc.historialConversacion
+                  : [
+                      {
+                        hora: new Date(esc.creadoEn).toLocaleTimeString('es-CL', {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        }),
+                        rol: 'cliente' as const,
+                        autor: 'Cliente',
+                        texto: esc.mensajeCliente,
+                        envioFoto: tieneFoto,
+                      },
+                    ];
+
+              const valorRespuestaInline =
+                respuestasInline[esc.id] ??
+                (abierto ? formRespuesta.respuestaMostrador : '');
+
+              const setValorRespuestaCard = (nuevoTexto: string) => {
+                setRespuestasInline((prev) => ({ ...prev, [esc.id]: nuevoTexto }));
+                if (abierto) {
+                  setFormRespuesta((prev) => ({ ...prev, respuestaMostrador: nuevoTexto }));
+                }
+              };
+
               return (
-                <div
-                  key={esc.id}
-                  className={`${styles.escCard} ${
-                    esc.estado === 'respondido' ? styles.escCardRespondido : ''
-                  }`}
-                >
-                  <div className={styles.escHeader}>
-                    <div className={styles.escBadges}>
-                      <span className={styles.ticketRef}>{esc.ticketRef}</span>
-                      {esc.tipoDestino === 'nodo_ailoo' ? (
-                        <span className={styles.destinoBadgeAiloo}>
-                          🔗 Federado en {esc.datasetDestino || `${esc.nodoAilooId}_ailoo.escalamientos`}
-                        </span>
-                      ) : (
-                        <span className={styles.destinoBadgeLocal}>
-                          🏭 Portal Proveedor: {esc.proveedorNombre}
-                        </span>
-                      )}
-                      <span
-                        className={
-                          esc.estado === 'respondido'
-                            ? styles.estadoBadgeRespondido
-                            : styles.estadoBadgePendiente
-                        }
-                      >
-                        {esc.estado === 'respondido' ? '✅ RESPONDIDO' : '⏳ PENDIENTE'}
-                      </span>
-                      <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                        Canal: {esc.canalOrigen.toUpperCase()}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: '0.74rem',
-                          fontWeight: 700,
-                          color: '#0f766e',
-                          background: '#f0fdfa',
-                          border: '1px solid #99f6e4',
-                          padding: '2px 8px',
-                          borderRadius: 999,
-                        }}
-                      >
-                        🛡️ Solicitante: FácilRepuestos SpA (Datos de Cliente Ocultos)
-                      </span>
-                    </div>
-
-                    <div style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                      {new Date(esc.creadoEn).toLocaleString('es-CL')}
-                    </div>
-                  </div>
-
-                  {/* Barra de Vehículo Detectado */}
-                  <div className={styles.vehiculoBar}>
-                    {esc.patente && <span className={styles.patenteTag}>{esc.patente}</span>}
-                    <span className={styles.vehiculoInfo}>
-                      🚗 {esc.marcaVehiculo} {esc.modeloVehiculo}{' '}
-                      {esc.anioVehiculo ? `· Año ${esc.anioVehiculo}` : ''}
-                    </span>
-                    {esc.motorVehiculo && (
-                      <span style={{ fontSize: '0.84rem', color: '#334155', fontWeight: 600 }}>
-                        ⚙️ Motor: {esc.motorVehiculo}
-                      </span>
-                    )}
-                    {esc.vinVehiculo && (
-                      <span style={{ fontSize: '0.78rem', color: '#64748b', fontFamily: 'monospace' }}>
-                        VIN: {esc.vinVehiculo}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Consulta Técnica Sanitizada (Sin Nombre ni Teléfono del Cliente) */}
-                  <div className={styles.mensajeBox}>
-                    <div className={styles.mensajeLabel}>
-                      Consulta Técnica Derivada por FácilRepuestos (Sin Nombre ni Teléfono del Cliente Final)
-                    </div>
-                    <p className={styles.mensajeText}>"{esc.mensajeCliente}"</p>
-                    {esc.transcripcionAudio && (
-                      <div
-                        style={{
-                          marginTop: 8,
-                          paddingTop: 8,
-                          borderTop: '1px dashed #fcd34d',
-                          fontSize: '0.84rem',
-                          color: '#78350f',
-                        }}
-                      >
-                        🎙️ <strong>Audio transcrito (Gemini 2.5 Flash):</strong> "{esc.transcripcionAudio}"
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Motivo técnico de escalamiento y SKU candidato */}
-                  <div className={styles.motivoBox}>
-                    <div>
-                      <strong>🤖 Motivo de Escalamiento IA:</strong> {esc.motivoEscalamiento}
-                    </div>
-                    {(esc.candidatoCodigo || esc.candidatoNombre) && (
-                      <div style={{ marginTop: 4 }}>
-                        <strong>📦 Repuesto Candidato:</strong> {esc.candidatoCodigo} —{' '}
-                        {esc.candidatoNombre}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Si ya fue respondido: muestra la respuesta técnica y el cálculo comercial */}
-                  {esc.estado === 'respondido' && (
-                    <div className={styles.respuestaBox}>
-                      <div style={{ fontSize: '0.85rem', color: '#065f46' }}>
-                        <strong>✓ Respuesta de Mostrador ({esc.respondidoPor}):</strong>{' '}
-                        {esc.respuestaMostrador}
+                <div key={esc.id} className={styles.soluDarkCard}>
+                  {tieneFoto ? (
+                    /* ─── VISTA 1: ESCALAMIENTO CON FOTO DEL CLIENTE (IDÉNTICO A PORTAL SOLUPARTS SIN TELÉFONO) ─── */
+                    <div className={styles.soluPhotoGrid}>
+                      <div className={styles.soluPhotoBox}>
+                        <a
+                          href={fotoUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Abrir foto en tamaño completo"
+                          style={{ width: '100%', display: 'flex', justifyContent: 'center' }}
+                        >
+                          <img
+                            src={fotoUrl}
+                            alt="Muestra enviada por el cliente"
+                            className={styles.soluPhotoImg}
+                          />
+                        </a>
                       </div>
 
-                      <div className={styles.comercialBar}>
-                        <span>
-                          <strong>SKU Público FRP:</strong>{' '}
-                          <code>{esc.skuPublicoFrp || 'N/A'}</code>
-                        </span>
-                        <span>
-                          <strong>Costo Proveedor:</strong> $
-                          {(esc.precioCostoProveedor || 0).toLocaleString('es-CL')} neto
-                        </span>
-                        {!esProveedor && (
-                          <>
-                            <span>
-                              <strong>Margen FácilRepuestos:</strong> +{esc.margenAplicadoPct || 0}%
-                            </span>
-                            <span style={{ color: '#047857', fontWeight: 800 }}>
-                              <strong>Precio Venta Cliente FRP:</strong> $
-                              {(esc.precioVentaFrp || 0).toLocaleString('es-CL')} neto ($
-                              {Math.round((esc.precioVentaFrp || 0) * 1.19).toLocaleString('es-CL')}{' '}
-                              IVA inc.)
-                            </span>
-                          </>
+                      <div className={styles.soluRightCol}>
+                        <div className={styles.soluMetaTop}>
+                          <div className={styles.soluMetaLeft}>
+                            <span className={styles.soluBadgeTeal}>Foto del cliente</span>
+                            <span className={styles.soluTimeText}>{tiempoRelativo}</span>
+                            {/* NUNCA se muestra el teléfono del cliente */}
+                            <span className={styles.soluRefBadge}>Consulta #{refNeutral}</span>
+                            {vehiculoPartes.length > 0 && (
+                              <span className={styles.soluRefBadge}>
+                                🚗 {vehiculoPartes.join(' ')}
+                              </span>
+                            )}
+                          </div>
+                          {esc.estado === 'respondido' ? (
+                            <span className={styles.estadoBadgeRespondido}>✅ Respondido</span>
+                          ) : (
+                            <span className={styles.soluBadgeTeal}>1 cliente esperando</span>
+                          )}
+                        </div>
+
+                        <div style={{ fontSize: '0.9rem', color: '#cbd5e1' }}>
+                          {esc.mensajeCliente
+                            ? esc.mensajeCliente
+                            : 'El cliente no escribió texto con la foto.'}
+                        </div>
+
+                        {(esc.pistaGemini || esc.motivoEscalamiento) && (
+                          <div className={styles.soluGeminiHint}>
+                            Pista de Gemini (el cliente no la ve): repuesto:{' '}
+                            {esc.pistaGemini || esc.motivoEscalamiento}
+                          </div>
+                        )}
+
+                        <div className={styles.soluChatBox}>
+                          <div className={styles.soluChatHeader}>CONVERSACIÓN ANTES DE LA FOTO</div>
+                          {conversacionTurnos.map((msg, idx) => (
+                            <div key={idx} className={styles.soluChatLine}>
+                              {msg.hora && <span className={styles.soluChatHour}>{msg.hora}</span>}
+                              <span
+                                className={
+                                  msg.rol === 'cliente'
+                                    ? styles.soluChatAuthorCliente
+                                    : styles.soluChatAuthorAgente
+                                }
+                              >
+                                {msg.rol === 'cliente' ? 'Cliente' : 'Asistente'}
+                              </span>
+                              <span>{msg.texto}</span>
+                              {msg.envioFoto && (
+                                <div style={{ marginTop: 6 }}>
+                                  <span className={styles.soluBadgeTeal}>📷 Aquí envió la foto</span>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {esc.estado === 'respondido' ? (
+                          <div className={styles.respuestaBox} style={{ color: '#0f172a' }}>
+                            <div style={{ fontSize: '0.88rem', color: '#065f46' }}>
+                              <strong>✓ Respuesta de Mostrador ({esc.respondidoPor}):</strong>{' '}
+                              {esc.respuestaMostrador}
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <div
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginBottom: 6,
+                              }}
+                            >
+                              <span className={styles.soluReplyLabel}>Respuesta para el cliente</span>
+                              <button
+                                type="button"
+                                className={styles.soluAdvToggle}
+                                onClick={() => abrirPanelRespuesta(esc)}
+                              >
+                                {abierto
+                                  ? 'Ocultar vinculación de inventario'
+                                  : '⚙️ Vincular SKU / precio de mi inventario'}
+                              </button>
+                            </div>
+                            <textarea
+                              className={styles.soluDarkTextarea}
+                              placeholder="Ejemplo: Es la pastilla delantera del Tiggo 2. La tenemos a $15.990, código PAS-DEL-1156K."
+                              value={valorRespuestaInline}
+                              onChange={(e) => setValorRespuestaCard(e.target.value)}
+                            />
+                            <div className={styles.soluFooterRow}>
+                              <span className={styles.soluTimeText}>
+                                Le llega de inmediato por WhatsApp.
+                              </span>
+                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                {!esProveedor && (
+                                  <button
+                                    type="button"
+                                    className={styles.soluQuickPillBtn}
+                                    onClick={() =>
+                                      navigate('/mesa-wsp', {
+                                        state: {
+                                          desdeEscalamiento: true,
+                                          escalamientoId: esc.id,
+                                          patente: esc.patente || '',
+                                          marcaVehiculo: esc.marcaVehiculo || '',
+                                          modeloVehiculo: esc.modeloVehiculo || '',
+                                          anioVehiculo: esc.anioVehiculo || '',
+                                          motorVehiculo: esc.motorVehiculo || '',
+                                          repuestoBuscado: esc.candidatoNombre || esc.mensajeCliente,
+                                          codigoReferencia: esc.candidatoCodigo || '',
+                                          motivoEscalamiento: esc.motivoEscalamiento || '',
+                                        },
+                                      })
+                                    }
+                                  >
+                                    📲 Derivar a Mesa WSP
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className={styles.soluSendBtn}
+                                  disabled={enviandoInlineId === esc.id}
+                                  onClick={() => handleEnviarRespuesta(esc)}
+                                >
+                                  {enviandoInlineId === esc.id
+                                    ? 'Enviando...'
+                                    : 'Responder al cliente'}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    /* ─── VISTA 2: ESCALAMIENTO SIN FOTO (REFERENCIA DE PRODUCTO + DUDA ENTRE COMILLAS + BOTONES RÁPIDOS) ─── */
+                    <div className={styles.soluRightCol}>
+                      <div className={styles.soluMetaTop}>
+                        <div className={styles.soluMetaLeft}>
+                          <span className={styles.soluBadgeSku}>{skuLimpio}</span>
+                          {esc.patente && (
+                            <span className={styles.soluRefBadge}>Patente: {esc.patente}</span>
+                          )}
+                          <span className={styles.soluRefBadge}>Ref #{refNeutral}</span>
+                        </div>
+                        {esc.estado === 'respondido' ? (
+                          <span className={styles.estadoBadgeRespondido}>✅ Respondido</span>
+                        ) : (
+                          <span className={styles.soluBadgeTeal}>1 cliente esperando</span>
                         )}
                       </div>
 
-                      {!esProveedor && esc.mensajeFinalCliente && (
-                        <div style={{ fontSize: '0.82rem', color: '#047857' }}>
-                          <strong>📲 Mensaje enviado al cliente por FácilRepuestos:</strong>{' '}
-                          "{esc.mensajeFinalCliente}"
-                        </div>
-                      )}
-                    </div>
-                  )}
+                      <p className={styles.soluProductDesc}>{descripcionProducto}</p>
 
-                  {/* Acciones si está pendiente */}
-                  {esc.estado === 'pendiente' && (
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap' }}>
-                      {!esProveedor && (
-                        <button
-                          type="button"
-                          className="btn btn-outline btn-sm"
-                          style={{
-                            borderColor: '#16a34a',
-                            color: '#15803d',
-                            background: '#f0fdf4',
-                            fontWeight: 700,
-                          }}
-                          onClick={() =>
-                            navigate('/mesa-wsp', {
-                              state: {
-                                desdeEscalamiento: true,
-                                escalamientoId: esc.id,
-                                patente: esc.patente || '',
-                                marcaVehiculo: esc.marcaVehiculo || '',
-                                modeloVehiculo: esc.modeloVehiculo || '',
-                                anioVehiculo: esc.anioVehiculo || '',
-                                motorVehiculo: esc.motorVehiculo || '',
-                                repuestoBuscado: esc.candidatoNombre || esc.mensajeCliente,
-                                codigoReferencia: esc.candidatoCodigo || '',
-                                motivoEscalamiento: esc.motivoEscalamiento || '',
-                              },
-                            })
-                          }
-                        >
-                          📲 Derivar a Mesa WhatsApp en Vivo (Etapa 3)
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        onClick={() => abrirPanelRespuesta(esc)}
-                      >
-                        {abierto
-                          ? 'Cerrar Panel de Respuesta'
-                          : '✍️ Responder Consulta y Guardar en Conocimiento Aprendido'}
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Panel desplegable de Respuesta Experta y Aprendizaje */}
-                  {abierto && (
-                    <div className={styles.replyPanel}>
-                      <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>
-                        ✍️ Validación Técnica de Mostrador + Enseñanza a la IA
+                      <div className={styles.soluQuotedQuestion}>
+                        «{esc.motivoEscalamiento || esc.mensajeCliente}»
                       </div>
 
-                      {/* 1. Vincular con repuesto del inventario */}
+                      {/* Contexto de la conversación de escalamiento sin número telefónico */}
+                      <div className={styles.soluChatBox}>
+                        <div className={styles.soluChatHeader}>
+                          CONTEXTO DE LA CONSULTA · Primera consulta {tiempoRelativo}
+                        </div>
+                        {conversacionTurnos.map((msg, idx) => (
+                          <div key={idx} className={styles.soluChatLine}>
+                            {msg.hora && <span className={styles.soluChatHour}>{msg.hora}</span>}
+                            <span
+                              className={
+                                msg.rol === 'cliente'
+                                  ? styles.soluChatAuthorCliente
+                                  : styles.soluChatAuthorAgente
+                              }
+                            >
+                              {msg.rol === 'cliente' ? 'Cliente' : 'Asistente'}
+                            </span>
+                            <span>{msg.texto}</span>
+                          </div>
+                        ))}
+                        {esc.transcripcionAudio && (
+                          <div className={styles.soluChatLine} style={{ color: '#fde68a' }}>
+                            🎙️ Audio del cliente: "{esc.transcripcionAudio}"
+                          </div>
+                        )}
+                      </div>
+
+                      {esc.estado === 'respondido' ? (
+                        <div className={styles.respuestaBox} style={{ color: '#0f172a' }}>
+                          <div style={{ fontSize: '0.88rem', color: '#065f46' }}>
+                            <strong>✓ Respuesta de Mostrador ({esc.respondidoPor}):</strong>{' '}
+                            {esc.respuestaMostrador}
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className={styles.soluQuickPills}>
+                            {[
+                              'Sí, es compatible con ese vehículo',
+                              'No es compatible con ese vehículo',
+                              'Para confirmarlo necesito la patente del vehículo',
+                              'Sí, tenemos stock disponible para entrega inmediata',
+                            ].map((sugerencia) => (
+                              <button
+                                key={sugerencia}
+                                type="button"
+                                className={styles.soluQuickPillBtn}
+                                onClick={() => setValorRespuestaCard(sugerencia)}
+                              >
+                                {sugerencia}
+                              </button>
+                            ))}
+                          </div>
+
+                          <div>
+                            <div
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginBottom: 6,
+                              }}
+                            >
+                              <span className={styles.soluReplyLabel}>
+                                Respuesta (le llega a cada cliente por el chat)
+                              </span>
+                              <button
+                                type="button"
+                                className={styles.soluAdvToggle}
+                                onClick={() => abrirPanelRespuesta(esc)}
+                              >
+                                {abierto
+                                  ? 'Ocultar vinculación de inventario'
+                                  : '⚙️ Vincular SKU / precio de mi inventario'}
+                              </button>
+                            </div>
+                            <textarea
+                              className={styles.soluDarkTextarea}
+                              placeholder="Escribe la confirmación técnica de compatibilidad o marca/medida del repuesto..."
+                              value={valorRespuestaInline}
+                              onChange={(e) => setValorRespuestaCard(e.target.value)}
+                            />
+                            <div
+                              className={styles.soluFooterRow}
+                              style={{ justifyContent: 'flex-end' }}
+                            >
+                              {!esProveedor && (
+                                <button
+                                  type="button"
+                                  className={styles.soluQuickPillBtn}
+                                  onClick={() =>
+                                    navigate('/mesa-wsp', {
+                                      state: {
+                                        desdeEscalamiento: true,
+                                        escalamientoId: esc.id,
+                                        patente: esc.patente || '',
+                                        marcaVehiculo: esc.marcaVehiculo || '',
+                                        modeloVehiculo: esc.modeloVehiculo || '',
+                                        anioVehiculo: esc.anioVehiculo || '',
+                                        motorVehiculo: esc.motorVehiculo || '',
+                                        repuestoBuscado: esc.candidatoNombre || esc.mensajeCliente,
+                                        codigoReferencia: esc.candidatoCodigo || '',
+                                        motivoEscalamiento: esc.motivoEscalamiento || '',
+                                      },
+                                    })
+                                  }
+                                >
+                                  📲 Derivar a Mesa WSP
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className={styles.soluSendBtn}
+                                disabled={enviandoInlineId === esc.id}
+                                onClick={() => handleEnviarRespuesta(esc)}
+                              >
+                                {enviandoInlineId === esc.id ? 'Enviando...' : 'Responder'}
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Panel opcional desplegable para vincular repuesto del inventario y enriquecer ficha */}
+                  {abierto && (
+                    <div className={styles.replyPanel} style={{ color: '#0f172a' }}>
+                      <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.95rem' }}>
+                        ⚙️ Vincular Repuesto de Inventario y Regla de Compatibilidad (Opcional)
+                      </div>
+
                       <div className={styles.formGrid}>
                         <div className={styles.fieldGroup} style={{ gridColumn: 'span 2' }}>
                           <label className={styles.fieldLabel}>
-                            1. Vincular Repuesto de mi Inventario (Opcional)
+                            Vincular Repuesto de mi Inventario
                           </label>
                           <select
                             className={styles.select}
@@ -1202,45 +1438,7 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
                         </div>
                       </div>
 
-                      {/* 2. Respuesta técnica */}
-                      <div className={styles.fieldGroup}>
-                        <label className={styles.fieldLabel}>
-                          2. Respuesta Técnica Experta (Explicación de compatibilidad / calce)
-                        </label>
-                        <textarea
-                          className={styles.textarea}
-                          placeholder="Ej: Sí, las pastillas Bosch 0986424792 calzan exacto en el Toyota Yaris 1.5 motor 2NR-FE entre 2016 y 2021."
-                          value={formRespuesta.respuestaMostrador}
-                          onChange={(e) =>
-                            setFormRespuesta((prev) => ({
-                              ...prev,
-                              respuestaMostrador: e.target.value,
-                            }))
-                          }
-                        />
-                      </div>
-
-                      {/* 3. Regla estructurada para Conocimiento Aprendido */}
                       <div className={styles.formGrid}>
-                        <div className={styles.fieldGroup}>
-                          <label className={styles.fieldLabel}>Tipo de Aprendizaje IA</label>
-                          <select
-                            className={styles.select}
-                            value={formRespuesta.tipoAprendizaje}
-                            onChange={(e) =>
-                              setFormRespuesta((prev) => ({
-                                ...prev,
-                                tipoAprendizaje: e.target.value as TipoAprendizajeIA,
-                              }))
-                            }
-                          >
-                            <option value="compatibilidad">✅ Compatibilidad Confirmada</option>
-                            <option value="equivalencia">🔄 Equivalencia OEM / Cruce</option>
-                            <option value="correccion_catalogo">🔧 Corrección de Años / Motor</option>
-                            <option value="disponibilidad_precio">💲 Cotización y Disponibilidad</option>
-                          </select>
-                        </div>
-
                         <div className={styles.fieldGroup}>
                           <label className={styles.fieldLabel}>Marca Vehículo Compatible</label>
                           <input
@@ -1298,35 +1496,7 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
                             }
                           />
                         </div>
-
-                        <div className={styles.fieldGroup}>
-                          <label className={styles.fieldLabel}>Motor / Especificación</label>
-                          <input
-                            className={styles.input}
-                            value={formRespuesta.motor}
-                            onChange={(e) =>
-                              setFormRespuesta((prev) => ({
-                                ...prev,
-                                motor: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
                       </div>
-
-                      <label className={styles.checkboxRow}>
-                        <input
-                          type="checkbox"
-                          checked={formRespuesta.guardarConocimiento}
-                          onChange={(e) =>
-                            setFormRespuesta((prev) => ({
-                              ...prev,
-                              guardarConocimiento: e.target.checked,
-                            }))
-                          }
-                        />
-                        🧠 Guardar regla en Base de Conocimiento Aprendido (el Agente IA responderá solo la próxima vez)
-                      </label>
 
                       {formRespuesta.inventarioId && (
                         <label className={styles.checkboxRow}>
@@ -1343,26 +1513,6 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
                           📦 Enriquecer automáticamente mi ficha en Inventario con esta Marca, Modelo y Rango de Años
                         </label>
                       )}
-
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                        <button
-                          type="button"
-                          className="btn btn-outline btn-sm"
-                          onClick={() => setRespondiendoId(null)}
-                        >
-                          Cancelar
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          disabled={enviandoRespuesta}
-                          onClick={() => handleEnviarRespuesta(esc.id)}
-                        >
-                          {enviandoRespuesta
-                            ? 'Guardando...'
-                            : '✅ Confirmar Respuesta y Enseñar a la IA'}
-                        </button>
-                      </div>
                     </div>
                   )}
                 </div>

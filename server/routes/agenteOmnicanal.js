@@ -2369,6 +2369,34 @@ async function ejecutarCascadaAgenteOmnicanal({
           `Confirmar compatibilidad técnica exacta de ${resumenRepuesto} para ${etiquetaVehiculo}`
       );
 
+      const historialPrevio = Array.isArray(sesion.mensajes) ? sesion.mensajes.slice(-6) : [];
+      const formatearHora = (iso) => {
+        try {
+          return new Date(iso || Date.now()).toLocaleTimeString('es-CL', {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+        } catch {
+          return '';
+        }
+      };
+      const historialConversacion = [
+        ...historialPrevio.map((m) => ({
+          hora: formatearHora(m.creadoEn),
+          rol: m.rol === 'cliente' ? 'cliente' : 'agente',
+          autor: m.rol === 'cliente' ? 'Cliente' : 'Asistente',
+          texto: sanitizarTextoParaProveedor(m.texto || ''),
+          envioFoto: Boolean(m.fotoUrl),
+        })),
+        {
+          hora: formatearHora(now),
+          rol: 'cliente',
+          autor: 'Cliente',
+          texto: mensajeSanitizado,
+          envioFoto: Boolean(fotoUrl),
+        },
+      ];
+
       const nuevoEsc = {
         ticketRef,
         sesionAgenteId: sesion.id,
@@ -2399,7 +2427,10 @@ async function ejecutarCascadaAgenteOmnicanal({
         motorVehiculo: vehiculo?.motor || '',
         mensajeCliente: mensajeSanitizado,
         transcripcionAudio: audioSanitizado,
+        imagenUrl: fotoUrl || '',
         fotoMuestraUrl: fotoUrl || '',
+        pistaGemini: fotoUrl ? (audioSanitizado || motivoSanitizado) : '',
+        historialConversacion,
         motivoEscalamiento: motivoSanitizado,
         candidatoInventarioId: mejorCandidato?.id || null,
         candidatoCodigo: mejorCandidato?.codigoInterno || '',

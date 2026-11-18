@@ -293,14 +293,75 @@ router.get('/', async (req, res, next) => {
     let items = snap.docs.map((doc) => {
       const raw = doc.data();
       // Eliminar cualquier campo de identidad del cliente final y sanitizar texto técnico
-      const { clienteNombre, clienteTelefono, telefonoCliente, nombreCliente, ...safeData } = raw;
+      const { clienteNombre, clienteTelefono, telefonoCliente, nombreCliente, telefono, ...safeData } = raw;
+      const imgFinal = String(raw.imagenUrl || raw.fotoMuestraUrl || '').trim();
+      const msgLimpio = sanitizarTextoParaProveedor(raw.mensajeCliente || '');
+      const motivoLimpio = sanitizarTextoParaProveedor(raw.motivoEscalamiento || '');
+      const audioLimpio = sanitizarTextoParaProveedor(raw.transcripcionAudio || '');
+      const pistaLimpia = sanitizarTextoParaProveedor(raw.pistaGemini || raw.transcripcionAudio || raw.motivoEscalamiento || '');
+
+      const horaFallback = (() => {
+        try {
+          return new Date(raw.creadoEn || Date.now()).toLocaleTimeString('es-CL', {
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+        } catch {
+          return '';
+        }
+      })();
+
+      const historialConversacion = Array.isArray(raw.historialConversacion) && raw.historialConversacion.length > 0
+        ? raw.historialConversacion.map((m) => ({
+            hora: m.hora || horaFallback,
+            rol: m.rol === 'cliente' ? 'cliente' : 'agente',
+            autor: m.rol === 'cliente' ? 'Cliente' : 'Asistente',
+            texto: sanitizarTextoParaProveedor(m.texto || ''),
+            envioFoto: Boolean(m.envioFoto),
+          }))
+        : [
+            {
+              hora: horaFallback,
+              rol: 'cliente',
+              autor: 'Cliente',
+              texto: msgLimpio,
+              envioFoto: Boolean(imgFinal),
+            },
+            ...(raw.respuestaAgentePreliminar
+              ? [
+                  {
+                    hora: horaFallback,
+                    rol: 'agente',
+                    autor: 'Asistente',
+                    texto: sanitizarTextoParaProveedor(raw.respuestaAgentePreliminar),
+                    envioFoto: false,
+                  },
+                ]
+              : [
+                  {
+                    hora: horaFallback,
+                    rol: 'agente',
+                    autor: 'Asistente',
+                    texto: imgFinal
+                      ? '¡Recibí tu foto! 📸 Se la paso a nuestro equipo técnico para identificar el repuesto y confirmar compatibilidad a la brevedad.'
+                      : 'Se la paso a nuestro equipo técnico para confirmar compatibilidad exacta con tu vehículo.',
+                    envioFoto: false,
+                  },
+                ]),
+          ];
+
       return {
         id: doc.id,
         ...safeData,
+        ticketRef: String(raw.ticketRef || doc.id).replace(/^FRP-/i, ''),
         solicitante: 'Consulta Técnica Mostrador',
-        mensajeCliente: sanitizarTextoParaProveedor(raw.mensajeCliente || ''),
-        motivoEscalamiento: sanitizarTextoParaProveedor(raw.motivoEscalamiento || ''),
-        transcripcionAudio: sanitizarTextoParaProveedor(raw.transcripcionAudio || ''),
+        imagenUrl: imgFinal,
+        fotoMuestraUrl: imgFinal,
+        pistaGemini: pistaLimpia,
+        historialConversacion,
+        mensajeCliente: msgLimpio,
+        motivoEscalamiento: motivoLimpio,
+        transcripcionAudio: audioLimpio,
       };
     });
 
@@ -342,6 +403,8 @@ router.post('/', async (req, res, next) => {
       respuestaAgentePreliminar = '',
       transcripcionAudio = '',
       imagenUrl = '',
+      fotoMuestraUrl = '',
+      pistaGemini = '',
       candidatoInventarioId = null,
       candidatoCodigo = '',
       candidatoNombre = '',
@@ -424,7 +487,9 @@ router.post('/', async (req, res, next) => {
       motivoEscalamiento: motivoSanitizado,
       respuestaAgentePreliminar: String(respuestaAgentePreliminar || '').trim(),
       transcripcionAudio: audioSanitizado,
-      imagenUrl: String(imagenUrl || '').trim(),
+      imagenUrl: String(imagenUrl || fotoMuestraUrl || '').trim(),
+      fotoMuestraUrl: String(imagenUrl || fotoMuestraUrl || '').trim(),
+      pistaGemini: sanitizarTextoParaProveedor(pistaGemini || transcripcionAudio || motivoSanitizado),
       candidatoInventarioId: candidatoInventarioId || null,
       candidatoCodigo: String(candidatoCodigo || '').trim().toUpperCase(),
       candidatoNombre: String(candidatoNombre || '').trim(),

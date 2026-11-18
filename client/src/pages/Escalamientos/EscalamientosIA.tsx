@@ -232,15 +232,24 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
           escalamiento: EscalamientoIA;
           reglaConocimiento: ReglaConocimientoAprendido | null;
           inventarioActualizado: boolean;
+          envioWhatsapp?: {
+            enviado?: boolean;
+            dentroVentana24h?: boolean;
+            horasTranscurridas?: number;
+          } | null;
         }>
       >(`/escalamientos/${escId}/responder`, payload);
 
       if (res.success && res.data) {
         const msgExtra = res.data.inventarioActualizado
-          ? ' + Ficha de inventario actualizada con la compatibilidad'
+          ? ' + Ficha de inventario actualizada'
           : '';
+        const wspStatus =
+          res.data.envioWhatsapp?.dentroVentana24h === false
+            ? ' (guardada en el chat; consulta > 24h)'
+            : ' y enviada por push directo al WhatsApp del cliente (< 24h)';
         notify(
-          `✓ Respuesta enviada al cliente y guardada en conocimiento aprendido${msgExtra}`,
+          `✓ Respuesta validada${wspStatus}${msgExtra}`,
           'success'
         );
         setRespondiendoId(null);

@@ -18,14 +18,18 @@ import { enviarRespuestaClienteMetaWhatsapp } from './agenteOmnicanal.js';
 
 const router = Router();
 
+const VENTANA_WSP_24H_MS = 24 * 60 * 60 * 1000;
+
 /**
- * Cuando un escalamiento es respondido (ya sea en `portal.soluparts.cl/escalamiento` o en nuestro portal),
- * inyecta la respuesta en la conversación activa de Repuestín WhatsApp y la envía al teléfono del cliente.
+ * Cuando un escalamiento es respondido (ya sea en `portal.soluparts.cl/escalamiento` o en nuestro Mostrador IA),
+ * inyecta la respuesta en la conversación activa de Repuestín WhatsApp y, si han pasado menos de 24 horas
+ * desde que el cliente preguntó, envía el push directo por WhatsApp al teléfono del cliente.
  */
 async function notificarRespuestaEscalamientoAClienteWsp(esc, updateData) {
   try {
     let telefonoDestino = String(esc.clienteTelefono || '').trim();
     const sesionId = esc.sesionAgenteId || null;
+    let timestampUltimaPreguntaCliente = esc.creadoEn || null;
 
     if (sesionId) {
       const sesRef = db.collection('sesiones_agente_omnicanal').doc(sesionId);
@@ -36,13 +40,18 @@ async function notificarRespuestaEscalamientoAClienteWsp(esc, updateData) {
           telefonoDestino = String(sesData.clienteTelefono).trim();
         }
         const mensajes = Array.isArray(sesData.mensajes) ? [...sesData.mensajes] : [];
+        const ultimoMsgCliente = [...mensajes].reverse().find((m) => m.rol === 'cliente' && m.creadoEn);
+        if (ultimoMsgCliente?.creadoEn) {
+          timestampUltimaPreguntaCliente = ultimoMsgCliente.creadoEn;
+        }
+
         mensajes.push({
           id: `msg-esc-${Date.now()}`,
           rol: 'agente',
-          autor: 'Repuestín · FácilRepuestos.cl',
+          autor: 'Repuestín · facilrepuestos.cl',
           texto: updateData.mensajeFinalCliente,
           creadoEn: new Date().toISOString(),
-          origen: 'respuesta_escalamiento_soluparts',
+          origen: 'respuesta_escalamiento_mostrador',
         });
 
         const carrito = Array.isArray(sesData.carritoCotizado) ? [...sesData.carritoCotizado] : [];
@@ -73,11 +82,57 @@ async function notificarRespuestaEscalamientoAClienteWsp(esc, updateData) {
       }
     }
 
+    const msRef = timestampUltimaPreguntaCliente
+      ? new Date(timestampUltimaPreguntaCliente).getTime()
+      : Date.now();
+    const msTranscurridos = Math.max(0, Date.now() - (Number.isFinite(msRef) ? msRef : Date.now()));
+    const horasTranscurridas = Number((msTranscurridos / (1000 * 60 * 60)).toFixed(2));
+    const dentroVentana24h = msTranscurridos <= VENTANA_WSP_24H_MS;
+
+    if (!dentroVentana24h) {
+      if (esc.id) {
+        await db
+          .collection('escalamientos_ia')
+          .doc(esc.id)
+          .update({
+            pushWspEnviado: false,
+            pushWspDentro24h: false,
+            pushWspHorasTranscurridas: horasTranscurridas,
+            pushWspMotivo: `Consulta supera ventana de 24h (${horasTranscurridas}h); respuesta guardada en sesión.`,
+          })
+          .catch(() => null);
+      }
+      return {
+        enviado: false,
+        dentroVentana24h: false,
+        horasTranscurridas,
+        motivo: 'ventana_24h_expirada',
+      };
+    }
+
     if (telefonoDestino && /\d{8,15}/.test(telefonoDestino.replace(/\D/g, ''))) {
-      return await enviarRespuestaClienteMetaWhatsapp({
+      const resWsp = await enviarRespuestaClienteMetaWhatsapp({
         telefonoDestino,
         texto: `${updateData.mensajeFinalCliente}\n\n👉 Si deseas confirmarlo, escribe *COMPRAR* por este mismo WhatsApp.`,
       });
+      if (esc.id) {
+        await db
+          .collection('escalamientos_ia')
+          .doc(esc.id)
+          .update({
+            pushWspEnviado: Boolean(resWsp?.enviado),
+            pushWspDentro24h: true,
+            pushWspHorasTranscurridas: horasTranscurridas,
+            pushWspEnviadoEn: new Date().toISOString(),
+            pushWspModo: resWsp?.modo || 'meta_cloud_api',
+          })
+          .catch(() => null);
+      }
+      return {
+        ...resWsp,
+        dentroVentana24h: true,
+        horasTranscurridas,
+      };
     }
   } catch (err) {
     console.warn('[Escalamientos->WSP] Aviso al notificar al cliente por WhatsApp:', err.message);
@@ -208,6 +263,96 @@ router.get('/conocimiento', async (req, res, next) => {
 
 let ultimoAutoSyncBqAt = 0;
 
+/**
+ * Sincroniza automáticamente respuestas desde `soluparts-mostrador-prod.soluparts.escalamientos`
+ * para tickets pendientes y envía el push directo por WhatsApp al cliente si han pasado < 24h.
+ */
+async function sincronizarRespuestasPendientesAiloo(snapExistente = null) {
+  const nowMs = Date.now();
+  if (nowMs - ultimoAutoSyncBqAt < 20000) return false;
+  ultimoAutoSyncBqAt = nowMs;
+
+  try {
+    const snap = snapExistente || (await db.collection('escalamientos_ia').get());
+    const pendientesAiloo = snap.docs.filter((d) => {
+      const data = d.data();
+      return (
+        (data.estado === 'pendiente' || data.estado === 'pendiente_mostrador') &&
+        data.ticketRef &&
+        (data.tipoDestino === 'nodo_ailoo' || data.nodoAilooId === 'soluparts')
+      );
+    });
+    if (pendientesAiloo.length === 0) return false;
+
+    const ticketRefs = pendientesAiloo.map((d) => d.data().ticketRef).filter(Boolean);
+    const bqConsulta = await consultarRespuestasEscalamientosEnBigQuery(
+      {
+        id: 'soluparts',
+        projectId: 'soluparts-mostrador-prod',
+        datasetId: 'soluparts',
+        tablaEscalamientos: 'escalamientos',
+      },
+      ticketRefs
+    );
+    if (!bqConsulta?.respuestasPorTicket || bqConsulta.respuestasPorTicket.size === 0) {
+      return false;
+    }
+
+    let huboCambios = false;
+    for (const docSnap of pendientesAiloo) {
+      const esc = docSnap.data();
+      const rawRef = String(esc.ticketRef || '').toUpperCase();
+      const neutralRef = rawRef.replace(/^FRP-/i, '');
+      const matchBq =
+        bqConsulta.respuestasPorTicket.get(rawRef) ||
+        bqConsulta.respuestasPorTicket.get(neutralRef);
+      if (!matchBq || !matchBq.respuestaMostrador) continue;
+
+      const costoBruto = Number(esc.precioCostoProveedor || esc.costoBrutoProveedor) || 0;
+      const margen = esc.nodoAilooId === 'soluparts' ? 0 : Number(esc.margenPorcentajeAplicado || 30);
+      const precioVentaFrp = costoBruto > 0 ? calcularPrecioPublicoFrp(costoBruto, margen) : 0;
+      const skuPublicoFrp =
+        esc.skuPublicoFrp ||
+        (esc.candidatoCodigo ? generarSkuPublicoFrp('FRP-SOL', esc.candidatoCodigo) : '');
+      const mensajeFinalCliente = construirMensajeFinalCliente({
+        ...esc,
+        respuestaMostrador: matchBq.respuestaMostrador,
+        skuPublicoFrp,
+        precioVentaFrp,
+      });
+      const nowIso = new Date().toISOString();
+      const updateData = {
+        estado: 'respondido',
+        calceConfirmado: true,
+        respuestaMostrador: matchBq.respuestaMostrador,
+        respuestaExperto: matchBq.respuestaMostrador,
+        respondidoPor: matchBq.respondidoPor || 'Mostrador Especialista',
+        respondidoEn: matchBq.respondidoEn || nowIso,
+        precioCostoProveedor: costoBruto,
+        margenAplicadoPct: margen,
+        precioVentaFrp,
+        skuPublicoFrp,
+        mensajeFinalCliente,
+        updatedAt: nowIso,
+      };
+      await db.collection('escalamientos_ia').doc(docSnap.id).update(updateData);
+      await notificarRespuestaEscalamientoAClienteWsp({ id: docSnap.id, ...esc }, updateData);
+      huboCambios = true;
+    }
+    return huboCambios;
+  } catch (autoErr) {
+    console.warn('[Escalamientos AutoSync BQ] Aviso:', autoErr.message);
+    return false;
+  }
+}
+
+// Poller en background cada 45s para enviar el push directo al WhatsApp del cliente (< 24h)
+// apenas respondan en `portal.soluparts.cl/escalamiento`, incluso si nadie tiene abierto nuestro portal.
+const bgTimer = setInterval(() => {
+  sincronizarRespuestasPendientesAiloo().catch(() => null);
+}, 45000);
+if (typeof bgTimer.unref === 'function') bgTimer.unref();
+
 // ─── GET /api/escalamientos ─────────────────────────────────────────────
 // Lista los escalamientos técnicos. Si es proveedor, filtra estrictamente los asignados a su proveedorId.
 // REGLA ANTI-BYPASS ETAPA 1: Jamás se incluye el nombre ni el teléfono del cliente final hacia los proveedores;
@@ -215,79 +360,9 @@ let ultimoAutoSyncBqAt = 0;
 router.get('/', async (req, res, next) => {
   try {
     let snap = await db.collection('escalamientos_ia').get();
-
-    // Auto-sincronizar respuestas desde `soluparts-mostrador-prod.soluparts.escalamientos` (cooldown 20s)
-    const nowMs = Date.now();
-    const pendientesAiloo = snap.docs.filter((d) => {
-      const data = d.data();
-      return (
-        data.estado === 'pendiente_mostrador' &&
-        data.ticketRef &&
-        (data.tipoDestino === 'nodo_ailoo' || data.nodoAilooId === 'soluparts')
-      );
-    });
-
-    if (pendientesAiloo.length > 0 && nowMs - ultimoAutoSyncBqAt > 20000) {
-      ultimoAutoSyncBqAt = nowMs;
-      try {
-        const ticketRefs = pendientesAiloo.map((d) => d.data().ticketRef).filter(Boolean);
-        const bqConsulta = await consultarRespuestasEscalamientosEnBigQuery(
-          {
-            id: 'soluparts',
-            projectId: 'soluparts-mostrador-prod',
-            datasetId: 'soluparts',
-            tablaEscalamientos: 'escalamientos',
-          },
-          ticketRefs
-        );
-        if (bqConsulta?.respuestasPorTicket?.size > 0) {
-          let huboCambios = false;
-          for (const docSnap of pendientesAiloo) {
-            const esc = docSnap.data();
-            const matchBq = bqConsulta.respuestasPorTicket.get(String(esc.ticketRef || '').toUpperCase());
-            if (!matchBq || !matchBq.respuestaMostrador) continue;
-
-            const costoBruto = Number(esc.costoBrutoProveedor) || 34500;
-            const margen = Number(esc.margenPorcentajeAplicado) || 30;
-            const precioVentaFrp = calcularPrecioPublicoFrp(costoBruto, margen);
-            const skuPublicoFrp =
-              esc.skuPublicoFrp ||
-              generarSkuPublicoFrp({
-                prefijoSku: 'FRP-SOL',
-                codigoOrigen: esc.candidatoCodigo || 'EXP',
-              });
-            const mensajeFinalCliente = construirMensajeFinalCliente({
-              ...esc,
-              respuestaMostrador: matchBq.respuestaMostrador,
-              skuPublicoFrp,
-              precioVentaFrp,
-            });
-            const nowIso = new Date().toISOString();
-            const updateData = {
-              estado: 'respondido',
-              calceConfirmado: true,
-              respuestaMostrador: matchBq.respuestaMostrador,
-              respuestaExperto: matchBq.respuestaMostrador,
-              respondidoPor: matchBq.respondidoPor || 'Mostrador Soluparts (portal.soluparts.cl)',
-              respondidoEn: matchBq.respondidoEn || nowIso,
-              costoBrutoProveedor: costoBruto,
-              margenPorcentajeAplicado: margen,
-              precioVentaFrp,
-              skuPublicoFrp,
-              mensajeFinalCliente,
-              updatedAt: nowIso,
-            };
-            await db.collection('escalamientos_ia').doc(docSnap.id).update(updateData);
-            await notificarRespuestaEscalamientoAClienteWsp({ id: docSnap.id, ...esc }, updateData);
-            huboCambios = true;
-          }
-          if (huboCambios) {
-            snap = await db.collection('escalamientos_ia').get();
-          }
-        }
-      } catch (autoErr) {
-        console.warn('[Escalamientos AutoSync BQ] Aviso:', autoErr.message);
-      }
+    const huboCambios = await sincronizarRespuestasPendientesAiloo(snap);
+    if (huboCambios) {
+      snap = await db.collection('escalamientos_ia').get();
     }
 
     let items = snap.docs.map((doc) => {

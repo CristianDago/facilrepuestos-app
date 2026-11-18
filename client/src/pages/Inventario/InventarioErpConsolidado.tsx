@@ -857,423 +857,402 @@ export default function InventarioErpConsolidado() {
         </div>
       </div>
 
-      {/* ── NAVEGADOR DE CATEGORÍAS Y SUBCATEGORÍAS ESTILO PORTAL WOOCOMMERCE ── */}
+      {/* ── SELECTORES DESPLEGABLES DE CATEGORÍAS Y COMPATIBILIDAD VEHICULAR (ESPEJO WOOCOMMERCE) ── */}
       <div
         style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: 14,
-          padding: 16,
-          display: 'flex',
-          flexDirection: 'column',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))',
           gap: 12,
         }}
       >
+        {/* 1. Categorías y Subcategorías Oficiales WooCommerce */}
         <div
           style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 14,
+            padding: '14px 16px',
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 8,
+            flexDirection: 'column',
+            gap: 10,
           }}
         >
-          <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a' }}>
-            📂 Categorías y Subcategorías Oficiales WooCommerce (facilrepuestos.cl)
-          </div>
-          {(categoriaActiva ||
-            subcategoriaActiva ||
-            subcategoriaHijaActiva ||
-            filtroMarcaAuto ||
-            filtroModeloAuto ||
-            filtroRangoAnioAuto) && (
-            <button
-              type="button"
-              className="btn btn-sm btn-outline"
-              onClick={() => {
-                setCategoriaActiva('');
-                setSubcategoriaActiva('');
-                setSubcategoriaHijaActiva('');
-                setFiltroMarcaAuto('');
-                setFiltroModeloAuto('');
-                setFiltroRangoAnioAuto('');
-              }}
-            >
-              ✕ Limpiar Categoría / Marca / Modelo
-            </button>
-          )}
-        </div>
-
-        {/* Nivel 1: 9 Familias Principales de WooCommerce */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => {
-              setCategoriaActiva('');
-              setSubcategoriaActiva('');
-              setSubcategoriaHijaActiva('');
-            }}
+          <div
             style={{
-              padding: '7px 13px',
-              borderRadius: 999,
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              border: !categoriaActiva ? '2px solid #0f172a' : '1px solid #cbd5e1',
-              background: !categoriaActiva ? '#0f172a' : '#f8fafc',
-              color: !categoriaActiva ? '#ffffff' : '#334155',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 8,
+              flexWrap: 'wrap',
             }}
           >
-            Todas las Categorías ({itemsPorTiendas.length.toLocaleString('es-CL')})
-          </button>
-
-          {ARBOL_CATEGORIAS_TIENDA.map((cat) => {
-            const count = conteosArbolWoo.porCat.get(cat.nombre) || 0;
-            const activa = categoriaActiva === cat.nombre;
-            return (
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#0f172a' }}>
+                📂 Categorías y Subcategorías Oficiales WooCommerce (facilrepuestos.cl)
+              </div>
+              <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                Selecciona Familia ↳ Subcategoría ↳ Pieza específica
+              </div>
+            </div>
+            {(categoriaActiva || subcategoriaActiva || subcategoriaHijaActiva) && (
               <button
-                key={cat.nombre}
                 type="button"
+                className="btn btn-sm btn-outline"
                 onClick={() => {
-                  setCategoriaActiva(cat.nombre);
+                  setCategoriaActiva('');
+                  setSubcategoriaActiva('');
+                  setSubcategoriaHijaActiva('');
+                }}
+              >
+                ✕ Limpiar categoría
+              </button>
+            )}
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+              gap: 8,
+            }}
+          >
+            {/* Nivel 1: Familia Principal */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: '0.71rem', fontWeight: 700, color: '#475569' }}>
+                1. Categoría Principal
+              </label>
+              <select
+                value={categoriaActiva}
+                onChange={(e) => {
+                  setCategoriaActiva(e.target.value);
                   setSubcategoriaActiva('');
                   setSubcategoriaHijaActiva('');
                 }}
                 style={{
-                  padding: '7px 13px',
-                  borderRadius: 999,
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  border: categoriaActiva ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                  background: categoriaActiva ? '#eff6ff' : '#ffffff',
                   fontSize: '0.8rem',
                   fontWeight: 700,
+                  color: '#0f172a',
                   cursor: 'pointer',
-                  border: activa ? '2px solid #2563eb' : '1px solid #cbd5e1',
-                  background: activa ? '#dbeafe' : '#ffffff',
-                  color: activa ? '#1d4ed8' : '#1e293b',
                 }}
               >
-                {cat.nombre} ({count})
-              </button>
-            );
-          })}
+                <option value="">
+                  Todas las Categorías ({itemsPorTiendas.length.toLocaleString('es-CL')})
+                </option>
+                {ARBOL_CATEGORIAS_TIENDA.map((cat) => {
+                  const count = conteosArbolWoo.porCat.get(cat.nombre) || 0;
+                  return (
+                    <option key={cat.nombre} value={cat.nombre}>
+                      {cat.nombre} ({count})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            {/* Nivel 2: Subcategoría */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: '0.71rem', fontWeight: 700, color: '#475569' }}>
+                2. Subcategoría
+              </label>
+              <select
+                value={subcategoriaActiva}
+                disabled={!familiaSeleccionadaObj}
+                onChange={(e) => {
+                  setSubcategoriaActiva(e.target.value);
+                  setSubcategoriaHijaActiva('');
+                }}
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  border: subcategoriaActiva ? '2px solid #0284c7' : '1px solid #cbd5e1',
+                  background: !familiaSeleccionadaObj
+                    ? '#f8fafc'
+                    : subcategoriaActiva
+                      ? '#e0f2fe'
+                      : '#ffffff',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color: !familiaSeleccionadaObj ? '#94a3b8' : '#0f172a',
+                  cursor: !familiaSeleccionadaObj ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <option value="">
+                  {familiaSeleccionadaObj
+                    ? `Todas las subcategorías (${familiaSeleccionadaObj.subcategorias.length})`
+                    : 'Elige primero una categoría'}
+                </option>
+                {(familiaSeleccionadaObj?.subcategorias || []).map((sub) => {
+                  const count =
+                    conteosArbolWoo.porSub.get(
+                      `${familiaSeleccionadaObj?.nombre}::${sub.nombre}`
+                    ) || 0;
+                  return (
+                    <option key={sub.nombre} value={sub.nombre}>
+                      {sub.nombre} ({count})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            {/* Nivel 3: Subcategoría Hija / Pieza Específica */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: '0.71rem', fontWeight: 700, color: '#475569' }}>
+                3. Pieza Específica
+              </label>
+              <select
+                value={subcategoriaHijaActiva}
+                disabled={
+                  !subcategoriaSeleccionadaObj ||
+                  (subcategoriaSeleccionadaObj.hijos || []).length === 0
+                }
+                onChange={(e) => setSubcategoriaHijaActiva(e.target.value)}
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  border: subcategoriaHijaActiva ? '2px solid #0d9488' : '1px solid #cbd5e1',
+                  background:
+                    !subcategoriaSeleccionadaObj ||
+                    (subcategoriaSeleccionadaObj.hijos || []).length === 0
+                      ? '#f8fafc'
+                      : subcategoriaHijaActiva
+                        ? '#ccfbf1'
+                        : '#ffffff',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color:
+                    !subcategoriaSeleccionadaObj ||
+                    (subcategoriaSeleccionadaObj.hijos || []).length === 0
+                      ? '#94a3b8'
+                      : '#0f172a',
+                  cursor:
+                    !subcategoriaSeleccionadaObj ||
+                    (subcategoriaSeleccionadaObj.hijos || []).length === 0
+                      ? 'not-allowed'
+                      : 'pointer',
+                }}
+              >
+                <option value="">
+                  {!subcategoriaSeleccionadaObj
+                    ? 'Elige primero subcategoría'
+                    : (subcategoriaSeleccionadaObj.hijos || []).length === 0
+                      ? 'Sin subdivisión adicional'
+                      : `Todas las piezas (${(subcategoriaSeleccionadaObj.hijos || []).length})`}
+                </option>
+                {(subcategoriaSeleccionadaObj?.hijos || []).map((hija: string) => {
+                  const count =
+                    conteosArbolWoo.porHija.get(
+                      `${familiaSeleccionadaObj?.nombre}::${subcategoriaSeleccionadaObj?.nombre}::${hija}`
+                    ) || 0;
+                  return (
+                    <option key={hija} value={hija}>
+                      {hija} ({count})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          </div>
         </div>
 
-        {/* Nivel 2: Subcategorías de la Familia Seleccionada */}
-        {familiaSeleccionadaObj && (
-          <div
-            style={{
-              display: 'flex',
-              gap: 8,
-              flexWrap: 'wrap',
-              paddingTop: 8,
-              borderTop: '1px dashed #e2e8f0',
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#475569' }}>
-              ↳ Subcategorías de {familiaSeleccionadaObj.nombre}:
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setSubcategoriaActiva('');
-                setSubcategoriaHijaActiva('');
-              }}
-              style={{
-                padding: '5px 11px',
-                borderRadius: 8,
-                fontSize: '0.76rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                border: !subcategoriaActiva ? '1px solid #1d4ed8' : '1px solid #cbd5e1',
-                background: !subcategoriaActiva ? '#eff6ff' : '#ffffff',
-                color: !subcategoriaActiva ? '#1d4ed8' : '#475569',
-              }}
-            >
-              Todas
-            </button>
-            {familiaSeleccionadaObj.subcategorias.map((sub) => {
-              const count =
-                conteosArbolWoo.porSub.get(`${familiaSeleccionadaObj.nombre}::${sub.nombre}`) || 0;
-              const activa = subcategoriaActiva === sub.nombre;
-              return (
-                <button
-                  key={sub.nombre}
-                  type="button"
-                  onClick={() => {
-                    setSubcategoriaActiva(sub.nombre);
-                    setSubcategoriaHijaActiva('');
-                  }}
-                  style={{
-                    padding: '5px 11px',
-                    borderRadius: 8,
-                    fontSize: '0.76rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    border: activa ? '2px solid #0284c7' : '1px solid #cbd5e1',
-                    background: activa ? '#e0f2fe' : '#ffffff',
-                    color: activa ? '#0369a1' : '#334155',
-                  }}
-                >
-                  {sub.nombre} ({count})
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Nivel 3: Subcategorías Hijas / Específicas */}
-        {subcategoriaSeleccionadaObj && (subcategoriaSeleccionadaObj.hijos || []).length > 0 && (
-          <div
-            style={{
-              display: 'flex',
-              gap: 8,
-              flexWrap: 'wrap',
-              paddingTop: 6,
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#64748b' }}>
-              ↳ Pieza específica:
-            </span>
-            {(subcategoriaSeleccionadaObj.hijos || []).map((hija: string) => {
-              const count =
-                conteosArbolWoo.porHija.get(
-                  `${familiaSeleccionadaObj?.nombre}::${subcategoriaSeleccionadaObj.nombre}::${hija}`
-                ) || 0;
-              const activa = subcategoriaHijaActiva === hija;
-              return (
-                <button
-                  key={hija}
-                  type="button"
-                  onClick={() => setSubcategoriaHijaActiva(activa ? '' : hija)}
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: 6,
-                    fontSize: '0.74rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    border: activa ? '2px solid #0d9488' : '1px solid #cbd5e1',
-                    background: activa ? '#ccfbf1' : '#f8fafc',
-                    color: activa ? '#0f766e' : '#334155',
-                  }}
-                >
-                  {hija} ({count})
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* ── ÁRBOL DE COMPATIBILIDAD VEHICULAR (MARCA -> MODELO -> RANGO DE AÑOS) ESPEJO DE "PRODUCTOS -> MARCAS" WOOCOMMERCE ── */}
-      <div
-        style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: 14,
-          padding: 16,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 10,
-        }}
-      >
+        {/* 2. Marcas, Modelos y Rangos de Años Compatibles (Espejo Productos -> Marcas en WooCommerce) */}
         <div
           style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 14,
+            padding: '14px 16px',
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 8,
+            flexDirection: 'column',
+            gap: 10,
           }}
         >
-          <div>
-            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a' }}>
-              🚗 Marcas, Modelos y Rangos de Años Compatibles (Espejo `Productos → Marcas` en WooCommerce)
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 8,
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '0.88rem', color: '#0f172a' }}>
+                🚗 Marcas, Modelos y Años Compatibles (`Productos → Marcas` Woo)
+              </div>
+              <div style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                Jerarquía 3 niveles: <strong>Marca</strong> ↳ <strong>Modelo</strong> ↳{' '}
+                <strong>Rango de Años</strong>
+              </div>
             </div>
-            <div style={{ fontSize: '0.77rem', color: '#64748b' }}>
-              Jerarquía de 3 niveles: <strong>Marca Principal (ej. SUZUKI, JAC)</strong> ↳ <strong>Modelo (ej.JAC S3)</strong> ↳ <strong>Rango de Años (ej. 2016 - 2023)</strong> · 100% dedicada a compatibilidad vehicular.
+
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+              {(filtroMarcaAuto || filtroModeloAuto || filtroRangoAnioAuto) && (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  onClick={() => {
+                    setFiltroMarcaAuto('');
+                    setFiltroModeloAuto('');
+                    setFiltroRangoAnioAuto('');
+                  }}
+                >
+                  ✕ Limpiar vehículo
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn btn-sm"
+                style={{ background: '#0284c7', color: '#ffffff', fontWeight: 700 }}
+                onClick={handleSyncMarcasWoo}
+                disabled={sincronizandoMarcasWoo}
+              >
+                {sincronizandoMarcasWoo
+                  ? 'Subiendo a WordPress...'
+                  : '⚡ Cargar Árbol a WooCommerce'}
+              </button>
             </div>
           </div>
 
-          <button
-            type="button"
-            className="btn btn-sm"
-            style={{ background: '#0284c7', color: '#ffffff', fontWeight: 700 }}
-            onClick={handleSyncMarcasWoo}
-            disabled={sincronizandoMarcasWoo}
-          >
-            {sincronizandoMarcasWoo
-              ? 'Subiendo a WordPress...'
-              : '⚡ Cargar Árbol de Marcas + Modelos + Años a WooCommerce'}
-          </button>
-        </div>
-
-        {/* Nivel 1: Marcas de Vehículos Compatibles */}
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => {
-              setFiltroMarcaAuto('');
-              setFiltroModeloAuto('');
-              setFiltroRangoAnioAuto('');
-            }}
+          <div
             style={{
-              padding: '6px 12px',
-              borderRadius: 999,
-              fontSize: '0.78rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              border: !filtroMarcaAuto ? '2px solid #0f172a' : '1px solid #cbd5e1',
-              background: !filtroMarcaAuto ? '#0f172a' : '#f8fafc',
-              color: !filtroMarcaAuto ? '#ffffff' : '#334155',
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
+              gap: 8,
             }}
           >
-            Todas las Marcas ({marcasAutoOpciones.length})
-          </button>
-
-          {marcasAutoOpciones.map(([marca, count]) => {
-            const activa = filtroMarcaAuto === marca;
-            return (
-              <button
-                key={marca}
-                type="button"
-                onClick={() => {
-                  setFiltroMarcaAuto(activa ? '' : marca);
+            {/* Nivel 1: Marca Vehículo */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: '0.71rem', fontWeight: 700, color: '#475569' }}>
+                1. Marca Vehículo ({marcasAutoOpciones.length})
+              </label>
+              <select
+                value={filtroMarcaAuto}
+                onChange={(e) => {
+                  setFiltroMarcaAuto(e.target.value);
                   setFiltroModeloAuto('');
                   setFiltroRangoAnioAuto('');
                 }}
                 style={{
-                  padding: '6px 12px',
-                  borderRadius: 999,
-                  fontSize: '0.78rem',
-                  fontWeight: 800,
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  border: filtroMarcaAuto ? '2px solid #0284c7' : '1px solid #cbd5e1',
+                  background: filtroMarcaAuto ? '#e0f2fe' : '#ffffff',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  color: '#0f172a',
                   cursor: 'pointer',
-                  border: activa ? '2px solid #0284c7' : '1px solid #cbd5e1',
-                  background: activa ? '#e0f2fe' : '#ffffff',
-                  color: activa ? '#0369a1' : '#1e293b',
                 }}
               >
-                {marca} ({count})
-              </button>
-            );
-          })}
+                <option value="">Todas las Marcas ({marcasAutoOpciones.length})</option>
+                {marcasAutoOpciones.map(([marca, count]) => (
+                  <option key={marca} value={marca}>
+                    {marca} ({count})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Nivel 2: Modelo Compatible */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: '0.71rem', fontWeight: 700, color: '#475569' }}>
+                2. Modelo Compatible
+              </label>
+              <select
+                value={filtroModeloAuto}
+                disabled={!filtroMarcaAuto || modelosDeMarcaActiva.length === 0}
+                onChange={(e) => {
+                  setFiltroModeloAuto(e.target.value);
+                  setFiltroRangoAnioAuto('');
+                }}
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  border: filtroModeloAuto ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                  background:
+                    !filtroMarcaAuto || modelosDeMarcaActiva.length === 0
+                      ? '#f8fafc'
+                      : filtroModeloAuto
+                        ? '#dbeafe'
+                        : '#ffffff',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color:
+                    !filtroMarcaAuto || modelosDeMarcaActiva.length === 0
+                      ? '#94a3b8'
+                      : '#0f172a',
+                  cursor:
+                    !filtroMarcaAuto || modelosDeMarcaActiva.length === 0
+                      ? 'not-allowed'
+                      : 'pointer',
+                }}
+              >
+                <option value="">
+                  {!filtroMarcaAuto
+                    ? 'Elige primero una marca'
+                    : modelosDeMarcaActiva.length === 0
+                      ? 'Sin modelos detallados'
+                      : `Todos los modelos ${filtroMarcaAuto} (${modelosDeMarcaActiva.length})`}
+                </option>
+                {modelosDeMarcaActiva.map(([mod, count]) => (
+                  <option key={mod} value={mod}>
+                    {filtroMarcaAuto} {mod} ({count})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Nivel 3: Rango de Años */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: '0.71rem', fontWeight: 700, color: '#475569' }}>
+                3. Rango de Años
+              </label>
+              <select
+                value={filtroRangoAnioAuto}
+                disabled={!filtroMarcaAuto || !filtroModeloAuto || rangosDeModeloActivo.length === 0}
+                onChange={(e) => setFiltroRangoAnioAuto(e.target.value)}
+                style={{
+                  padding: '8px 10px',
+                  borderRadius: 8,
+                  border: filtroRangoAnioAuto ? '2px solid #0d9488' : '1px solid #cbd5e1',
+                  background:
+                    !filtroMarcaAuto || !filtroModeloAuto || rangosDeModeloActivo.length === 0
+                      ? '#f8fafc'
+                      : filtroRangoAnioAuto
+                        ? '#ccfbf1'
+                        : '#ffffff',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  color:
+                    !filtroMarcaAuto || !filtroModeloAuto || rangosDeModeloActivo.length === 0
+                      ? '#94a3b8'
+                      : '#0f172a',
+                  cursor:
+                    !filtroMarcaAuto || !filtroModeloAuto || rangosDeModeloActivo.length === 0
+                      ? 'not-allowed'
+                      : 'pointer',
+                }}
+              >
+                <option value="">
+                  {!filtroMarcaAuto || !filtroModeloAuto
+                    ? 'Elige primero marca y modelo'
+                    : rangosDeModeloActivo.length === 0
+                      ? 'Todos los años'
+                      : `Todos los rangos (${rangosDeModeloActivo.length})`}
+                </option>
+                {rangosDeModeloActivo.map(([rango, count]) => (
+                  <option key={rango} value={rango}>
+                    {filtroMarcaAuto} {filtroModeloAuto} ({rango}) · {count}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
-
-        {/* Nivel 2: Modelos Compatibles de la Marca Seleccionada */}
-        {filtroMarcaAuto && modelosDeMarcaActiva.length > 0 && (
-          <div
-            style={{
-              display: 'flex',
-              gap: 6,
-              flexWrap: 'wrap',
-              paddingTop: 8,
-              borderTop: '1px dashed #e2e8f0',
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#0369a1' }}>
-              ↳ Modelos {filtroMarcaAuto}:
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setFiltroModeloAuto('');
-                setFiltroRangoAnioAuto('');
-              }}
-              style={{
-                padding: '4px 10px',
-                borderRadius: 8,
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                border: !filtroModeloAuto ? '2px solid #0284c7' : '1px solid #cbd5e1',
-                background: !filtroModeloAuto ? '#e0f2fe' : '#ffffff',
-                color: !filtroModeloAuto ? '#0369a1' : '#475569',
-              }}
-            >
-              Todos los modelos
-            </button>
-            {modelosDeMarcaActiva.map(([mod, count]) => {
-              const activo = filtroModeloAuto === mod;
-              return (
-                <button
-                  key={mod}
-                  type="button"
-                  onClick={() => {
-                    setFiltroModeloAuto(activo ? '' : mod);
-                    setFiltroRangoAnioAuto('');
-                  }}
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: 8,
-                    fontSize: '0.75rem',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    border: activo ? '2px solid #2563eb' : '1px solid #cbd5e1',
-                    background: activo ? '#dbeafe' : '#ffffff',
-                    color: activo ? '#1d4ed8' : '#334155',
-                  }}
-                >
-                  {filtroMarcaAuto} {mod} ({count})
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Nivel 3: Rangos de Años del Modelo Seleccionado */}
-        {filtroMarcaAuto && filtroModeloAuto && rangosDeModeloActivo.length > 0 && (
-          <div
-            style={{
-              display: 'flex',
-              gap: 6,
-              flexWrap: 'wrap',
-              paddingTop: 6,
-              alignItems: 'center',
-            }}
-          >
-            <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#0f766e' }}>
-              ↳ Rangos de Años ({filtroMarcaAuto} {filtroModeloAuto}):
-            </span>
-            <button
-              type="button"
-              onClick={() => setFiltroRangoAnioAuto('')}
-              style={{
-                padding: '4px 10px',
-                borderRadius: 6,
-                fontSize: '0.74rem',
-                fontWeight: 700,
-                cursor: 'pointer',
-                border: !filtroRangoAnioAuto ? '2px solid #0d9488' : '1px solid #cbd5e1',
-                background: !filtroRangoAnioAuto ? '#ccfbf1' : '#ffffff',
-                color: !filtroRangoAnioAuto ? '#0f766e' : '#475569',
-              }}
-            >
-              Todos los años
-            </button>
-            {rangosDeModeloActivo.map(([rango, count]) => {
-              const activo = filtroRangoAnioAuto === rango;
-              return (
-                <button
-                  key={rango}
-                  type="button"
-                  onClick={() => setFiltroRangoAnioAuto(activo ? '' : rango)}
-                  style={{
-                    padding: '4px 10px',
-                    borderRadius: 6,
-                    fontSize: '0.74rem',
-                    fontWeight: 800,
-                    cursor: 'pointer',
-                    border: activo ? '2px solid #0d9488' : '1px solid #cbd5e1',
-                    background: activo ? '#ccfbf1' : '#f8fafc',
-                    color: activo ? '#0f766e' : '#334155',
-                  }}
-                >
-                  📅 {filtroMarcaAuto} {filtroModeloAuto} ({rango}) · {count}
-                </button>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* Barra de Herramientas Estilo WooCommerce Products Table */}
@@ -1312,24 +1291,6 @@ export default function InventarioErpConsolidado() {
         </div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <select
-            value={filtroMarcaAuto}
-            onChange={(e) => setFiltroMarcaAuto(e.target.value)}
-            style={{
-              padding: '7px 10px',
-              borderRadius: 8,
-              border: '1px solid #cbd5e1',
-              fontSize: '0.8rem',
-            }}
-          >
-            <option value="">🚗 Todas las marcas de auto</option>
-            {marcasAutoOpciones.map(([m, c]) => (
-              <option key={m} value={m}>
-                {m} ({c})
-              </option>
-            ))}
-          </select>
-
           <select
             value={ordenInventario}
             onChange={(e) =>

@@ -802,24 +802,15 @@ export default function ProveedorPOS() {
       {/* ── PANEL IZQUIERDO: ESCÁNER SIEMPRE EN FOCO Y BÚSQUEDA (PARTE EN 0 POR DEFECTO) ── */}
       <div className={styles.leftPanel}>
         <div className={styles.searchHeader}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              gap: '0.5rem',
-            }}
-          >
+          <div className={styles.scannerStatusRow}>
             <div className={styles.scannerBadge}>
               <span className={styles.scannerDot} />
-              <span>Lector de Código de Barra / Pistola Activo (Foco Automático)</span>
+              <span>Escáner de pistola activo · Foco automático</span>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className={styles.headerQuickActions}>
               <button
                 type="button"
-                className="btn btn-sm btn-dark"
-                style={{ background: '#0284c7', borderColor: '#0284c7', color: '#fff', fontWeight: 700 }}
+                className={styles.btnActionBlue}
                 onClick={() => setModalPistolaCodigo('')}
                 title="Escanear mercadería nueva o sumar stock a bodega"
               >
@@ -827,59 +818,62 @@ export default function ProveedorPOS() {
               </button>
               <button
                 type="button"
-                className="btn btn-sm btn-dark"
+                className={styles.btnActionOutline}
                 onClick={abrirHistorial}
                 title="Ver ventas del día, cotizaciones y reimprimir tickets"
               >
                 🧾 Historial / Tickets
               </button>
-              <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
-                <strong>[Enter]</strong> agregar | <strong>[F4]</strong> cobrar
-              </span>
+              <div className={styles.shortcutsHint}>
+                <span className={styles.shortcutKey}>Enter</span> Agregar
+                <span className={styles.shortcutSep}>|</span>
+                <span className={styles.shortcutKey}>F4</span> Cobrar
+              </div>
             </div>
           </div>
 
           <div className={styles.searchBarWrap}>
-            <span className={styles.searchIcon}>🔫</span>
+            <span className={styles.searchIcon} aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M3 5v14M7 5v14M11 5v14M15 5v14M19 5v14" />
+              </svg>
+            </span>
             <input
               ref={searchInputRef}
               type="text"
               className={styles.searchInput}
-              placeholder="Pistolea directamente el producto o escribe código OEM, modelo o nombre... (Enter)"
+              placeholder="Pistolea directamente el producto o escribe código OEM, modelo o nombre..."
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
               onKeyDown={handleKeyDownSearch}
               autoFocus
             />
-            {busqueda && (
+            {busqueda ? (
               <button
                 className={styles.clearSearchBtn}
                 onClick={() => {
                   setBusqueda('');
                   enfocarEscannerSiCorresponde(true);
                 }}
+                title="Limpiar búsqueda"
               >
                 ✕
               </button>
+            ) : (
+              <span className={styles.searchMagnifierIcon} aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <circle cx="11" cy="11" r="8" />
+                  <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+              </span>
             )}
           </div>
 
           {/* ── FILTROS EN LISTAS DESPLEGABLES (SIN DESPLEGAR INVENTARIO POR DEFECTO) ── */}
-          <div
-            style={{
-              display: 'flex',
-              gap: '0.75rem',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              marginTop: '0.35rem',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <label
-                htmlFor="pos-select-categoria"
-                style={{ fontSize: '0.75rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}
-              >
-                📂 Categoría:
+          <div className={styles.filtersToolbar}>
+            <div className={styles.filterDropdownItem}>
+              <label htmlFor="pos-select-categoria" className={styles.filterDropdownLabel}>
+                📁 Categoría:
               </label>
               <select
                 id="pos-select-categoria"
@@ -888,17 +882,9 @@ export default function ProveedorPOS() {
                   setFiltroCategoria(e.target.value);
                   setTimeout(() => enfocarEscannerSiCorresponde(true), 30);
                 }}
-                style={{
-                  padding: '0.38rem 0.65rem',
-                  borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
-                  fontSize: '0.82rem',
-                  fontWeight: 700,
-                  background: filtroCategoria ? '#0f172a' : '#fff',
-                  color: filtroCategoria ? '#fff' : '#0f172a',
-                }}
+                className={`${styles.filterSelect} ${filtroCategoria ? styles.filterSelectActive : ''}`}
               >
-                <option value="">— Seleccionar para filtrar —</option>
+                <option value="">Todas las categorías</option>
                 {categoriasDisponibles.map(([cat, count]) => (
                   <option key={cat} value={cat}>
                     {cat} ({count})
@@ -907,11 +893,8 @@ export default function ProveedorPOS() {
               </select>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-              <label
-                htmlFor="pos-select-marca"
-                style={{ fontSize: '0.75rem', fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}
-              >
+            <div className={styles.filterDropdownItem}>
+              <label htmlFor="pos-select-marca" className={styles.filterDropdownLabel}>
                 🚗 Marca Auto:
               </label>
               <select
@@ -921,17 +904,9 @@ export default function ProveedorPOS() {
                   setFiltroMarcaVehiculo(e.target.value);
                   setTimeout(() => enfocarEscannerSiCorresponde(true), 30);
                 }}
-                style={{
-                  padding: '0.38rem 0.65rem',
-                  borderRadius: '8px',
-                  border: '1px solid #cbd5e1',
-                  fontSize: '0.82rem',
-                  fontWeight: 700,
-                  background: filtroMarcaVehiculo ? '#15803d' : '#fff',
-                  color: filtroMarcaVehiculo ? '#fff' : '#0f172a',
-                }}
+                className={`${styles.filterSelect} ${filtroMarcaVehiculo ? styles.filterSelectActive : ''}`}
               >
-                <option value="">— Seleccionar marca —</option>
+                <option value="">Todas las marcas</option>
                 {marcasVehiculoDisponibles.map(([marca, count]) => (
                   <option key={marca} value={marca}>
                     {marca} ({count})
@@ -940,64 +915,72 @@ export default function ProveedorPOS() {
               </select>
             </div>
 
-            {tieneBusquedaActiva && (
-              <button
-                type="button"
-                className={styles.btnClearFilters}
-                onClick={() => {
-                  setBusqueda('');
-                  setFiltroCategoria('');
-                  setFiltroMarcaVehiculo('');
-                  enfocarEscannerSiCorresponde(true);
-                }}
-              >
-                ✕ Volver pantalla a 0
-              </button>
-            )}
+            <button
+              type="button"
+              className={tieneBusquedaActiva ? styles.btnClearFilters : styles.btnFilterIcon}
+              onClick={() => {
+                setBusqueda('');
+                setFiltroCategoria('');
+                setFiltroMarcaVehiculo('');
+                enfocarEscannerSiCorresponde(true);
+              }}
+              title="Limpiar filtros y volver pantalla a 0"
+            >
+              {tieneBusquedaActiva ? '✕ Limpiar filtros' : '⏳'}
+            </button>
           </div>
         </div>
 
         <div className={styles.catalogContent}>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+            <div className={styles.loadingState}>
               Sincronizando bodega...
             </div>
           ) : !tieneBusquedaActiva ? (
-            /* ESTADO INICIAL EN 0: NO DESPLIEGA EL INVENTARIO HASTA QUE ALGUIEN PISTOLEE O BUSQUE */
-            <div
-              style={{
-                textAlign: 'center',
-                padding: '3.2rem 1.5rem',
-                color: '#475569',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '0.65rem',
-              }}
-            >
-              <div
-                style={{
-                  width: '64px',
-                  height: '64px',
-                  borderRadius: '50%',
-                  background: '#e0f2fe',
-                  color: '#0284c7',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '1.9rem',
-                  boxShadow: '0 4px 14px rgba(2, 132, 199, 0.15)',
-                }}
-              >
-                🔫
+            /* ESTADO INICIAL EN 0: DISEÑO MODERNO CON ILUSTRACIÓN Y PILLS */
+            <div className={styles.readyEmptyState}>
+              <div className={styles.scannerIllustrationWrap}>
+                <svg width="140" height="115" viewBox="0 0 140 115" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="70" cy="58" r="48" fill="#EFF6FF" />
+                  <rect x="28" y="54" width="44" height="32" rx="5" fill="#FFFFFF" stroke="#CBD5E1" strokeWidth="1.5" />
+                  <path d="M35 60V80M40 60V80M43 60V80M48 60V80M52 60V80M57 60V80M61 60V80M65 60V80" stroke="#0F172A" strokeWidth="2.2" strokeLinecap="round" />
+                  <polygon points="76,44 32,63 68,77" fill="rgba(249, 90, 22, 0.18)" />
+                  <line x1="31" y1="68" x2="69" y2="68" stroke="#F95A16" strokeWidth="2" strokeDasharray="3 2" />
+                  <path d="M74 30C74 25.5817 77.5817 22 82 22H106C110.418 22 114 25.5817 114 30V44C114 47.3137 111.314 50 108 50H96L89 80C88.1 83.8 84.7 86.5 80.8 86.5H79C75.1 86.5 72.3 82.9 73.2 79.1L80 50H78C75.7909 50 74 48.2091 74 46V30Z" fill="#1E293B" />
+                  <path d="M76 28C76 24.6863 78.6863 22 82 22H104C108.418 22 112 25.5817 112 30V38H76V28Z" fill="#F95A16" />
+                  <rect x="73" y="31" width="5" height="12" rx="2" fill="#38BDF8" />
+                </svg>
               </div>
-              <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
-                Pantalla Lista en 0 · Pistolea Directamente tu Producto
+              <div className={styles.readyTitle}>
+                Listo para registrar productos
               </div>
-              <div style={{ fontSize: '0.86rem', color: '#64748b', maxWidth: '460px', lineHeight: 1.5 }}>
-                El cursor está fijo en el lector superior. <strong>Dispara la pistola sobre el código de barras</strong>{' '}
-                para enviarlo directo al <strong>Mostrador / Ventana</strong> (descontándolo del stock local por 30 min),
-                o escribe en el buscador para consultar repuestos.
+              <div className={styles.readySubtitle}>
+                Pistolea un producto o escribe el código de barras para enviarlo al{' '}
+                <strong>Mostrador / Ventana.</strong>
+                <br />
+                El sistema retiene el repuesto en ventana por 30 minutos (se descuenta del stock local).
+              </div>
+              <div className={styles.readyPillsRow}>
+                <button
+                  type="button"
+                  className={styles.readyFeaturePill}
+                  onClick={() => enfocarEscannerSiCorresponde(true)}
+                >
+                  <span className={styles.readyPillIcon}>⚡</span>
+                  <span>Escaneo rápido</span>
+                </button>
+                <div className={styles.readyFeaturePill}>
+                  <span className={styles.readyPillIcon}>📦</span>
+                  <span>Retención 30 min</span>
+                </div>
+                <button
+                  type="button"
+                  className={styles.readyFeaturePill}
+                  onClick={abrirHistorial}
+                >
+                  <span className={styles.readyPillIcon}>🧾</span>
+                  <span>Genera ticket</span>
+                </button>
               </div>
             </div>
           ) : repuestosFiltrados.length === 0 ? (
@@ -1140,10 +1123,11 @@ export default function ProveedorPOS() {
 
       {/* ── PANEL DERECHO: MOSTRADOR / VENTANA (PERSISTENTE 30 MIN CON RESERVA DE STOCK) ── */}
       <div className={styles.rightPanel}>
-        <div className={styles.cartHeader} style={{ flexDirection: 'column', alignItems: 'stretch', gap: '0.4rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className={styles.cartHeader}>
+          <div className={styles.cartHeaderTopRow}>
             <div className={styles.cartTitle}>
-              <span>🛒 Mostrador / Ventana</span>
+              <span className={styles.cartHeaderIcon}>🛒</span>
+              <span>Mostrador / Ventana</span>
               {carro.length > 0 && <span className={styles.cartCountBadge}>{totales.totalUnidades} un.</span>}
             </div>
             {carro.length > 0 && (
@@ -1160,74 +1144,84 @@ export default function ProveedorPOS() {
           {/* BANNER DE RESERVA ACTIVA POR 30 MINUTOS (MODELO E-COMMERCE) */}
           {carro.length > 0 && (
             <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                background: segundosRestantes < 300 ? '#fef2f2' : '#fffbeb',
-                border: `1px solid ${segundosRestantes < 300 ? '#fecaca' : '#fde68a'}`,
-                color: segundosRestantes < 300 ? '#b91c1c' : '#92400e',
-                borderRadius: '7px',
-                padding: '0.35rem 0.65rem',
-                fontSize: '0.74rem',
-                fontWeight: 700,
-              }}
+              className={`${styles.reservationBanner} ${
+                segundosRestantes < 300 ? styles.reservationBannerUrgent : ''
+              }`}
             >
               <span>
                 🔒 Stock descontado de bodega local {sincronizandoReserva ? '(sincronizando...)' : ''}
               </span>
-              <span style={{ fontFamily: 'monospace', fontWeight: 900, fontSize: '0.82rem' }}>
+              <span className={styles.reservationTimerText}>
                 ⏱ Expira en {formatearRelojReserva(segundosRestantes)}
               </span>
             </div>
           )}
         </div>
 
-        {/* Formulario rápido de cliente */}
+        {/* Formulario rápido de cliente con iconos integrados */}
         <div className={styles.clientQuickForm}>
-          <input
-            type="text"
-            className={styles.inputMicro}
-            placeholder="Cliente (Opcional)"
-            value={clienteNombre}
-            onChange={(e) => setClienteNombre(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && enfocarEscannerSiCorresponde(true)}
-          />
-          <input
-            type="text"
-            className={styles.inputMicro}
-            placeholder="Patente (ej: ABCD12)"
-            value={clientePatente}
-            onChange={(e) => setClientePatente(e.target.value.toUpperCase())}
-            onKeyDown={(e) => e.key === 'Enter' && enfocarEscannerSiCorresponde(true)}
-          />
-          <input
-            type="text"
-            className={styles.inputMicro}
-            placeholder="RUT Cliente"
-            value={clienteRut}
-            onChange={(e) => setClienteRut(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && enfocarEscannerSiCorresponde(true)}
-          />
-          <input
-            type="text"
-            className={styles.inputMicro}
-            placeholder="Teléfono"
-            value={clienteTelefono}
-            onChange={(e) => setClienteTelefono(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && enfocarEscannerSiCorresponde(true)}
-          />
+          <div className={styles.inputIconField}>
+            <span className={styles.fieldLeftIcon}>👤</span>
+            <input
+              type="text"
+              className={styles.inputMicro}
+              placeholder="Cliente (Opcional)"
+              value={clienteNombre}
+              onChange={(e) => setClienteNombre(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && enfocarEscannerSiCorresponde(true)}
+            />
+          </div>
+          <div className={styles.inputIconField}>
+            <span className={styles.fieldLeftIcon}>🚗</span>
+            <input
+              type="text"
+              className={styles.inputMicro}
+              placeholder="Patente (ej: ABCD12)"
+              value={clientePatente}
+              onChange={(e) => setClientePatente(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === 'Enter' && enfocarEscannerSiCorresponde(true)}
+            />
+          </div>
+          <div className={styles.inputIconField}>
+            <span className={styles.fieldLeftIcon}>🪪</span>
+            <input
+              type="text"
+              className={styles.inputMicro}
+              placeholder="RUT Cliente"
+              value={clienteRut}
+              onChange={(e) => setClienteRut(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && enfocarEscannerSiCorresponde(true)}
+            />
+          </div>
+          <div className={styles.inputIconField}>
+            <span className={styles.fieldLeftIcon}>📞</span>
+            <input
+              type="text"
+              className={styles.inputMicro}
+              placeholder="Teléfono"
+              value={clienteTelefono}
+              onChange={(e) => setClienteTelefono(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && enfocarEscannerSiCorresponde(true)}
+            />
+          </div>
         </div>
 
         {/* Lista de productos en el Mostrador / Ventana */}
         <div className={styles.cartItemsList}>
           {carro.length === 0 ? (
             <div className={styles.emptyCart}>
-              <span style={{ fontSize: '2.5rem' }}>📦</span>
-              <strong>Mostrador / Ventana vacía</strong>
-              <span>
-                Pistolea un repuesto para retenerlo en ventana por 30 minutos (se descuenta del stock local hasta
-                imprimir el ticket o cancelar)
+              <div className={styles.emptyBoxIllustration}>
+                <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M36 10L60 22V48L36 60L12 48V22L36 10Z" fill="#DBEAFE" />
+                  <path d="M36 10L60 22L36 34L12 22L36 10Z" fill="#93C5FD" />
+                  <path d="M36 34V60L60 48V22L36 34Z" fill="#60A5FA" />
+                  <path d="M24 16L48 28" stroke="#EFF6FF" strokeWidth="3" strokeLinecap="round" />
+                </svg>
+              </div>
+              <strong className={styles.emptyCartTitle}>Mostrador / Ventana vacía</strong>
+              <span className={styles.emptyCartSub}>
+                Pistolea un repuesto para retenerlo en ventana por 30 minutos (se descuenta del stock local)
+                hasta imprimir el ticket o cancelar.
               </span>
             </div>
           ) : (
@@ -1291,16 +1285,7 @@ export default function ProveedorPOS() {
         {/* Totales y opciones de cobro */}
         <div className={styles.checkoutFooter}>
           {errorMsg && (
-            <div
-              style={{
-                color: '#ef4444',
-                fontSize: '0.8rem',
-                fontWeight: 600,
-                background: '#fee2e2',
-                padding: '0.5rem',
-                borderRadius: '6px',
-              }}
-            >
+            <div className={styles.errorAlert}>
               ⚠️ {errorMsg}
             </div>
           )}
@@ -1380,21 +1365,12 @@ export default function ProveedorPOS() {
 
           {/* Selector de medio de pago */}
           <div>
-            <div
-              style={{
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                color: '#64748b',
-                marginBottom: '4px',
-                textTransform: 'uppercase',
-              }}
-            >
-              Medio de Pago:
-            </div>
+            <div className={styles.paymentSectionLabel}>Medio de pago:</div>
             <div className={styles.paymentMethodsGrid}>
               {(['EFECTIVO', 'DEBITO', 'CREDITO', 'TRANSFERENCIA'] as MetodoPagoPOS[]).map((m) => (
                 <button
                   key={m}
+                  type="button"
                   className={`${styles.paymentBtn} ${metodoPago === m ? styles.paymentBtnActive : ''}`}
                   onClick={() => setMetodoPago(m)}
                 >
@@ -1404,7 +1380,7 @@ export default function ProveedorPOS() {
                     ? '💳 Débito'
                     : m === 'CREDITO'
                     ? '💳 Crédito'
-                    : '📲 Transf.'}
+                    : '⇄ Transf.'}
                 </button>
               ))}
             </div>

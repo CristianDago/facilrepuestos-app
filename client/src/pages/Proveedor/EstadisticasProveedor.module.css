@@ -1,94 +1,123 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   EstadisticasProveedor.module.css — Reportes y Métricas del Proveedor
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 .estado {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.8rem;
-    padding: 3rem 1rem;
-    color: var(--gray, #666);
-    text-align: center;
-  }
-  
-  .nota {
-    background: #fff;
-    border-left: 3px solid var(--red, #E94216);
-    padding: 0.7rem 0.9rem;
-    margin-bottom: 1.2rem;
-    font-size: 0.82rem;
-    line-height: 1.4;
-    color: #444;
-  }
-  
-  .seccion {
-    margin-top: 1.6rem;
-    min-width: 0;   /* permite que la tabla se adapte (y haga scroll dentro de .tbl-wrap) */
-  }
-  
-  .seccionTitulo {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 1rem;
-    font-weight: 800;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    color: var(--dark, #13345B);
-    margin-bottom: 0.6rem;
-  }
-  
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 3rem 1rem;
+  color: var(--prov-text-muted, #64748b);
+  text-align: center;
+}
+
+.nota {
+  background: var(--prov-surface, #ffffff);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  border-left: 4px solid var(--prov-accent, #f95a16);
+  border-radius: 12px;
+  padding: 0.85rem 1.1rem;
+  margin-bottom: 1.35rem;
+  font-size: 0.84rem;
+  line-height: 1.48;
+  color: var(--prov-text-muted, #475569);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+}
+
+.seccion {
+  margin-top: 1.5rem;
+  min-width: 0;
+  background: var(--prov-surface, #ffffff);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  border-radius: 14px;
+  padding: 1.15rem 1.25rem;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04);
+}
+
+.seccionTitulo {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--prov-text, #0f172a);
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.seccionTitulo::before {
+  content: '';
+  width: 4px;
+  height: 16px;
+  border-radius: 99px;
+  background: var(--prov-accent, #f95a16);
+}
+
+.dosColumnas {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.colBarra {
+  width: 34%;
+}
+
+.barraPista {
+  background: #f1f5f9;
+  height: 10px;
+  width: 100%;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.barraRelleno {
+  background: linear-gradient(90deg, var(--prov-accent, #ff6b1a), var(--prov-accent-end, #e94216));
+  height: 100%;
+  min-width: 0;
+  border-radius: 999px;
+}
+
+.itemNombre {
+  font-weight: 700;
+  color: var(--prov-text, #0f172a);
+}
+
+.itemCodigo {
+  font-size: 0.74rem;
+  color: var(--prov-text-muted, #64748b);
+  font-family: monospace;
+}
+
+.vacio {
+  text-align: center;
+  padding: 1.5rem;
+  color: var(--prov-text-muted, #64748b);
+}
+
+.valorAviso {
+  color: #d97706;
+  font-weight: 700;
+}
+
+.valorAlerta {
+  color: #dc2626;
+  font-weight: 800;
+}
+
+.masItems {
+  margin-top: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--prov-text-muted, #64748b);
+}
+
+@media (max-width: 1100px) {
   .dosColumnas {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 1.4rem;
-    min-width: 0;
+    grid-template-columns: 1fr;
+    gap: 0;
   }
-  
-  .colBarra {
-    width: 34%;
-  }
-  
-  .barraPista {
-    background: #EEE;
-    height: 10px;
-    width: 100%;
-  }
-  
-  .barraRelleno {
-    background: var(--red, #E94216);
-    height: 100%;
-    min-width: 0;
-  }
-  
-  .itemNombre {
-    font-weight: 600;
-  }
-  
-  .itemCodigo {
-    font-size: 0.74rem;
-    color: var(--gray, #666);
-  }
-  
-  .vacio {
-    text-align: center;
-    padding: 1.4rem;
-    color: var(--gray, #666);
-  }
-  
-  .valorAviso {
-    color: #B7791F;
-  }
-  
-  .valorAlerta {
-    color: #C0392B;
-    font-weight: 700;
-  }
-  
-  .masItems {
-    margin-top: 0.5rem;
-    font-size: 0.8rem;
-    color: var(--gray, #666);
-  }
-  
-  @media (max-width: 1100px) {
-    .dosColumnas {
-      grid-template-columns: 1fr;
-      gap: 0;
-    }
-  }
+}

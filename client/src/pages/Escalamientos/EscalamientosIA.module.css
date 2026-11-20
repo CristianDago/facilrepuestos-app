@@ -1,74 +1,152 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   EscalamientosIA.module.css — Diseño Ejecutivo Moderno para Consultas IA
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 .container {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 1.15rem;
+  padding-bottom: 1.5rem;
 }
 
 .topBar {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
+  align-items: center;
+  gap: 1rem;
   flex-wrap: wrap;
 }
 
 .title {
-  font-size: 1.45rem;
+  font-size: 1.38rem;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--prov-text, #0f172a);
+  letter-spacing: 0.03em;
   margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  text-transform: uppercase;
 }
 
 .subtitle {
-  margin: 4px 0 0;
-  font-size: 0.9rem;
-  color: #475569;
+  margin: 3px 0 0;
+  font-size: 0.84rem;
+  color: var(--prov-text-muted, #64748b);
+  max-width: 760px;
+  line-height: 1.45;
 }
 
+.refreshBtn {
+  background: var(--prov-surface, #ffffff);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  color: var(--prov-text, #0f172a);
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.52rem 0.95rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
+}
+
+.refreshBtn:hover:not(:disabled) {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+/* ── TARJETAS KPI ──────────────────────────────────────────────────────── */
 .kpiGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 860px) {
+  .kpiGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .kpiCard {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 16px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  background: var(--prov-surface, #ffffff);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  border-radius: 14px;
+  padding: 1.1rem 1.25rem;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.03);
+  transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.kpiCard:hover {
+  transform: translateY(-1px);
+  border-color: #cbd5e1;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
+}
+
+.kpiCardSelected {
+  border-color: var(--prov-accent, #f97316);
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.12);
+}
+
+.kpiTopRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .kpiLabel {
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #64748b;
+  color: var(--prov-text-muted, #64748b);
+}
+
+.kpiIconBadge {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.kpiIconOrange {
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.kpiIconGreen {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.kpiIconBlue {
+  background: #eff6ff;
+  color: #2563eb;
 }
 
 .kpiValue {
-  font-size: 1.75rem;
+  font-size: 1.85rem;
   font-weight: 800;
-  color: #0f172a;
-  margin-top: 6px;
+  color: var(--prov-text, #0f172a);
+  margin-top: 0.25rem;
+  line-height: 1.1;
 }
 
 .kpiSub {
-  font-size: 0.8rem;
-  color: #64748b;
-  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--prov-text-muted, #64748b);
+  margin-top: 0.3rem;
 }
 
-/* Nodos Ailoo (Admin) */
+/* ── NODOS AILOO (ADMIN) ───────────────────────────────────────────────── */
 .nodosSection {
-  background: #f8fafc;
-  border: 1px solid #cbd5e1;
-  border-radius: 14px;
-  padding: 18px;
+  background: var(--prov-surface, #ffffff);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  border-radius: 16px;
+  padding: 1.15rem 1.25rem;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.03);
 }
 
 .nodosHeader {
@@ -81,9 +159,9 @@
 }
 
 .nodosTitle {
-  font-size: 1rem;
+  font-size: 0.98rem;
   font-weight: 800;
-  color: #0f172a;
+  color: var(--prov-text, #0f172a);
   margin: 0;
 }
 
@@ -94,8 +172,8 @@
 }
 
 .nodoCard {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--prov-surface-2, #f8fafc);
+  border: 1px solid var(--prov-border, #e2e8f0);
   border-radius: 12px;
   padding: 16px;
   display: flex;
@@ -112,19 +190,19 @@
 
 .nodoName {
   font-weight: 800;
-  font-size: 1.02rem;
-  color: #0f172a;
+  font-size: 1rem;
+  color: var(--prov-text, #0f172a);
 }
 
 .datasetBadge {
   font-family: monospace;
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   background: #eff6ff;
   color: #1d4ed8;
   border: 1px solid #bfdbfe;
   padding: 3px 8px;
   border-radius: 6px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .nodoMetaRow {
@@ -132,15 +210,16 @@
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
-  font-size: 0.83rem;
-  color: #334155;
+  font-size: 0.82rem;
+  color: var(--prov-text-muted, #475569);
 }
 
 .margenInputGroup {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #f1f5f9;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   padding: 4px 8px;
   border-radius: 8px;
 }
@@ -154,226 +233,406 @@
   text-align: center;
 }
 
-/* Tabs principales */
+/* ── BARRA DE PESTAÑAS Y FILTROS ───────────────────────────────────────── */
 .tabsBar {
   display: flex;
-  gap: 10px;
-  border-bottom: 2px solid #e2e8f0;
-  padding-bottom: 10px;
+  gap: 0.5rem;
+  background: var(--prov-surface, #ffffff);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  border-radius: 12px;
+  padding: 0.4rem;
+  width: fit-content;
+  max-width: 100%;
   flex-wrap: wrap;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
 }
 
 .tabBtn {
-  padding: 9px 16px;
-  border-radius: 10px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  color: #334155;
+  padding: 0.5rem 1rem;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: var(--prov-text-muted, #64748b);
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 0.84rem;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
-.tabBtnActive {
-  background: #0f172a;
-  color: #ffffff;
-  border-color: #0f172a;
+.tabBtn:hover {
+  color: var(--prov-text, #0f172a);
+  background: var(--prov-surface-2, #f8fafc);
 }
 
-/* Filtros */
+.tabBtnActive {
+  background: linear-gradient(135deg, var(--prov-accent, #ff6b1a) 0%, var(--prov-accent-end, #e94216) 100%);
+  color: #ffffff !important;
+  box-shadow: 0 3px 10px var(--prov-accent-glow, rgba(233, 66, 22, 0.25));
+}
+
 .filtersRow {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: 0.75rem;
   flex-wrap: wrap;
 }
 
 .pillGroup {
   display: flex;
-  gap: 8px;
+  gap: 0.45rem;
   flex-wrap: wrap;
 }
 
 .pillBtn {
-  padding: 6px 13px;
-  border-radius: 999px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  font-size: 0.82rem;
+  padding: 0.42rem 0.9rem;
+  border-radius: 9px;
+  border: 1px solid var(--prov-border, #e2e8f0);
+  background: var(--prov-surface, #ffffff);
+  font-size: 0.8rem;
   font-weight: 700;
-  color: #475569;
+  color: var(--prov-text-muted, #475569);
   cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pillBtn:hover {
+  border-color: #cbd5e1;
+  color: var(--prov-text, #0f172a);
 }
 
 .pillBtnActive {
-  background: #2563eb;
+  background: #0f172a;
   color: #ffffff;
-  border-color: #2563eb;
+  border-color: #0f172a;
 }
 
-/* Lista de Escalamientos */
+/* ── TARJETAS DE CONSULTA IA (MODERNA Y LUMINOSA) ──────────────────────── */
 .cardsList {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 1rem;
 }
 
-.escCard {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-left: 5px solid #f59e0b;
-  border-radius: 12px;
-  padding: 18px;
-  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.04);
+.soluDarkCard {
+  background: var(--prov-surface, #ffffff);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  border-left: 4px solid var(--prov-accent, #f97316);
+  border-radius: 16px;
+  padding: 1.35rem 1.5rem;
+  color: var(--prov-text, #0f172a);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 1rem;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
 }
 
-.escCardRespondido {
-  border-left-color: #10b981;
+.soluDarkCard:hover {
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.07);
 }
 
-.escHeader {
+.soluPhotoGrid {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1.35rem;
+  align-items: stretch;
+}
+
+@media (max-width: 860px) {
+  .soluPhotoGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.soluPhotoBox {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
   display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 240px;
+  padding: 0.5rem;
+}
+
+.soluPhotoImg {
+  width: 100%;
+  max-height: 340px;
+  object-fit: contain;
+  display: block;
+  border-radius: 8px;
+}
+
+.soluRightCol {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.soluMetaTop {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
+  gap: 0.65rem;
   flex-wrap: wrap;
-  gap: 10px;
 }
 
-.escBadges {
+.soluMetaLeft {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
   flex-wrap: wrap;
 }
 
-.ticketRef {
-  font-family: monospace;
+.soluBadgeTeal {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #fed7aa;
+  font-size: 0.75rem;
   font-weight: 800;
-  font-size: 0.88rem;
-  background: #0f172a;
-  color: #ffffff;
-  padding: 4px 9px;
-  border-radius: 6px;
-}
-
-.destinoBadgeAiloo {
-  background: #ede9fe;
-  color: #5b21b6;
-  border: 1px solid #ddd6fe;
-  font-size: 0.78rem;
-  font-weight: 700;
-  padding: 3px 9px;
+  padding: 0.25rem 0.7rem;
   border-radius: 999px;
 }
 
-.destinoBadgeLocal {
-  background: #dcfce7;
-  color: #166534;
-  border: 1px solid #bbf7d0;
+.soluBadgeSku {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8rem;
+  font-weight: 800;
+  padding: 0.25rem 0.65rem;
+  border-radius: 7px;
+}
+
+.soluTimeText {
   font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.soluRefBadge {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
   font-weight: 700;
-  padding: 3px 9px;
-  border-radius: 999px;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 0.22rem 0.6rem;
+  border-radius: 7px;
 }
 
 .estadoBadgePendiente {
   background: #fef3c7;
   color: #92400e;
   font-weight: 800;
-  font-size: 0.76rem;
-  padding: 3px 9px;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.7rem;
   border-radius: 999px;
 }
 
 .estadoBadgeRespondido {
-  background: #d1fae5;
-  color: #065f46;
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
   font-weight: 800;
-  font-size: 0.76rem;
-  padding: 3px 9px;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.7rem;
   border-radius: 999px;
 }
 
-.vehiculoBar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  padding: 10px 14px;
-  border-radius: 10px;
-}
-
-.patenteTag {
-  background: #ffffff;
-  border: 2px solid #0f172a;
-  border-radius: 6px;
-  padding: 2px 9px;
-  font-family: monospace;
-  font-weight: 900;
-  font-size: 0.9rem;
-  letter-spacing: 0.08em;
-  color: #0f172a;
-}
-
-.vehiculoInfo {
-  font-weight: 700;
-  color: #1e293b;
+.soluProductDesc {
   font-size: 0.92rem;
-}
-
-.mensajeBox {
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-radius: 10px;
-  padding: 12px 14px;
-}
-
-.mensajeLabel {
-  font-size: 0.75rem;
-  font-weight: 800;
-  text-transform: uppercase;
-  color: #92400e;
-  margin-bottom: 4px;
-}
-
-.mensajeText {
-  font-size: 0.95rem;
-  color: #1e293b;
-  margin: 0;
+  font-weight: 700;
+  color: var(--prov-text, #1e293b);
   line-height: 1.45;
+  margin: 0;
 }
 
-.motivoBox {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 10px;
-  padding: 10px 14px;
-  font-size: 0.87rem;
-  color: #1e3a8a;
+.soluQuotedQuestion {
+  font-size: 1.04rem;
+  font-weight: 800;
+  color: var(--prov-text, #0f172a);
+  background: var(--prov-surface-2, #f8fafc);
+  border-left: 3.5px solid #2563eb;
+  padding: 0.75rem 1rem;
+  border-radius: 0 10px 10px 0;
+  line-height: 1.45;
+  margin: 2px 0;
 }
 
-/* Panel de Respuesta Experta */
-.replyPanel {
-  background: #f8fafc;
-  border: 1px solid #cbd5e1;
+.soluGeminiHint {
+  font-size: 0.82rem;
+  color: #0369a1;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  padding: 0.55rem 0.85rem;
+  border-radius: 9px;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.soluChatBox {
+  background: var(--prov-surface-2, #f8fafc);
+  border: 1px solid var(--prov-border, #e2e8f0);
   border-radius: 12px;
-  padding: 16px;
+  padding: 0.85rem 1.05rem;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 0.45rem;
+}
+
+.soluChatHeader {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.soluChatLine {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--prov-text, #1e293b);
+  white-space: pre-wrap;
+}
+
+.soluChatHour {
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-family: monospace;
+  margin-right: 6px;
+}
+
+.soluChatAuthorCliente {
+  color: #1d4ed8;
+  font-weight: 800;
+  margin-right: 6px;
+}
+
+.soluChatAuthorAgente {
+  color: #15803d;
+  font-weight: 800;
+  margin-right: 6px;
+}
+
+.soluQuickPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 2px;
+}
+
+.soluQuickPillBtn {
+  background: var(--prov-surface-2, #f8fafc);
+  color: var(--prov-text, #334155);
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 0.38rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.soluQuickPillBtn:hover {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #93c5fd;
+}
+
+.soluReplyLabel {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--prov-text-muted, #475569);
+}
+
+.soluDarkTextarea {
+  width: 100%;
+  min-height: 78px;
+  background: var(--prov-surface, #ffffff);
+  border: 1.5px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0.7rem 0.9rem;
+  color: var(--prov-text, #0f172a);
+  font-size: 0.88rem;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.soluDarkTextarea:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.soluFooterRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.soluSendBtn {
+  background: linear-gradient(135deg, var(--prov-accent, #ff6b1a) 0%, var(--prov-accent-end, #e94216) 100%);
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.86rem;
+  border: none;
+  border-radius: 10px;
+  padding: 0.65rem 1.3rem;
+  cursor: pointer;
+  box-shadow: 0 4px 14px var(--prov-accent-glow, rgba(233, 66, 22, 0.28));
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.soluSendBtn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px var(--prov-accent-glow, rgba(233, 66, 22, 0.36));
+}
+
+.soluSendBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.soluAdvToggle {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.28rem 0.65rem;
+  border-radius: 7px;
+  transition: all 0.15s ease;
+}
+
+.soluAdvToggle:hover {
+  background: #dbeafe;
+}
+
+/* ── PANEL DESPLEGABLE DE VINCULACIÓN DE INVENTARIO ────────────────────── */
+.replyPanel {
+  background: var(--prov-surface-2, #f8fafc);
+  border: 1px solid var(--prov-border, #cbd5e1);
+  border-radius: 12px;
+  padding: 1rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
 }
 
 .formGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+  gap: 0.75rem;
 }
 
 .fieldGroup {
@@ -383,19 +642,20 @@
 }
 
 .fieldLabel {
-  font-size: 0.78rem;
+  font-size: 0.75rem;
   font-weight: 700;
-  color: #334155;
+  color: var(--prov-text-muted, #475569);
 }
 
 .input,
 .select,
 .textarea {
-  padding: 8px 10px;
+  padding: 0.5rem 0.7rem;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
-  font-size: 0.88rem;
+  font-size: 0.85rem;
   background: #ffffff;
+  color: #0f172a;
 }
 
 .textarea {
@@ -407,21 +667,20 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 0.86rem;
-  font-weight: 600;
-  color: #0f172a;
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--prov-text, #0f172a);
   cursor: pointer;
 }
 
-/* Caja de Respuesta y Margen Comercial */
 .respuestaBox {
   background: #ecfdf5;
   border: 1px solid #a7f3d0;
   border-radius: 10px;
-  padding: 12px 14px;
+  padding: 0.75rem 1rem;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.4rem;
 }
 
 .comercialBar {
@@ -436,22 +695,23 @@
   font-size: 0.85rem;
 }
 
-/* Tabla / Tarjetas de Conocimiento Aprendido */
+/* ── TARJETAS DE CONOCIMIENTO APRENDIDO ────────────────────────────────── */
 .knowGrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-  gap: 14px;
+  gap: 1rem;
 }
 
 .knowCard {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
+  background: var(--prov-surface, #ffffff);
+  border: 1px solid var(--prov-border, #e2e8f0);
   border-top: 4px solid #2563eb;
-  border-radius: 12px;
-  padding: 16px;
+  border-radius: 14px;
+  padding: 1.15rem 1.25rem;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0.65rem;
 }
 
 .knowTags {
@@ -463,280 +723,8 @@
 .knowTag {
   background: #f1f5f9;
   color: #334155;
-  font-size: 0.75rem;
+  font-size: 0.73rem;
   font-weight: 700;
   padding: 3px 8px;
   border-radius: 6px;
-}
-
-/* ─── Tarjetas Estilo Portal Escalamiento (Con Foto y Sin Foto) ─── */
-.soluSectionHeader {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  margin: 6px 0 2px;
-}
-
-.soluSectionTitle {
-  font-size: 1.05rem;
-  font-weight: 800;
-  color: #0f172a;
-}
-
-.soluSectionSub {
-  font-size: 0.86rem;
-  color: #64748b;
-}
-
-.soluDarkCard {
-  background: #141821;
-  border: 1px solid #262d3d;
-  border-radius: 14px;
-  padding: 22px;
-  color: #e2e8f0;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.soluPhotoGrid {
-  display: grid;
-  grid-template-columns: 310px 1fr;
-  gap: 22px;
-  align-items: stretch;
-}
-
-@media (max-width: 860px) {
-  .soluPhotoGrid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.soluPhotoBox {
-  background: #0b0e14;
-  border: 1px solid #1e2533;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  min-height: 280px;
-}
-
-.soluPhotoImg {
-  width: 100%;
-  max-height: 380px;
-  object-fit: contain;
-  display: block;
-}
-
-.soluRightCol {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.soluMetaTop {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.soluMetaLeft {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.soluBadgeTeal {
-  background: rgba(14, 165, 233, 0.16);
-  color: #7dd3fc;
-  border: 1px solid rgba(56, 189, 248, 0.28);
-  font-size: 0.78rem;
-  font-weight: 700;
-  padding: 3px 10px;
-  border-radius: 999px;
-}
-
-.soluBadgeSku {
-  background: #232a38;
-  color: #e2e8f0;
-  border: 1px solid #333d52;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.82rem;
-  font-weight: 700;
-  padding: 4px 10px;
-  border-radius: 6px;
-}
-
-.soluTimeText {
-  font-size: 0.83rem;
-  color: #94a3b8;
-}
-
-.soluRefBadge {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.78rem;
-  color: #94a3b8;
-  background: #1c2230;
-  border: 1px solid #2d364a;
-  padding: 2px 9px;
-  border-radius: 6px;
-}
-
-.soluProductDesc {
-  font-size: 0.94rem;
-  color: #cbd5e1;
-  line-height: 1.45;
-  margin: 0;
-}
-
-.soluQuotedQuestion {
-  font-size: 1.18rem;
-  font-weight: 700;
-  color: #f8fafc;
-  line-height: 1.4;
-  margin: 2px 0;
-}
-
-.soluGeminiHint {
-  font-size: 0.87rem;
-  color: #94a3b8;
-  line-height: 1.45;
-}
-
-.soluChatBox {
-  background: #0e121a;
-  border: 1px solid #222938;
-  border-radius: 10px;
-  padding: 13px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.soluChatHeader {
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #94a3b8;
-  margin-bottom: 2px;
-}
-
-.soluChatLine {
-  font-size: 0.87rem;
-  line-height: 1.45;
-  color: #e2e8f0;
-  white-space: pre-wrap;
-}
-
-.soluChatHour {
-  color: #64748b;
-  font-size: 0.8rem;
-  margin-right: 6px;
-}
-
-.soluChatAuthorCliente {
-  color: #f8fafc;
-  font-weight: 800;
-  margin-right: 6px;
-}
-
-.soluChatAuthorAgente {
-  color: #4ade80;
-  font-weight: 800;
-  margin-right: 6px;
-}
-
-.soluQuickPills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 2px;
-}
-
-.soluQuickPillBtn {
-  background: transparent;
-  color: #cbd5e1;
-  border: 1px solid #333d52;
-  border-radius: 999px;
-  padding: 6px 14px;
-  font-size: 0.83rem;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.soluQuickPillBtn:hover {
-  background: #1e2636;
-  color: #ffffff;
-  border-color: #64748b;
-}
-
-.soluReplyLabel {
-  font-size: 0.82rem;
-  color: #94a3b8;
-  margin-bottom: 4px;
-}
-
-.soluDarkTextarea {
-  width: 100%;
-  min-height: 78px;
-  background: #0b0e14;
-  border: 1px solid #2b3448;
-  border-radius: 8px;
-  padding: 11px 13px;
-  color: #f8fafc;
-  font-size: 0.92rem;
-  resize: vertical;
-  outline: none;
-}
-
-.soluDarkTextarea:focus {
-  border-color: #38bdf8;
-}
-
-.soluFooterRow {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-
-.soluSendBtn {
-  background: #7dd3fc;
-  color: #0f172a;
-  font-weight: 800;
-  font-size: 0.9rem;
-  border: none;
-  border-radius: 8px;
-  padding: 10px 20px;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.soluSendBtn:hover:not(:disabled) {
-  background: #38bdf8;
-}
-
-.soluSendBtn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.soluAdvToggle {
-  background: transparent;
-  border: none;
-  color: #7dd3fc;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0;
-  text-decoration: underline;
 }

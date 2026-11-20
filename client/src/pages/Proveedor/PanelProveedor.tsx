@@ -7,7 +7,7 @@ import styles from "./PanelProveedor.module.css";
 type AccentColor = "orange" | "blue" | "green" | "purple";
 
 // Estructura moderna del portal del proveedor:
-// Header superior + Menú lateral izquierdo colapsable + Área de trabajo fluida.
+// Header superior con botón desplegable (drawer en móvil / colapsable en escritorio) + Menú lateral izquierdo.
 //   /proveedor/pos          → Punto de Venta (POS)
 //   /proveedor              → Mis Repuestos (Inventario propio)
 //   /proveedor/consultas    → Consultas IA (Mostrador)
@@ -21,6 +21,7 @@ export default function PanelProveedor() {
   const [sidebarColapsado, setSidebarColapsado] = useState<boolean>(() => {
     return localStorage.getItem("frp_prov_sidebar_collapsed") === "true";
   });
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
   const [modoOscuro, setModoOscuro] = useState<boolean>(() => {
     return localStorage.getItem("frp_prov_dark_mode") === "true";
   });
@@ -30,6 +31,11 @@ export default function PanelProveedor() {
   const [mostrarAyuda, setMostrarAyuda] = useState(false);
   const [mostrarMenuTema, setMostrarMenuTema] = useState(false);
 
+  // Cerrar el cajón móvil automáticamente al cambiar de ruta
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [location.pathname]);
+
   // Auto-cierre de la notificación (las pantallas hijas avisan con useAppStore().notify)
   useEffect(() => {
     if (!notification) return;
@@ -37,7 +43,19 @@ export default function PanelProveedor() {
     return () => clearTimeout(timer);
   }, [notification, clearNotification]);
 
-  const toggleSidebar = () => {
+  const handleToggleMenuButton = () => {
+    if (typeof window !== "undefined" && window.innerWidth <= 960) {
+      setMobileMenuOpen(prev => !prev);
+    } else {
+      setSidebarColapsado(prev => {
+        const next = !prev;
+        localStorage.setItem("frp_prov_sidebar_collapsed", String(next));
+        return next;
+      });
+    }
+  };
+
+  const toggleSidebarDesktop = () => {
     setSidebarColapsado(prev => {
       const next = !prev;
       localStorage.setItem("frp_prov_sidebar_collapsed", String(next));
@@ -80,6 +98,28 @@ export default function PanelProveedor() {
       {/* ── HEADER SUPERIOR ─────────────────────────────────────── */}
       <header className={styles.header}>
         <div className={styles.headerLeft}>
+          {/* Botón desplegable del menú lateral (Desktop + Mobile Drawer) */}
+          <button
+            type="button"
+            className={styles.menuToggleBtn}
+            onClick={handleToggleMenuButton}
+            title="Desplegar / contraer menú de navegación"
+            aria-label="Menú de navegación"
+          >
+            {mobileMenuOpen ? (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="16" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+            )}
+          </button>
+
           <div className={styles.brandBlock} onClick={() => navigate("/proveedor/pos")}>
             <img
               className={styles.logo}
@@ -234,15 +274,48 @@ export default function PanelProveedor() {
         </div>
       </header>
 
-      {/* ── CUERPO PRINCIPAL: SIDEBAR LATERAL IZQUIERDO + CONTENIDO ── */}
+      {/* ── CUERPO PRINCIPAL: SIDEBAR LATERAL RESPONSIVE + CONTENIDO ── */}
       <div className={styles.bodyLayout}>
-        <aside className={`${styles.sidebar} ${sidebarColapsado ? styles.sidebarCollapsed : ""}`}>
+        {/* Backdrop oscuro cuando el cajón móvil está abierto */}
+        {mobileMenuOpen && (
+          <div
+            className={styles.mobileBackdrop}
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        )}
+
+        <aside
+          className={`${styles.sidebar} ${sidebarColapsado ? styles.sidebarCollapsed : ""} ${
+            mobileMenuOpen ? styles.sidebarMobileOpen : ""
+          }`}
+        >
+          {/* Cabecera exclusiva para móvil dentro del menú desplegable */}
+          <div className={styles.mobileDrawerHeader}>
+            <div>
+              <div className={styles.mobileDrawerTitle}>MENÚ PROVEEDOR</div>
+              <div className={styles.mobileDrawerSub}>{user?.nombre || "Proveedor"}</div>
+            </div>
+            <button
+              type="button"
+              className={styles.mobileDrawerCloseBtn}
+              onClick={() => setMobileMenuOpen(false)}
+              aria-label="Cerrar menú"
+            >
+              ✕
+            </button>
+          </div>
+
           <div className={styles.sidebarSectionLabel}>
-            {sidebarColapsado ? "•••" : "MENÚ PROVEEDOR"}
+            {sidebarColapsado ? "•••" : "NAVEGACIÓN"}
           </div>
 
           <nav className={styles.sidebarNav}>
-            <NavLink to="/proveedor/pos" className={claseSidebarLink} title="Punto de Venta (POS)">
+            <NavLink
+              to="/proveedor/pos"
+              className={claseSidebarLink}
+              title="Punto de Venta (POS)"
+              onClick={() => setMobileMenuOpen(false)}
+            >
               <span className={styles.sidebarIcon}>
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="9" cy="21" r="1" />
@@ -250,10 +323,16 @@ export default function PanelProveedor() {
                   <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
                 </svg>
               </span>
-              {!sidebarColapsado && <span className={styles.sidebarText}>Punto de Venta (POS)</span>}
+              <span className={styles.sidebarText}>Punto de Venta (POS)</span>
             </NavLink>
 
-            <NavLink to="/proveedor" end className={claseSidebarLink} title="Mis Repuestos">
+            <NavLink
+              to="/proveedor"
+              end
+              className={claseSidebarLink}
+              title="Mis Repuestos"
+              onClick={() => setMobileMenuOpen(false)}
+            >
               <span className={styles.sidebarIcon}>
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
@@ -261,19 +340,29 @@ export default function PanelProveedor() {
                   <line x1="12" y1="22.08" x2="12" y2="12" />
                 </svg>
               </span>
-              {!sidebarColapsado && <span className={styles.sidebarText}>Mis Repuestos</span>}
+              <span className={styles.sidebarText}>Mis Repuestos</span>
             </NavLink>
 
-            <NavLink to="/proveedor/consultas" className={claseSidebarLink} title="Consultas IA (Mostrador)">
+            <NavLink
+              to="/proveedor/consultas"
+              className={claseSidebarLink}
+              title="Consultas IA (Mostrador)"
+              onClick={() => setMobileMenuOpen(false)}
+            >
               <span className={styles.sidebarIcon}>
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
               </span>
-              {!sidebarColapsado && <span className={styles.sidebarText}>Consultas IA (Mostrador)</span>}
+              <span className={styles.sidebarText}>Consultas IA (Mostrador)</span>
             </NavLink>
 
-            <NavLink to="/proveedor/estadisticas" className={claseSidebarLink} title="Estadísticas">
+            <NavLink
+              to="/proveedor/estadisticas"
+              className={claseSidebarLink}
+              title="Estadísticas"
+              onClick={() => setMobileMenuOpen(false)}
+            >
               <span className={styles.sidebarIcon}>
                 <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="20" x2="18" y2="10" />
@@ -281,7 +370,7 @@ export default function PanelProveedor() {
                   <line x1="6" y1="20" x2="6" y2="14" />
                 </svg>
               </span>
-              {!sidebarColapsado && <span className={styles.sidebarText}>Estadísticas</span>}
+              <span className={styles.sidebarText}>Estadísticas</span>
             </NavLink>
           </nav>
 
@@ -289,11 +378,24 @@ export default function PanelProveedor() {
             <button
               type="button"
               className={styles.collapseBtn}
-              onClick={toggleSidebar}
+              onClick={toggleModoOscuro}
+              style={{ marginBottom: "0.45rem" }}
+              title="Alternar Modo Oscuro / Claro"
+            >
+              <span>{modoOscuro ? "☀️" : "🌙"}</span>
+              <span className={styles.collapseBtnText}>
+                {modoOscuro ? "Tema Claro" : "Modo Oscuro"}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className={`${styles.collapseBtn} ${styles.desktopOnlyBtn}`}
+              onClick={toggleSidebarDesktop}
               title={sidebarColapsado ? "Expandir menú lateral" : "Contraer menú lateral"}
             >
               <span>{sidebarColapsado ? "›" : "‹"}</span>
-              {!sidebarColapsado && <span className={styles.collapseBtnText}>Contraer menú</span>}
+              <span className={styles.collapseBtnText}>Contraer menú</span>
             </button>
           </div>
         </aside>

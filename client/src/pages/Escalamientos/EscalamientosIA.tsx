@@ -483,33 +483,52 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
       <div className={styles.topBar}>
         <div>
           <h1 className={styles.title}>
-            🧠{' '}
             {esProveedor
-              ? 'Mostrador IA: Consultas Técnicas y Aprendizaje'
-              : 'Centro de Escalamiento Federado y Conocimiento IA'}
+              ? 'MOSTRADOR IA · CONSULTAS TÉCNICAS Y COMPATIBILIDAD'
+              : 'CENTRO DE ESCALAMIENTO FEDERADO Y CONOCIMIENTO IA'}
           </h1>
           <p className={styles.subtitle}>
             {esProveedor
-              ? 'Responde dudas técnicas de compatibilidad de tus repuestos. Cada respuesta enseña al Agente IA y actualiza tus fichas automáticamente.'
+              ? 'Responde dudas técnicas de compatibilidad de tus repuestos. Cada respuesta le llega al cliente por WhatsApp, enseña al Agente IA y actualiza tus fichas.'
               : 'Conecta el Agente de FácilRepuestos con soluparts_ailoo.escalamientos, global_ailoo.escalamientos y el Portal de Proveedores Locales.'}
           </p>
         </div>
 
-        {!esProveedor && (
+        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
-            className="btn btn-primary"
-            onClick={() => setMostrarNuevoModal((v) => !v)}
+            type="button"
+            className={styles.refreshBtn}
+            onClick={cargarTodo}
+            disabled={loading}
           >
-            {mostrarNuevoModal ? '✕ Cerrar Simulador' : '+ Derivar / Simular Escalamiento IA'}
+            ↻ Actualizar bandeja
           </button>
-        )}
+          {!esProveedor && (
+            <button
+              className="btn btn-primary"
+              onClick={() => setMostrarNuevoModal((v) => !v)}
+            >
+              {mostrarNuevoModal ? '✕ Cerrar Simulador' : '+ Derivar / Simular Escalamiento IA'}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* KPIs */}
       <div className={styles.kpiGrid}>
-        <div className={styles.kpiCard}>
-          <div className={styles.kpiLabel}>Consultas Pendientes (SLA)</div>
-          <div className={styles.kpiValue} style={{ color: totalPendientes > 0 ? '#d97706' : '#10b981' }}>
+        <div
+          className={`${styles.kpiCard} ${filtroEstado === 'pendiente' ? styles.kpiCardSelected : ''}`}
+          onClick={() => {
+            setTabActiva('escalamientos');
+            setFiltroEstado('pendiente');
+          }}
+          style={{ cursor: 'pointer' }}
+        >
+          <div className={styles.kpiTopRow}>
+            <span className={styles.kpiLabel}>Consultas Pendientes (SLA)</span>
+            <span className={`${styles.kpiIconBadge} ${styles.kpiIconOrange}`}>⏳</span>
+          </div>
+          <div className={styles.kpiValue} style={{ color: totalPendientes > 0 ? '#ea580c' : '#10b981' }}>
             {totalPendientes}
           </div>
           <div className={styles.kpiSub}>
@@ -519,20 +538,37 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
           </div>
         </div>
 
-        <div className={styles.kpiCard}>
-          <div className={styles.kpiLabel}>Consultas Resueltas</div>
+        <div
+          className={`${styles.kpiCard} ${filtroEstado === 'respondido' ? styles.kpiCardSelected : ''}`}
+          onClick={() => {
+            setTabActiva('escalamientos');
+            setFiltroEstado('respondido');
+          }}
+          style={{ cursor: 'pointer' }}
+        >
+          <div className={styles.kpiTopRow}>
+            <span className={styles.kpiLabel}>Consultas Resueltas</span>
+            <span className={`${styles.kpiIconBadge} ${styles.kpiIconGreen}`}>✓</span>
+          </div>
           <div className={styles.kpiValue} style={{ color: '#059669' }}>
             {totalRespondidos}
           </div>
-          <div className={styles.kpiSub}>Con margen FácilRepuestos y SKU público</div>
+          <div className={styles.kpiSub}>Validadas y enviadas automáticamente al cliente</div>
         </div>
 
-        <div className={styles.kpiCard}>
-          <div className={styles.kpiLabel}>Base Conocimiento Aprendido</div>
+        <div
+          className={`${styles.kpiCard} ${tabActiva === 'conocimiento' ? styles.kpiCardSelected : ''}`}
+          onClick={() => setTabActiva('conocimiento')}
+          style={{ cursor: 'pointer' }}
+        >
+          <div className={styles.kpiTopRow}>
+            <span className={styles.kpiLabel}>Base Conocimiento IA</span>
+            <span className={`${styles.kpiIconBadge} ${styles.kpiIconBlue}`}>🧠</span>
+          </div>
           <div className={styles.kpiValue} style={{ color: '#2563eb' }}>
             {conocimiento.length}
           </div>
-          <div className={styles.kpiSub}>Reglas técnicas que la IA ya responde sola</div>
+          <div className={styles.kpiSub}>Reglas técnicas aprendidas que la IA ya responde sola</div>
         </div>
       </div>
 
@@ -1125,10 +1161,10 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
                           )}
                         </div>
 
-                        <div style={{ fontSize: '0.9rem', color: '#cbd5e1' }}>
+                        <div className={styles.soluProductDesc}>
                           {esc.mensajeCliente
                             ? esc.mensajeCliente
-                            : 'El cliente no escribió texto con la foto.'}
+                            : 'El cliente adjuntó una fotografía de muestra para validar compatibilidad.'}
                         </div>
 
                         {(esc.pistaGemini || esc.motivoEscalamiento) && (
@@ -1286,7 +1322,7 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
                           </div>
                         ))}
                         {esc.transcripcionAudio && (
-                          <div className={styles.soluChatLine} style={{ color: '#fde68a' }}>
+                          <div className={styles.soluChatLine} style={{ color: '#b45309', fontWeight: 700 }}>
                             🎙️ Audio del cliente: "{esc.transcripcionAudio}"
                           </div>
                         )}

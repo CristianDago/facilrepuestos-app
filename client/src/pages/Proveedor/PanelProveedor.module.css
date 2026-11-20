@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   PanelProveedor.module.css — Diseño Moderno con Menú Lateral (Sidebar)
-   Soporta Tema Claro, Modo Oscuro y Colores de Acento Personalizables
+   PanelProveedor.module.css — Diseño Moderno con Menú Lateral Responsive
+   (Colapsable en Escritorio + Cajón Desplegable / Drawer en Móvil y Tablet)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .wrap {
@@ -70,7 +70,7 @@
   background: var(--prov-header-bg);
   border-bottom: 1px solid rgba(255, 255, 255, 0.09);
   box-shadow: 0 4px 18px rgba(7, 16, 35, 0.25);
-  padding: 0 1.4rem;
+  padding: 0 1.25rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -80,7 +80,28 @@
 .headerLeft {
   display: flex;
   align-items: center;
-  gap: 0.9rem;
+  gap: 0.8rem;
+}
+
+.menuToggleBtn {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.menuToggleBtn:hover {
+  background: var(--prov-accent);
+  border-color: var(--prov-accent);
+  box-shadow: 0 4px 12px var(--prov-accent-glow);
 }
 
 .brandBlock {
@@ -90,7 +111,7 @@
 }
 
 .logo {
-  height: 36px;
+  height: 35px;
   object-fit: contain;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.25));
 }
@@ -110,7 +131,7 @@
 
 .headerTitle {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 1.08rem;
+  font-size: 1.06rem;
   font-weight: 800;
   letter-spacing: 1.6px;
   text-transform: uppercase;
@@ -118,7 +139,7 @@
 }
 
 .headerSub {
-  font-size: 0.72rem;
+  font-size: 0.71rem;
   font-weight: 600;
   letter-spacing: 0.8px;
   text-transform: uppercase;
@@ -130,7 +151,7 @@
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  margin-left: 0.75rem;
+  margin-left: 0.55rem;
 }
 
 .headerQuickBtn {
@@ -164,7 +185,7 @@
 .headerRight {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.55rem;
 }
 
 .iconCircleBtn {
@@ -359,23 +380,37 @@
   display: flex;
   min-height: 0;
   overflow: hidden;
+  position: relative;
+}
+
+.mobileBackdrop {
+  display: none;
+}
+
+.mobileDrawerHeader {
+  display: none;
 }
 
 .sidebar {
-  width: 240px;
+  width: 242px;
   flex-shrink: 0;
   background: var(--prov-sidebar-bg);
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
   padding: 1rem 0.75rem;
-  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1), padding 0.22s ease;
+  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1), padding 0.22s ease, transform 0.25s ease;
   z-index: 40;
 }
 
 .sidebarCollapsed {
   width: 68px;
   padding: 1rem 0.5rem;
+}
+
+.sidebarCollapsed .sidebarText,
+.sidebarCollapsed .collapseBtnText {
+  display: none;
 }
 
 .sidebarSectionLabel {
@@ -556,42 +591,96 @@
   white-space: nowrap;
 }
 
-/* ── RESPONSIVE ────────────────────────────────────────────────────────── */
-@media (max-width: 900px) {
+/* ── RESPONSIVE MÓVIL Y TABLET (CAJÓN DESPLEGABLE / DRAWER) ────────────── */
+@media (max-width: 960px) {
+  .header {
+    padding: 0 0.85rem;
+  }
+
   .headerQuickIcons,
-  .userShortName {
+  .userShortName,
+  .headerDivider {
     display: none;
   }
 
-  .bodyLayout {
-    flex-direction: column;
+  .mobileBackdrop {
+    display: block;
+    position: fixed;
+    inset: 62px 0 0 0;
+    background: rgba(7, 15, 32, 0.58);
+    backdrop-filter: blur(2px);
+    z-index: 80;
+    animation: fadeInBackdrop 0.2s ease;
+  }
+
+  @keyframes fadeInBackdrop {
+    from { opacity: 0; }
+    to   { opacity: 1; }
   }
 
   .sidebar,
   .sidebarCollapsed {
-    width: 100%;
-    height: auto;
-    flex-direction: row;
+    position: fixed;
+    top: 62px;
+    left: 0;
+    bottom: 0;
+    width: 270px !important;
+    padding: 1rem 0.85rem !important;
+    transform: translateX(-105%);
+    box-shadow: 12px 0 36px rgba(5, 12, 28, 0.45);
+    z-index: 90;
+  }
+
+  .sidebarMobileOpen {
+    transform: translateX(0) !important;
+  }
+
+  .sidebarCollapsed .sidebarText,
+  .sidebarCollapsed .collapseBtnText {
+    display: inline !important;
+  }
+
+  .sidebarCollapsed .sidebarLink {
+    justify-content: flex-start !important;
+    padding: 0.75rem 0.85rem !important;
+  }
+
+  .mobileDrawerHeader {
+    display: flex;
     align-items: center;
-    padding: 0.45rem 0.75rem;
-    border-right: none;
+    justify-content: space-between;
+    padding: 0.25rem 0.5rem 0.85rem;
+    margin-bottom: 0.65rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    overflow-x: auto;
   }
 
-  .sidebarSectionLabel,
-  .sidebarFooter {
-    display: none;
+  .mobileDrawerTitle {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+    color: #ffffff;
   }
 
-  .sidebarNav {
-    flex-direction: row;
-    gap: 0.4rem;
+  .mobileDrawerSub {
+    font-size: 0.74rem;
+    color: #93b4db;
+    margin-top: 2px;
   }
 
-  .sidebarLink {
-    padding: 0.5rem 0.75rem;
-    font-size: 0.82rem;
+  .mobileDrawerCloseBtn {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+
+  .desktopOnlyBtn {
+    display: none !important;
   }
 
   .content {

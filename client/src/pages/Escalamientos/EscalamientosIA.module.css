@@ -698,7 +698,7 @@
 /* ── TARJETAS DE CONOCIMIENTO APRENDIDO ────────────────────────────────── */
 .knowGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
   gap: 1rem;
 }
 
@@ -712,6 +712,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+  min-width: 0;
 }
 
 .knowTags {
@@ -727,4 +728,36 @@
   font-weight: 700;
   padding: 3px 8px;
   border-radius: 6px;
+}
+
+@media (max-width: 680px) {
+  .title {
+    font-size: 1.12rem;
+  }
+
+  .tabsBar {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .tabBtn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .soluDarkCard {
+    padding: 1rem;
+  }
+
+  .soluQuotedQuestion {
+    font-size: 0.94rem;
+    padding: 0.65rem 0.85rem;
+  }
+
+  .soluSendBtn {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+  }
 }

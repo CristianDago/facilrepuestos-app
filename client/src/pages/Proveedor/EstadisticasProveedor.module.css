@@ -72,7 +72,9 @@
   border: 1px solid var(--prov-border, #e2e8f0);
   border-radius: 10px;
   padding: 0.42rem 0.75rem 0.42rem 2.1rem;
-  min-width: 240px;
+  min-width: 0;
+  width: 240px;
+  max-width: 100%;
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
 }
 
@@ -650,6 +652,27 @@
 }
 
 @media (max-width: 600px) {
+  .analyticsTitle {
+    font-size: 1.25rem;
+  }
+
+  .topHeaderControls {
+    width: 100%;
+  }
+
+  .searchBox {
+    flex: 1;
+    width: auto;
+  }
+
+  .chartCard {
+    padding: 0.95rem 1rem;
+  }
+
+  .bigMetricValue {
+    font-size: 1.65rem;
+  }
+
   .metricsQuadGrid {
     grid-template-columns: 1fr;
   }

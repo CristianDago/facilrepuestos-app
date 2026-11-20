@@ -7,7 +7,7 @@ import styles from "./PanelProveedor.module.css";
 type AccentColor = "orange" | "blue" | "green" | "purple";
 
 // Estructura moderna del portal del proveedor:
-// Header superior con botón desplegable (drawer en móvil / colapsable en escritorio) + Menú lateral izquierdo.
+// Header superior 100% adaptable a celular + Menú lateral izquierdo (colapsable en PC / cajón en móvil).
 //   /proveedor/pos          → Punto de Venta (POS)
 //   /proveedor              → Mis Repuestos (Inventario propio)
 //   /proveedor/consultas    → Consultas IA (Mostrador)
@@ -95,7 +95,7 @@ export default function PanelProveedor() {
     <div
       className={`${styles.wrap} ${modoOscuro ? styles.darkTheme : ""} ${styles[`accent_${accentColor}`]}`}
     >
-      {/* ── HEADER SUPERIOR ─────────────────────────────────────── */}
+      {/* ── HEADER SUPERIOR (100% RESPONSIVE SIN DESBORDES) ─────── */}
       <header className={styles.header}>
         <div className={styles.headerLeft}>
           {/* Botón desplegable del menú lateral (Desktop + Mobile Drawer) */}
@@ -136,7 +136,7 @@ export default function PanelProveedor() {
             <div className={styles.headerSub}>{user?.nombre || "PROVEEDOR ASOCIADO"}</div>
           </div>
 
-          {/* Iconos rápidos de vista en cabecera */}
+          {/* Iconos rápidos de vista en cabecera (solo escritorio) */}
           <div className={styles.headerQuickIcons}>
             <button
               type="button"
@@ -197,7 +197,7 @@ export default function PanelProveedor() {
                   className={styles.themeModeToggleBtn}
                   onClick={toggleModoOscuro}
                 >
-                  <span>{modoOscuro ? "🌙 Modo Oscuro activo" : "☀️ Tema Claro activo"}</span>
+                  <span>{modoOscuro ? "🌙 Modo Oscuro" : "☀️ Tema Claro"}</span>
                   <span className={styles.themeSwitchPill}>{modoOscuro ? "Claro" : "Oscuro"}</span>
                 </button>
                 <div className={styles.themePopoverSub}>Color de acento</div>
@@ -237,7 +237,7 @@ export default function PanelProveedor() {
             onClick={() => navigate("/proveedor/consultas")}
             title="Consultas IA de Mostrador"
           >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
@@ -246,14 +246,18 @@ export default function PanelProveedor() {
 
           <button
             type="button"
-            className={styles.iconCircleBtn}
+            className={`${styles.iconCircleBtn} ${styles.hideOnMobileHeader}`}
             onClick={() => setMostrarAyuda(prev => !prev)}
             title="Atajos de teclado y ayuda rápida"
           >
             ?
           </button>
 
-          <div className={styles.userProfilePill}>
+          <div
+            className={styles.userProfilePill}
+            onClick={handleToggleMenuButton}
+            title={user?.nombre || "Perfil Proveedor"}
+          >
             <div className={styles.userAvatar}>{inicialesUsuario || "PR"}</div>
             <span className={styles.userShortName}>{user?.nombre?.split(" ")[0] || "Proveedor"}</span>
           </div>
@@ -261,14 +265,18 @@ export default function PanelProveedor() {
           {user?.rol === "admin" && (
             <button
               type="button"
-              className={styles.btnVolverAdmin}
+              className={`${styles.btnVolverAdmin} ${styles.hideOnMobileHeader}`}
               onClick={() => navigate("/")}
             >
               ← Panel Admin
             </button>
           )}
 
-          <button type="button" className={styles.btnSalir} onClick={handleLogout}>
+          <button
+            type="button"
+            className={`${styles.btnSalir} ${styles.hideOnMobileHeader}`}
+            onClick={handleLogout}
+          >
             Salir
           </button>
         </div>
@@ -291,9 +299,12 @@ export default function PanelProveedor() {
         >
           {/* Cabecera exclusiva para móvil dentro del menú desplegable */}
           <div className={styles.mobileDrawerHeader}>
-            <div>
-              <div className={styles.mobileDrawerTitle}>MENÚ PROVEEDOR</div>
-              <div className={styles.mobileDrawerSub}>{user?.nombre || "Proveedor"}</div>
+            <div className={styles.mobileDrawerUserRow}>
+              <div className={styles.userAvatar}>{inicialesUsuario || "PR"}</div>
+              <div style={{ minWidth: 0 }}>
+                <div className={styles.mobileDrawerTitle}>PANEL PROVEEDOR</div>
+                <div className={styles.mobileDrawerSub}>{user?.nombre || "Proveedor"}</div>
+              </div>
             </div>
             <button
               type="button"
@@ -386,6 +397,31 @@ export default function PanelProveedor() {
               <span className={styles.collapseBtnText}>
                 {modoOscuro ? "Tema Claro" : "Modo Oscuro"}
               </span>
+            </button>
+
+            {user?.rol === "admin" && (
+              <button
+                type="button"
+                className={`${styles.collapseBtn} ${styles.mobileOnlyDrawerBtn}`}
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  navigate("/");
+                }}
+                style={{ marginBottom: "0.45rem", color: "#93c5fd", borderColor: "rgba(96, 165, 250, 0.35)" }}
+              >
+                <span>←</span>
+                <span className={styles.collapseBtnText}>Volver al Panel Admin</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              className={`${styles.collapseBtn} ${styles.mobileOnlyDrawerBtn}`}
+              onClick={handleLogout}
+              style={{ color: "#fca5a5", borderColor: "rgba(248, 113, 113, 0.3)" }}
+            >
+              <span>🚪</span>
+              <span className={styles.collapseBtnText}>Cerrar Sesión (Salir)</span>
             </button>
 
             <button

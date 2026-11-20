@@ -987,7 +987,7 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
         ) : (
           <input
             className={styles.input}
-            style={{ minWidth: 300 }}
+            style={{ width: '100%', maxWidth: 380, minWidth: 0 }}
             placeholder="🔍 Buscar en conocimiento aprendido por marca, modelo, motor, SKU..."
             value={busquedaConocimiento}
             onChange={(e) => setBusquedaConocimiento(e.target.value)}

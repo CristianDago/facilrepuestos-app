@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    PanelProveedor.module.css — Diseño Moderno con Menú Lateral Responsive
-   (Colapsable en Escritorio + Cajón Desplegable / Drawer en Móvil y Tablet)
+   (100% libre de desbordes horizontales en móvil, tablet y escritorio)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .wrap {
@@ -18,6 +18,7 @@
 
   height: 100vh;
   width: 100%;
+  max-width: 100vw;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -65,7 +66,9 @@
 
 /* ── HEADER SUPERIOR ───────────────────────────────────────────────────── */
 .header {
-  height: 62px;
+  height: 60px;
+  width: 100%;
+  max-width: 100vw;
   flex-shrink: 0;
   background: var(--prov-header-bg);
   border-bottom: 1px solid rgba(255, 255, 255, 0.09);
@@ -74,18 +77,22 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
   z-index: 60;
 }
 
 .headerLeft {
   display: flex;
   align-items: center;
-  gap: 0.8rem;
+  gap: 0.7rem;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
 .menuToggleBtn {
-  width: 38px;
-  height: 38px;
+  width: 36px;
+  height: 36px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.08);
@@ -108,18 +115,21 @@
   display: flex;
   align-items: center;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .logo {
-  height: 35px;
+  height: 34px;
+  width: auto;
   object-fit: contain;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.25));
 }
 
 .headerDivider {
   width: 1px;
-  height: 28px;
+  height: 26px;
   background: rgba(255, 255, 255, 0.16);
+  flex-shrink: 0;
 }
 
 .titleBlock {
@@ -127,31 +137,40 @@
   flex-direction: column;
   justify-content: center;
   line-height: 1.15;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .headerTitle {
   font-family: 'Barlow Condensed', sans-serif;
-  font-size: 1.06rem;
+  font-size: 1.04rem;
   font-weight: 800;
-  letter-spacing: 1.6px;
+  letter-spacing: 1.4px;
   text-transform: uppercase;
   color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .headerSub {
   font-size: 0.71rem;
   font-weight: 600;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.6px;
   text-transform: uppercase;
   color: #93b4db;
   margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .headerQuickIcons {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  margin-left: 0.55rem;
+  margin-left: 0.45rem;
+  flex-shrink: 0;
 }
 
 .headerQuickBtn {
@@ -185,7 +204,8 @@
 .headerRight {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .iconCircleBtn {
@@ -196,13 +216,14 @@
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.06);
   color: #dbeafe;
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.15s ease;
+  flex-shrink: 0;
 }
 
 .iconCircleBtn:hover {
@@ -224,11 +245,13 @@
 .userProfilePill {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem 0.65rem 0.25rem 0.3rem;
+  gap: 0.45rem;
+  padding: 0.22rem 0.6rem 0.22rem 0.25rem;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .userAvatar {
@@ -237,12 +260,13 @@
   border-radius: 50%;
   background: linear-gradient(135deg, #2563eb, #1d4ed8);
   color: #ffffff;
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
   letter-spacing: 0.5px;
+  flex-shrink: 0;
 }
 
 .userShortName {
@@ -255,12 +279,13 @@
   background: rgba(37, 99, 235, 0.25);
   border: 1px solid rgba(96, 165, 250, 0.4);
   color: #dbeafe;
-  padding: 0.38rem 0.75rem;
+  padding: 0.36rem 0.7rem;
   border-radius: 8px;
-  font-size: 0.75rem;
+  font-size: 0.74rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .btnVolverAdmin:hover {
@@ -272,12 +297,13 @@
   background: rgba(255, 255, 255, 0.09);
   border: 1px solid rgba(255, 255, 255, 0.16);
   color: #e2e8f0;
-  padding: 0.38rem 0.8rem;
+  padding: 0.36rem 0.75rem;
   border-radius: 8px;
-  font-size: 0.76rem;
+  font-size: 0.75rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .btnSalir:hover {
@@ -295,13 +321,13 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 230px;
+  width: 220px;
   background: #ffffff;
   color: #0f172a;
   border-radius: 12px;
   border: 1px solid #e2e8f0;
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22);
-  padding: 0.85rem;
+  padding: 0.8rem;
   z-index: 120;
   display: flex;
   flex-direction: column;
@@ -309,7 +335,7 @@
 }
 
 .themePopoverTitle {
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -323,8 +349,8 @@
   background: #f1f5f9;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
-  padding: 0.45rem 0.6rem;
-  font-size: 0.76rem;
+  padding: 0.42rem 0.55rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: #0f172a;
   cursor: pointer;
@@ -342,13 +368,13 @@
   font-size: 0.7rem;
   font-weight: 700;
   color: #64748b;
-  margin-top: 0.2rem;
+  margin-top: 0.15rem;
 }
 
 .accentDotsRow {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
+  gap: 0.5rem;
 }
 
 .accentDot {
@@ -379,6 +405,8 @@
   flex: 1;
   display: flex;
   min-height: 0;
+  width: 100%;
+  max-width: 100vw;
   overflow: hidden;
   position: relative;
 }
@@ -389,6 +417,10 @@
 
 .mobileDrawerHeader {
   display: none;
+}
+
+.mobileOnlyDrawerBtn {
+  display: none !important;
 }
 
 .sidebar {
@@ -517,6 +549,7 @@
 .content {
   flex: 1;
   min-width: 0;
+  max-width: 100%;
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
@@ -594,20 +627,50 @@
 /* ── RESPONSIVE MÓVIL Y TABLET (CAJÓN DESPLEGABLE / DRAWER) ────────────── */
 @media (max-width: 960px) {
   .header {
-    padding: 0 0.85rem;
+    height: 56px;
+    padding: 0 0.75rem;
+  }
+
+  .headerLeft {
+    gap: 0.5rem;
+  }
+
+  .logo {
+    height: 28px;
+  }
+
+  .headerTitle {
+    font-size: 0.88rem;
+    letter-spacing: 0.8px;
+  }
+
+  .headerSub {
+    font-size: 0.65rem;
   }
 
   .headerQuickIcons,
   .userShortName,
-  .headerDivider {
-    display: none;
+  .headerDivider,
+  .hideOnMobileHeader {
+    display: none !important;
+  }
+
+  .userProfilePill {
+    padding: 0;
+    background: transparent;
+    border: none;
+  }
+
+  .iconCircleBtn {
+    width: 32px;
+    height: 32px;
   }
 
   .mobileBackdrop {
     display: block;
     position: fixed;
-    inset: 62px 0 0 0;
-    background: rgba(7, 15, 32, 0.58);
+    inset: 56px 0 0 0;
+    background: rgba(7, 15, 32, 0.62);
     backdrop-filter: blur(2px);
     z-index: 80;
     animation: fadeInBackdrop 0.2s ease;
@@ -621,14 +684,15 @@
   .sidebar,
   .sidebarCollapsed {
     position: fixed;
-    top: 62px;
+    top: 56px;
     left: 0;
     bottom: 0;
-    width: 270px !important;
+    width: min(275px, 84vw) !important;
     padding: 1rem 0.85rem !important;
     transform: translateX(-105%);
     box-shadow: 12px 0 36px rgba(5, 12, 28, 0.45);
     z-index: 90;
+    overflow-y: auto;
   }
 
   .sidebarMobileOpen {
@@ -649,23 +713,37 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0.25rem 0.5rem 0.85rem;
+    gap: 0.5rem;
+    padding: 0.25rem 0.35rem 0.85rem;
     margin-bottom: 0.65rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
 
+  .mobileDrawerUserRow {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+  }
+
   .mobileDrawerTitle {
     font-family: 'Barlow Condensed', sans-serif;
-    font-size: 0.95rem;
+    font-size: 0.92rem;
     font-weight: 800;
-    letter-spacing: 1.5px;
+    letter-spacing: 1.2px;
     color: #ffffff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .mobileDrawerSub {
-    font-size: 0.74rem;
+    font-size: 0.72rem;
     color: #93b4db;
-    margin-top: 2px;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .mobileDrawerCloseBtn {
@@ -677,6 +755,11 @@
     color: #ffffff;
     font-size: 0.9rem;
     cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .mobileOnlyDrawerBtn {
+    display: flex !important;
   }
 
   .desktopOnlyBtn {
@@ -684,7 +767,17 @@
   }
 
   .content {
-    padding: 0.85rem;
+    padding: 0.75rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .headerTitle {
+    font-size: 0.8rem;
+    letter-spacing: 0.5px;
+  }
+  .headerSub {
+    font-size: 0.62rem;
   }
 }
 
@@ -705,6 +798,7 @@
   border-top: 3px solid var(--prov-accent);
   border-radius: 14px;
   box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05);
+  max-width: 100%;
 }
 
 .wrap :global(.inv-card-name),
@@ -718,7 +812,8 @@
   border: 1px solid var(--prov-border);
   border-top: 3px solid var(--prov-accent);
   border-radius: 14px;
-  overflow: hidden;
+  overflow-x: auto;
+  max-width: 100%;
   box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05);
 }
 
@@ -735,9 +830,12 @@
 .wrap :global(select),
 .wrap :global(textarea) {
   border-radius: 9px;
+  max-width: 100%;
 }
 
 .wrap :global(.modal) {
   border-radius: 16px;
   border-top: 4px solid var(--prov-accent);
+  max-width: min(560px, 95vw);
+  padding: 1.25rem;
 }

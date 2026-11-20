@@ -156,6 +156,8 @@ export const ARBOL_CATEGORIAS_FRP = ARBOL_CATEGORIAS_TIENDA;
 
 export function normCat(str = '') {
   return String(str || '')
+    .replace(/&#8211;|&#8212;|&ndash;|&mdash;|[\u2013\u2014]/gi, '-')
+    .replace(/&amp;|&#038;/gi, '&')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toUpperCase()

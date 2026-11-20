@@ -66,11 +66,15 @@ async function wcFetch(path, options = {}, retries = 3) {
           continue;
         }
         const msg = data?.message || `WooCommerce respondió ${res.status}`;
-        throw new Error(msg);
+        const errObj = new Error(msg);
+        errObj.status = res.status;
+        errObj.wooData = data;
+        throw errObj;
       }
       return data;
     } catch (err) {
-      if (attempt < retries && !String(err.message || '').includes('WooCommerce respondió 4')) {
+      const isClientErr = err.status >= 400 && err.status < 500 && err.status !== 429;
+      if (attempt < retries && !isClientErr && !String(err.message || '').includes('WooCommerce respondió 4')) {
         const waitMs = attempt * 2500;
         console.warn(`[woo-sync] Error de red en ${path}: ${err.message}. Reintentando (${attempt}/${retries}) en ${waitMs}ms...`);
         await new Promise(r => setTimeout(r, waitMs));
@@ -597,13 +601,16 @@ async function prepararMarcasVehiculoWooCommerce(items = [], { maxCreacionesPorP
       }
 
       const listaCandidatos = Array.from(candidatosNivel.values());
-      const CONCURRENCY = 6;
+      const CONCURRENCY = 8;
       for (let i = 0; i < listaCandidatos.length; i += CONCURRENCY) {
         if (creadasCount >= maxCreacionesPorPase) {
           pendientesPorCrearCount += (listaCandidatos.length - i);
           break;
         }
-        const chunk = listaCandidatos.slice(i, Math.min(listaCandidatos.length, i + CONCURRENCY, i + (maxCreacionesPorPase - creadasCount)));
+        const chunk = listaCandidatos.slice(
+          i,
+          Math.min(listaCandidatos.length, i + CONCURRENCY, i + (maxCreacionesPorPase - creadasCount))
+        );
         await Promise.all(
           chunk.map(async ({ nombreOriginal, parentId }) => {
             try {
@@ -626,7 +633,22 @@ async function prepararMarcasVehiculoWooCommerce(items = [], { maxCreacionesPorP
                 creadasCount++;
               }
             } catch (err) {
-              console.warn('[woo-brands] Aviso creando marca compatible', nombreOriginal, ':', err.message);
+              const resourceId = Number(
+                err?.wooData?.data?.resource_id || err?.wooData?.additional_data?.[0] || 0
+              );
+              if (resourceId > 0) {
+                const existenteRecuperada = {
+                  id: resourceId,
+                  name: nombreOriginal,
+                  parent: parentId || 0,
+                };
+                indexarBrand(existenteRecuperada);
+                if (_cacheMarcasWooMemoria) {
+                  _cacheMarcasWooMemoria.push(existenteRecuperada);
+                }
+              } else {
+                console.warn('[woo-brands] Aviso creando marca compatible', nombreOriginal, ':', err.message);
+              }
             }
           })
         );
@@ -1816,19 +1838,286 @@ export async function obtenerResumenMarcasCompatibilidadInventario(itemsPreCarga
   };
 }
 
+let _cacheMapaSkuAWooId = null;
+let _cacheMapaSkuAWooIdTs = 0;
+
+/**
+ * Construye o reutiliza un mapa rápido en memoria de SKU -> wooProductId consultando WooCommerce
+ * en lotes paralelos de 5 páginas de 100 productos (`_fields=id,sku`), sólo cuando hay ítems sin `wooProductId`.
+ */
+async function obtenerMapaRapidoSkuAWooId() {
+  if (_cacheMapaSkuAWooId && Date.now() - _cacheMapaSkuAWooIdTs < 15 * 60 * 1000) {
+    return _cacheMapaSkuAWooId;
+  }
+  const mapa = new Map();
+  let page = 1;
+  const PARALLEL_PAGES = 5;
+  let seguir = true;
+
+  while (seguir && page <= 120) {
+    const paginasLote = Array.from({ length: PARALLEL_PAGES }, (_, idx) => page + idx);
+    const resultados = await Promise.all(
+      paginasLote.map((p) =>
+        wcFetch(`/products?per_page=100&page=${p}&_fields=id,sku`).catch(() => [])
+      )
+    );
+    for (const lista of resultados) {
+      if (!Array.isArray(lista) || lista.length === 0) {
+        seguir = false;
+        continue;
+      }
+      for (const prod of lista) {
+        if (prod?.id && prod?.sku) {
+          mapa.set(String(prod.sku).trim().toUpperCase(), Number(prod.id));
+        }
+      }
+      if (lista.length < 100) {
+        seguir = false;
+      }
+    }
+    page += PARALLEL_PAGES;
+  }
+
+  _cacheMapaSkuAWooId = mapa;
+  _cacheMapaSkuAWooIdTs = Date.now();
+  return mapa;
+}
+
+/**
+ * Aplica de forma ultrarrápida los términos de `Productos -> Marcas` (`brands: [{ id }]`)
+ * directamente a los productos en WooCommerce mediante `/products/batch` enviando únicamente `{ id, brands }`.
+ * Esto es ~15x más rápido que un sync completo porque WordPress solo actualiza la taxonomía `product_brand`.
+ */
+export async function aplicarMarcasDirectoAProductosWoo(
+  items = [],
+  resolverMarcas = null,
+  { maxProductos = 600 } = {}
+) {
+  if (!isWooConfigured()) {
+    return { procesados: 0, actualizados: 0, pendientesRestantes: 0 };
+  }
+
+  const resolver = resolverMarcas || (await prepararMarcasVehiculoWooCommerce(items, { maxCreacionesPorPase: 0 }));
+
+  // Identificar todos los ítems con marcas de compatibilidad resueltas que aún no tienen ese hash aplicado
+  const candidatos = [];
+  let necesitanMapaGlobalSku = false;
+
+  for (const item of items) {
+    if (item.ocultarEnTienda) continue;
+    const info = resolver(item);
+    const brandIds = (info?.brands || []).map((b) => Number(b.id)).filter((id) => id > 0);
+    if (brandIds.length === 0) continue;
+
+    const hashBrands = [...brandIds].sort((a, b) => a - b).join(',');
+    if (item.wooBrandsAppliedHash === hashBrands && item.wooProductId) {
+      continue;
+    }
+
+    if (!item.wooProductId) {
+      necesitanMapaGlobalSku = true;
+    }
+
+    candidatos.push({
+      docId: item.id,
+      sku: skuDeItem(item.id, item),
+      codigoInterno: item.codigo ? String(item.codigo).trim().toUpperCase() : '',
+      wooProductId: item.wooProductId ? Number(item.wooProductId) : 0,
+      brands: brandIds.map((id) => ({ id })),
+      attributes: info.attributes || [],
+      hashBrands,
+    });
+  }
+
+  if (candidatos.length === 0) {
+    return { procesados: 0, actualizados: 0, pendientesRestantes: 0 };
+  }
+
+  let mapaSkuWoo = null;
+  if (necesitanMapaGlobalSku || !_cacheMapaSkuAWooId) {
+    mapaSkuWoo = await obtenerMapaRapidoSkuAWooId();
+  } else {
+    mapaSkuWoo = _cacheMapaSkuAWooId;
+  }
+
+  const conWooIdValido = [];
+  for (const cand of candidatos) {
+    let wid = cand.wooProductId;
+    if (!wid && mapaSkuWoo) {
+      wid =
+        mapaSkuWoo.get(cand.sku) ||
+        (cand.codigoInterno ? mapaSkuWoo.get(cand.codigoInterno) : 0) ||
+        0;
+    }
+    if (wid > 0) {
+      conWooIdValido.push({ ...cand, wooProductId: wid });
+    }
+  }
+
+  const loteEjecutar = maxProductos > 0 ? conWooIdValido.slice(0, maxProductos) : conWooIdValido;
+  const pendientesRestantes = Math.max(0, conWooIdValido.length - loteEjecutar.length);
+
+  const CHUNK_SIZE = 75;
+  let actualizados = 0;
+  const ahora = new Date().toISOString();
+
+  for (let i = 0; i < loteEjecutar.length; i += CHUNK_SIZE) {
+    const chunk = loteEjecutar.slice(i, i + CHUNK_SIZE);
+    const updatePayload = chunk.map((c) => ({
+      id: c.wooProductId,
+      brands: c.brands,
+    }));
+
+    try {
+      const resBatch = await wcFetch('/products/batch', {
+        method: 'POST',
+        body: JSON.stringify({ update: updatePayload }),
+      });
+      const updatedList = resBatch?.update || [];
+      actualizados += updatedList.filter((u) => u && !u.error).length;
+
+      const fsBatch = db.batch();
+      let fsCount = 0;
+      for (let j = 0; j < chunk.length; j++) {
+        const c = chunk[j];
+        const uw = updatedList[j];
+        if (!uw || !uw.error) {
+          fsBatch.update(db.collection('inventario').doc(c.docId), {
+            wooProductId: c.wooProductId,
+            wooBrandsAppliedHash: c.hashBrands,
+            wooBrandsSyncAt: ahora,
+          });
+          fsCount++;
+        }
+      }
+      if (fsCount > 0) {
+        await fsBatch.commit();
+      }
+    } catch (err) {
+      console.warn('[woo-brands-apply] Aviso aplicando lote de marcas a productos:', err.message);
+    }
+  }
+
+  return {
+    procesados: loteEjecutar.length,
+    actualizados,
+    pendientesRestantes,
+    totalConWooId: conWooIdValido.length,
+  };
+}
+
+let _jobMarcasEnCurso = false;
+let _estadoJobMarcas = {
+  enCurso: false,
+  iniciadoEn: null,
+  actualizadoEn: null,
+  marcasCreadasAcumuladas: 0,
+  pendientesTaxonomia: 0,
+  productosActualizadosAcumulados: 0,
+  productosPendientesRestantes: 0,
+  ultimoError: null,
+};
+
+export function obtenerEstadoJobMarcasCompatibilidadWoo() {
+  return _estadoJobMarcas;
+}
+
+/**
+ * Ejecuta en background en el servidor todos los pases necesarios hasta que:
+ * 1) Se hayan creado el 100% de las Marcas -> Modelos -> Rangos de Años en `Productos -> Marcas`, y
+ * 2) Se hayan aplicado las marcas (`brands`) al 100% de los productos en WooCommerce.
+ */
+export async function iniciarJobAsignacionMarcasEnBackground() {
+  if (_jobMarcasEnCurso || !isWooConfigured()) return _estadoJobMarcas;
+  _jobMarcasEnCurso = true;
+  _estadoJobMarcas = {
+    enCurso: true,
+    iniciadoEn: new Date().toISOString(),
+    actualizadoEn: new Date().toISOString(),
+    marcasCreadasAcumuladas: 0,
+    pendientesTaxonomia: 0,
+    productosActualizadosAcumulados: 0,
+    productosPendientesRestantes: 0,
+    ultimoError: null,
+  };
+
+  (async () => {
+    try {
+      for (let iter = 1; iter <= 30; iter++) {
+        const snap = await db.collection('inventario').get();
+        const items = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((i) => !i.ocultarEnTienda);
+
+        const resolver = await prepararMarcasVehiculoWooCommerce(items, {
+          maxCreacionesPorPase: 240,
+        });
+        const statsTax = resolver.estadisticas || {};
+        _estadoJobMarcas.marcasCreadasAcumuladas += statsTax.marcasNuevasCreadasEnWoo || 0;
+        _estadoJobMarcas.pendientesTaxonomia = statsTax.pendientesPorCrearEnWoo || 0;
+        _estadoJobMarcas.actualizadoEn = new Date().toISOString();
+
+        // Si todavía faltaban términos de taxonomía por crear, seguir creando primero para que los productos reciban los 3 niveles completos
+        if ((statsTax.pendientesPorCrearEnWoo || 0) > 0 && (statsTax.marcasNuevasCreadasEnWoo || 0) > 0) {
+          continue;
+        }
+
+        // Aplicar marcas directamente a un lote de 600 productos por iteración
+        const resLote = await aplicarMarcasDirectoAProductosWoo(items, resolver, {
+          maxProductos: 600,
+        });
+        _estadoJobMarcas.productosActualizadosAcumulados += resLote.actualizados || 0;
+        _estadoJobMarcas.productosPendientesRestantes = resLote.pendientesRestantes || 0;
+        _estadoJobMarcas.actualizadoEn = new Date().toISOString();
+
+        console.log(
+          `[woo-brands-bg] Iteración ${iter}: +${resLote.actualizados} productos con marcas aplicadas (restantes: ${resLote.pendientesRestantes}, tax pendientes: ${_estadoJobMarcas.pendientesTaxonomia})`
+        );
+
+        if ((resLote.pendientesRestantes || 0) === 0 && (_estadoJobMarcas.pendientesTaxonomia || 0) === 0) {
+          break;
+        }
+        if ((resLote.procesados || 0) === 0 && (statsTax.marcasNuevasCreadasEnWoo || 0) === 0) {
+          break;
+        }
+      }
+    } catch (err) {
+      console.warn('[woo-brands-bg] Error en job background de marcas:', err.message);
+      _estadoJobMarcas.ultimoError = err.message;
+    } finally {
+      _jobMarcasEnCurso = false;
+      _estadoJobMarcas.enCurso = false;
+      _estadoJobMarcas.actualizadoEn = new Date().toISOString();
+    }
+  })();
+
+  return _estadoJobMarcas;
+}
+
+// Al iniciar el servidor en producción, verificar tras 15s si quedan marcas o productos pendientes
+// de asignación en WooCommerce y procesarlos automáticamente en segundo plano.
+const _autoStartBrandsTimer = setTimeout(() => {
+  if (isWooConfigured()) {
+    iniciarJobAsignacionMarcasEnBackground().catch(() => null);
+  }
+}, 15000);
+if (typeof _autoStartBrandsTimer.unref === 'function') {
+  _autoStartBrandsTimer.unref();
+}
+
 /**
  * Sincroniza hacia WooCommerce (`Productos -> Marcas`) la jerarquía completa de 3 niveles:
  *   Nivel 1 (Marca Principal): `SUZUKI`, `JAC`, `TOYOTA`, `CHERY`, `GREAT WALL`, `HAVAL`...
  *   Nivel 2 (Sub-marca Modelo): `JAC S3`, `SUZUKI SWIFT`...
  *   Nivel 3 (Sub-marca Rango de Años): `JAC S3 (2016 - 2023)`...
- * Y opcionalmente actualiza un lote de productos en WooCommerce (o encola todos con `needsWooSync: true`)
- * para dejar asignados `brands` y `attributes` (100% dedicado a compatibilidad vehicular).
+ * Y aplica inmediatamente las marcas a un lote de productos en WooCommerce + deja corriendo el job en background
+ * hasta completar los ~8.600 productos.
  */
 export async function sincronizarMarcasCompatibilidadWooCommerce({
-  encolarProductos = true,
+  encolarProductos = false,
   sincronizarLoteInmediato = true,
-  maxProductosLote = 100,
-  maxCreacionesTaxonomia = 180,
+  maxProductosLote = 300,
+  maxCreacionesTaxonomia = 240,
 } = {}) {
   const snap = await db.collection('inventario').get();
   const items = snap.docs
@@ -1846,71 +2135,56 @@ export async function sincronizarMarcasCompatibilidadWooCommerce({
     totalRutasAseguradas: 0,
   };
 
+  let resolver = null;
   if (configured) {
-    const resolver = await prepararMarcasVehiculoWooCommerce(items, {
-      maxCreacionesPorPase: Math.max(30, Math.min(350, Number(maxCreacionesTaxonomia) || 180)),
+    resolver = await prepararMarcasVehiculoWooCommerce(items, {
+      maxCreacionesPorPase: Math.max(30, Math.min(350, Number(maxCreacionesTaxonomia) || 240)),
     });
     if (resolver.estadisticas) {
       estadisticasTaxonomia = resolver.estadisticas;
     }
   }
 
-  let encoladosCount = 0;
-  if (encolarProductos) {
-    const BATCH_LIMIT = 400;
-    let batch = db.batch();
-    let ops = 0;
-    for (const item of items) {
-      if (item.needsWooSync === true) continue;
-      const compat = extraerCompatibilidadesVehiculoDeItem(item);
-      if (compat.marcas.length === 0) continue;
-      batch.update(db.collection('inventario').doc(item.id), {
-        needsWooSync: true,
-        wooSyncMotivo: 'enriquecimiento_compatibilidad_ia',
-      });
-      ops++;
-      encoladosCount++;
-      if (ops >= BATCH_LIMIT) {
-        await batch.commit();
-        batch = db.batch();
-        ops = 0;
-      }
-    }
-    if (ops > 0) {
-      await batch.commit();
-    }
-  }
-
   let resultadoLote = null;
-  // Solo sincronizar el lote de productos cuando ya no queden términos pendientes de la jerarquía
-  // (o cuando el pase de taxonomía fue liviano), evitando superar el timeout HTTP de un solo request.
-  if (sincronizarLoteInmediato && configured && (estadisticasTaxonomia.pendientesPorCrearEnWoo || 0) === 0) {
-    resultadoLote = await sincronizarInventarioConWooCommerce({
-      soloDelta: true,
-      maxItems: Math.max(25, Math.min(250, Number(maxProductosLote) || 100)),
-      todosPreCargados: items,
+  if (sincronizarLoteInmediato && configured && resolver) {
+    resultadoLote = await aplicarMarcasDirectoAProductosWoo(items, resolver, {
+      maxProductos: Math.max(50, Math.min(800, Number(maxProductosLote) || 300)),
     });
   }
+
+  // Si aún quedan términos de taxonomía o productos pendientes por recibir sus marcas,
+  // dejamos corriendo el proceso en background en Cloud Run hasta llegar a 0 pendientes.
+  if (
+    configured &&
+    ((estadisticasTaxonomia.pendientesPorCrearEnWoo || 0) > 0 ||
+      (resultadoLote && (resultadoLote.pendientesRestantes || 0) > 0))
+  ) {
+    iniciarJobAsignacionMarcasEnBackground();
+  }
+
+  const aplicadosCount = items.filter((i) => Boolean(i.wooBrandsAppliedHash)).length + (resultadoLote?.actualizados || 0);
 
   return {
     modoConexion: configured ? 'woocommerce_rest_live' : 'simulacion_local',
     resumenCatalogo: {
       totalProductosVisibles: resumen.totalProductosVisibles,
       productosConCompatibilidad: resumen.productosConCompatibilidad,
+      productosConMarcasAplicadasEnWoo: Math.min(resumen.productosConCompatibilidad, aplicadosCount),
       totalMarcasVehiculo: resumen.totalMarcasVehiculo,
       totalModelosVehiculo: resumen.totalModelosVehiculo,
       totalRangosAnios: resumen.totalRangosAnios,
     },
     taxonomiaMarcasWoo: estadisticasTaxonomia,
-    productosEncoladosParaAsignacion: encoladosCount,
+    productosEncoladosParaAsignacion: resultadoLote?.pendientesRestantes || 0,
     loteSincronizado: resultadoLote
       ? {
           procesados: resultadoLote.procesados,
           actualizados: resultadoLote.actualizados,
-          creados: resultadoLote.creados,
+          creados: 0,
           pendientesRestantes: resultadoLote.pendientesRestantes,
         }
       : null,
+    jobBackground: obtenerEstadoJobMarcasCompatibilidadWoo(),
   };
 }
 

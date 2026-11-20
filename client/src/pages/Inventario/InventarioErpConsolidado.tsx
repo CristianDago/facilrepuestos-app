@@ -512,32 +512,44 @@ export default function InventarioErpConsolidado() {
     setSincronizandoMarcasWoo(true);
     try {
       let totalMarcasCreadas = 0;
+      let totalProductosActualizados = 0;
       let ultimoResultado: Awaited<ReturnType<typeof woocommerceService.syncMarcasCompatibilidad>>['data'] | null = null;
 
-      // Pase por lotes seguros de 180 términos para no superar memoria ni tiempo de respuesta HTTP
-      for (let pase = 1; pase <= 6; pase++) {
+      // Crea la taxonomía en WordPress y aplica directamente las marcas (`brands`) a los productos en lotes rápidos
+      for (let pase = 1; pase <= 12; pase++) {
         const r = await woocommerceService.syncMarcasCompatibilidad({
-          encolarProductos: pase === 1,
+          encolarProductos: false,
           sincronizarLoteInmediato: true,
-          maxProductosLote: 100,
-          maxCreacionesTaxonomia: 180,
+          maxProductosLote: 350,
+          maxCreacionesTaxonomia: 240,
         });
         if (!r.success || !r.data) {
           throw new Error(r.error || 'Error al sincronizar marcas de compatibilidad');
         }
         ultimoResultado = r.data;
         totalMarcasCreadas += r.data.taxonomiaMarcasWoo.marcasNuevasCreadasEnWoo || 0;
+        totalProductosActualizados += r.data.loteSincronizado?.actualizados || 0;
+
         const pendientesTax = r.data.taxonomiaMarcasWoo.pendientesPorCrearEnWoo || 0;
-        if (pendientesTax <= 0) break;
+        const pendientesProd = r.data.loteSincronizado?.pendientesRestantes ?? 0;
+        const huboAvance =
+          (r.data.taxonomiaMarcasWoo.marcasNuevasCreadasEnWoo || 0) > 0 ||
+          (r.data.loteSincronizado?.procesados || 0) > 0;
+
+        if ((pendientesTax <= 0 && pendientesProd <= 0) || !huboAvance) {
+          break;
+        }
       }
 
       if (ultimoResultado) {
         const { resumenCatalogo, loteSincronizado } = ultimoResultado;
-        const loteTxt = loteSincronizado
-          ? ` · Lote asignado: ${loteSincronizado.procesados} productos (restantes en cola: ${loteSincronizado.pendientesRestantes})`
-          : '';
+        const restantes = loteSincronizado?.pendientesRestantes || 0;
+        const loteTxt =
+          restantes > 0
+            ? ` · ${totalProductosActualizados} productos actualizados ahora (${restantes} continúan aplicándose automáticamente en segundo plano)`
+            : ` · Marcas aplicadas a los productos en WooCommerce (${totalProductosActualizados} actualizados en este pase)`;
         notify(
-          `🚗 Marcas de Compatibilidad WooCommerce listas: ${resumenCatalogo.totalMarcasVehiculo} marcas, ${resumenCatalogo.totalModelosVehiculo} modelos y ${resumenCatalogo.totalRangosAnios} rangos de años (${totalMarcasCreadas} nuevas creadas en WordPress)${loteTxt}`,
+          `🚗 Marcas de Compatibilidad aplicadas en WooCommerce: ${resumenCatalogo.totalMarcasVehiculo} marcas, ${resumenCatalogo.totalModelosVehiculo} modelos y ${resumenCatalogo.totalRangosAnios} rangos de años (${totalMarcasCreadas} términos nuevos)${loteTxt}`,
           'success'
         );
         await cargarTodo();

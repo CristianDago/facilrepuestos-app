@@ -1,8 +1,704 @@
 /* ═══════════════════════════════════════════════════════════
-   Inventario.module.css
+   Inventario.module.css — Diseño Profesional Moderno (InventIA)
    ═══════════════════════════════════════════════════════════ */
 
-/* ── TOOLBAR DOS FILAS ───────────────────────────────────── */
+.inventoryPageWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  padding-bottom: 1.5rem;
+}
+
+/* ── CABECERA SUPERIOR ───────────────────────────────────── */
+.topActionBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.modernPageTitle {
+  font-size: 1.38rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--prov-text, #0f172a);
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.topRightActions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.modernSearchWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--prov-surface, #ffffff);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  border-radius: 10px;
+  padding: 0.48rem 0.85rem 0.48rem 2.2rem;
+  min-width: 265px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.modernSearchWrap:focus-within {
+  border-color: #f95a16;
+  box-shadow: 0 0 0 3px rgba(249, 90, 22, 0.12);
+}
+
+.modernSearchIcon {
+  position: absolute;
+  left: 0.75rem;
+  font-size: 0.85rem;
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.modernSearchInput {
+  border: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  font-size: 0.84rem;
+  color: var(--prov-text, #0f172a);
+  width: 100%;
+  outline: none;
+  box-shadow: none !important;
+}
+
+.modernSearchInput::placeholder {
+  color: #94a3b8;
+}
+
+.modernSearchClear {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 0.8rem;
+  margin-left: 0.35rem;
+}
+
+.viewSwitchGroup {
+  display: inline-flex;
+  align-items: center;
+  background: var(--prov-surface, #ffffff);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.viewSwitchBtn {
+  width: 34px;
+  height: 32px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.viewSwitchBtn:hover {
+  color: #0f172a;
+  background: #f1f5f9;
+}
+
+.viewSwitchBtnActive {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #fed7aa;
+}
+
+.btnPrimaryAdd {
+  background: linear-gradient(135deg, #ff6b1a 0%, #e94216 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 0.62rem 1.15rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(233, 66, 22, 0.28);
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.btnPrimaryAdd:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(233, 66, 22, 0.36);
+}
+
+/* ── BARRA PROFESIONAL DE HERRAMIENTAS (6 BOTONES) ───────── */
+.proToolsBar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: var(--prov-surface, #ffffff);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  border-radius: 14px;
+  padding: 0.65rem 1rem;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.03);
+}
+
+.proToolsGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.proToolsGroupLabel {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  margin-right: 0.2rem;
+}
+
+.proToolsDivider {
+  width: 1px;
+  height: 24px;
+  background: #e2e8f0;
+  margin: 0 0.15rem;
+}
+
+.proToolBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: var(--prov-surface-2, #f8fafc);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  color: var(--prov-text, #1e293b);
+  font-size: 0.79rem;
+  font-weight: 700;
+  padding: 0.42rem 0.78rem;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.proToolBtn:hover:not(:disabled) {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.06);
+  transform: translateY(-1px);
+}
+
+.proToolBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.proToolBtnSyncPending {
+  background: #f0fdf4;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.proToolIcon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.iconTeal    { background: #ccfbf1; color: #0f766e; }
+.iconPurple  { background: #ede9fe; color: #6d28d9; }
+.iconSky     { background: #e0f2fe; color: #0284c7; }
+.iconSlate   { background: #e2e8f0; color: #334155; }
+.iconIndigo  { background: #e0e7ff; color: #4338ca; }
+.iconEmerald { background: #d1fae5; color: #059669; }
+
+.proToolCountBadge {
+  background: #16a34a;
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 999px;
+  margin-left: 2px;
+}
+
+/* ── 5 TARJETAS KPI ESTILO INVENTIA ──────────────────────── */
+.kpiCardsGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.9rem;
+}
+
+.kpiCardItem {
+  background: var(--prov-surface, #ffffff);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  border-radius: 14px;
+  padding: 1.05rem 1.25rem;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.03);
+  transition: transform 0.14s ease, border-color 0.14s ease;
+}
+
+.kpiCardItem:hover {
+  transform: translateY(-1px);
+  border-color: #cbd5e1;
+}
+
+.kpiCardActive {
+  border-color: #f97316;
+  background: #fff7ed;
+}
+
+.kpiCardNumber {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--prov-text, #0f172a);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.kpiOrange {
+  color: #ea580c;
+}
+
+.kpiCardLabel {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--prov-text-muted, #64748b);
+  margin-top: 0.28rem;
+}
+
+/* ── CONTENEDOR PRINCIPAL DEL CATÁLOGO ───────────────────── */
+.catalogMasterCard {
+  background: var(--prov-surface, #ffffff);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  border-radius: 16px;
+  box-shadow: 0 8px 26px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.tableFilterHeader {
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--prov-border, #e2e8f0);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.filterLeftRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.filterGridIcon {
+  color: #64748b;
+  font-size: 1rem;
+  margin-right: 0.15rem;
+}
+
+.cleanFilterSelect {
+  padding: 0.42rem 2rem 0.42rem 0.75rem !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 9px !important;
+  background-color: #f8fafc !important;
+  color: #1e293b !important;
+  font-size: 0.81rem !important;
+  font-weight: 600 !important;
+  cursor: pointer;
+}
+
+.cleanFilterSelect:hover {
+  border-color: #cbd5e1 !important;
+  background-color: #ffffff !important;
+}
+
+.filterRightRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.filterStaticBadge {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #475569;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.38rem 0.75rem;
+  border-radius: 9px;
+}
+
+.btnClearFiltersPill {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0.38rem 0.75rem;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.btnCriticalStockPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.38rem 0.8rem;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btnCriticalStockPill:hover {
+  border-color: #f97316;
+  color: #ea580c;
+}
+
+.btnCriticalStockPillActive {
+  background: #fff7ed;
+  border-color: #f97316;
+  color: #c2410c;
+}
+
+/* ── TABLA MODERNA DE PRODUCTOS ──────────────────────────── */
+.modernTableContainer {
+  overflow-x: auto;
+}
+
+.modernProductTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 780px;
+}
+
+.modernProductTable thead tr {
+  background: #f8fafc !important;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.modernProductTable th {
+  background: #f8fafc !important;
+  color: #64748b !important;
+  font-family: 'Barlow', sans-serif !important;
+  font-size: 0.7rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase;
+  padding: 0.75rem 0.85rem !important;
+}
+
+.modernRow {
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.12s ease;
+}
+
+.modernRow:hover td {
+  background: #f8fafc !important;
+}
+
+.modernProductTable td {
+  padding: 0.85rem !important;
+  vertical-align: middle;
+  border-bottom: 1px solid #f1f5f9 !important;
+}
+
+.productMainCell {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.productThumbBox {
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.productThumbBox:hover {
+  border-color: #f97316;
+  transform: scale(1.03);
+}
+
+.productThumbImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.productThumbPlaceholder {
+  font-size: 1.25rem;
+  opacity: 0.55;
+}
+
+.productMetaInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.productTitleText {
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--prov-text, #0f172a);
+  line-height: 1.25;
+}
+
+.productSkuLine {
+  font-size: 0.74rem;
+  font-family: monospace;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.productTagsWrap {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-top: 3px;
+}
+
+.tagCatMain {
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #ffedd5;
+  font-size: 0.63rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 5px;
+  letter-spacing: 0.03em;
+}
+
+.tagSubcat {
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.63rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+
+.tagBrand {
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.63rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+
+.tagAutoMarca {
+  background: #f0fdf4;
+  color: #15803d;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 5px;
+}
+
+.rotationBadgeMid {
+  display: inline-block;
+  background: #f1f5f9;
+  color: #334155;
+  font-size: 0.73rem;
+  font-weight: 700;
+  padding: 0.22rem 0.65rem;
+  border-radius: 7px;
+}
+
+.rotationBadgeLow {
+  display: inline-block;
+  background: #fff7ed;
+  color: #c2410c;
+  font-size: 0.73rem;
+  font-weight: 700;
+  padding: 0.22rem 0.65rem;
+  border-radius: 7px;
+}
+
+.stockCellWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 90px;
+}
+
+.stockNumberBold {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: var(--prov-text, #0f172a);
+}
+
+.stockReservedTag {
+  font-size: 0.7rem;
+  color: #d97706;
+  font-weight: 700;
+}
+
+.miniStockBarTrack {
+  width: 76px;
+  height: 4px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.miniStockBarFill {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.miniStockBarOk {
+  background: #22c55e;
+}
+
+.miniStockBarLow {
+  background: #f97316;
+}
+
+.lowStockMicroText {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #ea580c;
+}
+
+.tablePriceMain {
+  font-size: 0.94rem;
+  font-weight: 800;
+  color: var(--prov-text, #0f172a);
+  display: block;
+}
+
+.tableCostSecondary {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.marginPctText {
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: #ea580c;
+}
+
+.wooSyncedBadge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #15803d;
+  background: #dcfce7;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.wooPendingBadge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #b45309;
+  background: #fef3c7;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.iconActionsRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.iconActionBtn {
+  width: 31px;
+  height: 31px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  font-size: 0.85rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.iconActionBtn:hover {
+  border-color: #94a3b8;
+  color: #0f172a;
+  background: #f8fafc;
+}
+
+.iconActionBtnPhoto {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.iconActionBtnPhoto:hover {
+  border-color: #f97316;
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.iconActionBtnDelete:hover {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.catalogFooterBar {
+  padding: 0.65rem 1.25rem;
+  border-top: 1px solid #f1f5f9;
+  background: #fcfdfe;
+}
+
+@media (max-width: 1024px) {
+  .kpiCardsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .proToolsDivider {
+    display: none;
+  }
+}
+
+/* ── TOOLBAR DOS FILAS (compatibilidad) ──────────────────── */
 .pageHeaderWrap {
   margin-bottom: 1.4rem;
 }

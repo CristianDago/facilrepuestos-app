@@ -182,7 +182,8 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
   const [filtrocat, setFiltrocat] = useState("");
   const [filtroSubcat, setFiltroSubcat] = useState("");
   const [filtroMarca, setFiltroMarca] = useState("");
-  const [vista, setVista]         = useState<"grid" | "tabla">("grid");
+  const [soloStockCritico, setSoloStockCritico] = useState(false);
+  const [vista, setVista]         = useState<"grid" | "tabla">("tabla");
   const [modal, setModal]         = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm]           = useState<Omit<ItemInventario, "id">>(emptyItem());
@@ -600,7 +601,8 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
     const matchCat = !filtrocat || i.categoria === filtrocat || jer.categoria === filtrocat;
     const matchSubcat = !filtroSubcat || i.subcategoria === filtroSubcat || jer.subcategoria === filtroSubcat || i.subcategoriaDetalle === filtroSubcat || jer.subcategoriaDetalle === filtroSubcat;
     const matchMarca = !filtroMarca || (i.marcasCompatibles || []).some(m => m.toUpperCase() === filtroMarca);
-    return matchSearch && matchCat && matchSubcat && matchMarca;
+    const matchCritico = !soloStockCritico || getStockInfo(i).disponible <= (i.stockMinimo || 0);
+    return matchSearch && matchCat && matchSubcat && matchMarca && matchCritico;
   });
   const { paged, page, pageSize, totalPages, goTo, changeSize } = usePagination(filtered);
 
@@ -714,369 +716,642 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
   const todasMarcasSeleccionadas = [...(form.marcasCompatibles || []), ...marcasExtra];
 
   return (
-    <div>
-      {/* ── HEADER: TÍTULO + FILA 1 (búsqueda/vista) + FILTROS DESPLEGADOS A LA IZQUIERDA ── */}
-      <div className={styles.pageHeaderWrap}>
-        <div className="page-header">
-          <div className="page-title">
-            {esProveedor ? (
-              <>
-                Mis <span>Repuestos</span>
-              </>
-            ) : esBodegaPropia ? (
-              <>
-                Inventario Propio <span>Dr. Motors & Enrique Olivares 224</span>
-              </>
-            ) : (
-              <>
-                Inventario <span>& Web WooCommerce</span>
-              </>
-            )}
-          </div>
-          <div className={styles.toolbarFila1}>
+    <div className={styles.inventoryPageWrap}>
+      {/* ── CABECERA SUPERIOR: TÍTULO + BUSCADOR + TOGGLE VISTA + BOTÓN + AGREGAR REPUESTO ── */}
+      <div className={styles.topActionBar}>
+        <h1 className={styles.modernPageTitle}>
+          {esProveedor ? (
+            "MIS REPUESTOS"
+          ) : esBodegaPropia ? (
+            "INVENTARIO PROPIO DR. MOTORS & ENRIQUE OLIVARES 224"
+          ) : (
+            "INVENTARIO & WEB WOOCOMMERCE"
+          )}
+        </h1>
+
+        <div className={styles.topRightActions}>
+          <div className={styles.modernSearchWrap}>
+            <span className={styles.modernSearchIcon}>🔍</span>
             <input
               type="text"
               placeholder="Buscar repuesto, código, marca..."
-              className={styles.searchInput}
+              className={styles.modernSearchInput}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
-            <div className={styles.vistaToggle}>
-              <button
-                className={`btn btn-sm ${styles.vistaBtn} ${vista === "grid" ? styles.vistaBtnActive : ""}`}
-                onClick={() => setVista("grid")}
-              >⊞ Grid</button>
-              <button
-                className={`btn btn-sm ${styles.vistaBtn} ${vista === "tabla" ? styles.vistaBtnActive : ""}`}
-                onClick={() => setVista("tabla")}
-              >☰ Tabla</button>
-            </div>
-          </div>
-        </div>
-
-        {/* LISTAS DESPLEGABLES DE CATEGORÍA Y MARCA DE AUTO */}
-        <div className={styles.filtrosDesplegadosWrap}>
-          <div className={styles.filtrosDropdownBar}>
-            <div className={styles.filtroDropdownGroup}>
-              <label htmlFor="select-filtro-categoria" className={styles.filtroGrupoLabel}>
-                📂 Categorías:
-              </label>
-              <select
-                id="select-filtro-categoria"
-                className={styles.filtroSelectDropdown}
-                value={filtrocat}
-                onChange={e => {
-                  setFiltrocat(e.target.value);
-                  setFiltroSubcat("");
-                }}
-              >
-                <option value="">Todas las categorías ({inventarioVisible.length})</option>
-                {categoriasConConteo.map(([nombreCat, cant]) => (
-                  <option key={nombreCat} value={nombreCat}>
-                    {nombreCat} ({cant})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {subcategoriasFiltroOpciones.length > 0 && (
-              <div className={styles.filtroDropdownGroup}>
-                <label htmlFor="select-filtro-subcategoria" className={styles.filtroGrupoLabel}>
-                  ↳ Subcategoría:
-                </label>
-                <select
-                  id="select-filtro-subcategoria"
-                  className={styles.filtroSelectDropdown}
-                  value={filtroSubcat}
-                  onChange={e => setFiltroSubcat(e.target.value)}
-                >
-                  <option value="">Todas las subcategorías</option>
-                  {subcategoriasFiltroOpciones.map(sub => (
-                    <option key={sub.nombre} value={sub.nombre}>
-                      {sub.nombre}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div className={styles.filtroDropdownGroup}>
-              <label htmlFor="select-filtro-marca" className={styles.filtroGrupoLabel}>
-                🚗 Marca Auto:
-              </label>
-              <select
-                id="select-filtro-marca"
-                className={styles.filtroSelectDropdown}
-                value={filtroMarca}
-                onChange={e => setFiltroMarca(e.target.value)}
-              >
-                <option value="">Todas las marcas</option>
-                {marcasVehiculoConConteo.map(([marca, cant]) => (
-                  <option key={marca} value={marca}>
-                    {marca} ({cant})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {(filtrocat !== "" || filtroSubcat !== "" || filtroMarca !== "") && (
+            {search && (
               <button
                 type="button"
-                className={styles.btnLimpiarFiltros}
-                onClick={() => {
-                  setFiltrocat("");
-                  setFiltroSubcat("");
-                  setFiltroMarca("");
-                }}
+                className={styles.modernSearchClear}
+                onClick={() => setSearch("")}
+                title="Limpiar búsqueda"
               >
-                ✕ Limpiar filtros
+                ✕
               </button>
             )}
           </div>
-        </div>
 
-        {/* FILA 2: acciones */}
-        <div className={styles.toolbarFila2}>
+          <div className={styles.viewSwitchGroup}>
+            <button
+              type="button"
+              className={`${styles.viewSwitchBtn} ${vista === "grid" ? styles.viewSwitchBtnActive : ""}`}
+              onClick={() => setVista("grid")}
+              title="Vista en cuadrícula de tarjetas"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="7" height="7" rx="1" />
+                <rect x="14" y="3" width="7" height="7" rx="1" />
+                <rect x="3" y="14" width="7" height="7" rx="1" />
+                <rect x="14" y="14" width="7" height="7" rx="1" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className={`${styles.viewSwitchBtn} ${vista === "tabla" ? styles.viewSwitchBtnActive : ""}`}
+              onClick={() => setVista("tabla")}
+              title="Vista de lista profesional"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="8" y1="6" x2="21" y2="6" />
+                <line x1="8" y1="12" x2="21" y2="12" />
+                <line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3" y1="6" x2="3.01" y2="6" />
+                <line x1="3" y1="12" x2="3.01" y2="12" />
+                <line x1="3" y1="18" x2="3.01" y2="18" />
+              </svg>
+            </button>
+          </div>
+
+          <button type="button" className={styles.btnPrimaryAdd} onClick={openNuevo}>
+            <span>+</span> Agregar Repuesto
+          </button>
+        </div>
+      </div>
+
+      {/* ── BARRA PROFESIONAL DE HERRAMIENTAS DE INVENTARIO ── */}
+      <div className={styles.proToolsBar}>
+        <div className={styles.proToolsGroup}>
+          <span className={styles.proToolsGroupLabel}>Captura &amp; IA</span>
           <button
-            className="btn btn-dark"
-            style={{ background: '#0f766e', borderColor: '#0f766e', color: '#ffffff', fontWeight: 700 }}
+            type="button"
+            className={styles.proToolBtn}
             onClick={() => setModalFactura(true)}
             title="Cargar o fotografiar factura de compra mayorista con el teléfono para actualizar stock y costos con IA"
           >
-            🧾 Cargar / Foto Factura IA
+            <span className={`${styles.proToolIcon} ${styles.iconTeal}`}>🧾</span>
+            <span>Cargar / Foto Factura IA</span>
           </button>
+
           <button
-            className="btn btn-dark"
-            style={{ background: '#7c3aed', borderColor: '#7c3aed', color: '#ffffff', fontWeight: 700 }}
+            type="button"
+            className={styles.proToolBtn}
             onClick={() => {
               setItemBancoFotoPreseleccionado(null);
               setModalBancoFotos(true);
             }}
             title="Sacar fotos a los productos con el teléfono y administrar el Banco de Fotos asociado"
           >
-            📸 Banco de Fotos
+            <span className={`${styles.proToolIcon} ${styles.iconPurple}`}>📸</span>
+            <span>Banco de Fotos</span>
           </button>
+
           <button
-            className="btn btn-dark"
-            style={{ background: '#0284c7', borderColor: '#0284c7', color: '#ffffff', fontWeight: 700 }}
+            type="button"
+            className={styles.proToolBtn}
             onClick={() => setModalPistola(true)}
             title="Escanear códigos con pistola e ingresar a bodega con búsqueda web automática"
           >
-            ⚡ Ingreso con Pistola (QR/EAN)
+            <span className={`${styles.proToolIcon} ${styles.iconSky}`}>⚡</span>
+            <span>Ingreso con Pistola (QR/EAN)</span>
           </button>
-          <button className="btn btn-dark" onClick={() => setModalExcel(true)}>⬆ Importar Excel</button>
-          <button className="btn btn-dark" onClick={exportarExcel} disabled={filtered.length === 0}>⬇ Exportar Excel</button>
+        </div>
+
+        <div className={styles.proToolsDivider} />
+
+        <div className={styles.proToolsGroup}>
+          <span className={styles.proToolsGroupLabel}>Planillas</span>
+          <button
+            type="button"
+            className={styles.proToolBtn}
+            onClick={() => setModalExcel(true)}
+            title="Importar catálogo desde archivo Excel (.xlsx)"
+          >
+            <span className={`${styles.proToolIcon} ${styles.iconSlate}`}>⬆</span>
+            <span>Importar Excel</span>
+          </button>
+
+          <button
+            type="button"
+            className={styles.proToolBtn}
+            onClick={exportarExcel}
+            disabled={filtered.length === 0}
+            title="Exportar vista actual a archivo Excel (.xlsx)"
+          >
+            <span className={`${styles.proToolIcon} ${styles.iconSlate}`}>⬇</span>
+            <span>Exportar Excel</span>
+          </button>
+        </div>
+
+        <div className={styles.proToolsDivider} />
+
+        <div className={styles.proToolsGroup}>
+          <span className={styles.proToolsGroupLabel}>Sincronización</span>
           {!esProveedor && !esBodegaPropia && (
             <button
-              className="btn btn-dark"
-              style={{ background: '#4f46e5', borderColor: '#4f46e5', color: '#ffffff', fontWeight: 700 }}
+              type="button"
+              className={styles.proToolBtn}
               onClick={handleSyncAilooCatalogo}
               disabled={sincronizandoAiloo}
-              title="Ingestar catálogos normalizados desde Soluparts (soluparts_ailoo) y Global (global_ailoo) hacia Firebase con Delta Hash"
+              title="Ingestar catálogos normalizados desde Soluparts y Global hacia Firebase"
             >
-              {sincronizandoAiloo ? "Ingestando Ailoo..." : "📦 Ingestar Catálogo Ailoo"}
+              <span className={`${styles.proToolIcon} ${styles.iconIndigo}`}>📦</span>
+              <span>{sincronizandoAiloo ? "Ingestando Ailoo..." : "Ingestar Catálogo Ailoo"}</span>
             </button>
           )}
+
           <button
-            className="btn btn-dark"
-            style={{
-              background: pendientesWooCount > 0 ? '#059669' : undefined,
-              borderColor: pendientesWooCount > 0 ? '#059669' : undefined,
-              color: pendientesWooCount > 0 ? '#ffffff' : undefined,
-              fontWeight: pendientesWooCount > 0 ? 700 : undefined,
-            }}
+            type="button"
+            className={`${styles.proToolBtn} ${pendientesWooCount > 0 ? styles.proToolBtnSyncPending : ""}`}
             onClick={handleSyncWoo}
             disabled={sincronizando}
             title="Sincroniza incrementalmente hacia WooCommerce (facilrepuestos.cl) los productos con cambios"
           >
-            {sincronizando
-              ? "Sincronizando..."
-              : `🛒 Sync Delta WooCommerce${pendientesWooCount > 0 ? ` (${pendientesWooCount})` : ""}`}
+            <span className={`${styles.proToolIcon} ${styles.iconEmerald}`}>🛒</span>
+            <span>
+              {sincronizando ? "Sincronizando..." : "Sync Delta WooCommerce"}
+            </span>
+            {pendientesWooCount > 0 && (
+              <span className={styles.proToolCountBadge}>{pendientesWooCount}</span>
+            )}
           </button>
-          <button className="btn btn-primary" onClick={openNuevo}>+ Agregar Repuesto</button>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="stats-grid">
-        <div className="stat-card"><div className="stat-value">{inventarioVisible.length}</div><div className="stat-label">Total Items</div></div>
-        <div className="stat-card"><div className={`stat-value ${styles.colorDanger}`}>{lowStock.length}</div><div className="stat-label">Stock Bajo</div></div>
-        <div className="stat-card"><div className={`stat-value ${styles.colorWarning}`}>{reservados.length}</div><div className="stat-label">Con Reservas</div></div>
-        <div className="stat-card"><div className={`stat-value ${styles.statValorInventario}`}>{fmtCLP(totalValue)}</div><div className="stat-label">Valor Inventario (neto)</div></div>
-        <div className="stat-card"><div className="stat-value">{cats}</div><div className="stat-label">Categorías</div></div>
+      {/* ── 5 TARJETAS KPI ESTILO INVENTIA ── */}
+      <div className={styles.kpiCardsGrid}>
+        <div
+          className={styles.kpiCardItem}
+          onClick={() => setSoloStockCritico(false)}
+          style={{ cursor: "pointer" }}
+        >
+          <div className={`${styles.kpiCardNumber} ${styles.kpiOrange}`}>{inventarioVisible.length}</div>
+          <div className={styles.kpiCardLabel}>Total Items</div>
+        </div>
+
+        <div
+          className={`${styles.kpiCardItem} ${soloStockCritico ? styles.kpiCardActive : ""}`}
+          onClick={() => setSoloStockCritico(prev => !prev)}
+          style={{ cursor: "pointer" }}
+          title="Haz clic para filtrar productos con stock bajo"
+        >
+          <div className={styles.kpiCardNumber}>{lowStock.length}</div>
+          <div className={styles.kpiCardLabel}>Stock Bajo</div>
+        </div>
+
+        <div className={styles.kpiCardItem}>
+          <div className={styles.kpiCardNumber}>{reservados.length}</div>
+          <div className={styles.kpiCardLabel}>Con Reservas</div>
+        </div>
+
+        <div className={styles.kpiCardItem}>
+          <div className={styles.kpiCardNumber}>{fmtCLP(totalValue)}</div>
+          <div className={styles.kpiCardLabel}>Valor Inventario (Neto)</div>
+        </div>
+
+        <div className={styles.kpiCardItem}>
+          <div className={styles.kpiCardNumber}>{cats}</div>
+          <div className={styles.kpiCardLabel}>Categorías</div>
+        </div>
       </div>
 
-      <Pagination page={page} totalPages={totalPages} totalItems={filtered.length} pageSize={pageSize} onPage={goTo} onPageSize={changeSize} />
+      {/* ── CONTENEDOR PRINCIPAL DEL CATÁLOGO (FILTROS + TABLA/GRID + PAGINACIÓN) ── */}
+      <div className={styles.catalogMasterCard}>
+        {/* Barra integrada de filtros */}
+        <div className={styles.tableFilterHeader}>
+          <div className={styles.filterLeftRow}>
+            <span className={styles.filterGridIcon}>⊞</span>
 
-      {/* Vista Grid */}
-      {vista === "grid" && (filtered.length === 0
-        ? <div className={styles.emptyState}><div className={styles.emptyStateIcon}>📦</div><div>No hay repuestos en inventario</div></div>
-        : <div className="inv-grid">
-            {paged.map(item => {
-              const margen     = item.precioCompra && item.precioVenta
-                ? (((item.precioVenta - item.precioCompra) / item.precioVenta) * 100).toFixed(0) : null;
-              const modResumen = resumenModelos(item);
-              const jerCard    = resolverJerarquiaCategoria(item);
-              const rutaCatTxt = [jerCard.categoria || item.categoria, jerCard.subcategoria, jerCard.subcategoriaDetalle]
-                .filter(Boolean)
-                .join(" › ");
-              return (
-                <div className="inv-card" key={item.id}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.6rem' }}>
-                    <div style={{ flex: 1 }}>
-                      <div className="inv-card-cat">{rutaCatTxt}</div>
-                      <div className="inv-card-name">{item.nombre}</div>
-                    </div>
-                    {item.imagenUrl && (
-                      <img
-                        src={item.imagenUrl}
-                        alt={item.nombre}
-                        onClick={() => {
-                          setItemBancoFotoPreseleccionado(item);
-                          setModalBancoFotos(true);
-                        }}
-                        title="Ver / agregar fotos en el Banco de Fotos"
-                        style={{
-                          width: 52,
-                          height: 52,
-                          objectFit: 'cover',
-                          borderRadius: 6,
-                          border: '1px solid #cbd5e1',
-                          cursor: 'pointer',
-                          flexShrink: 0,
-                        }}
-                      />
-                    )}
-                  </div>
-                  {item.ocultarEnTienda && (
-                    <div className={styles.badgeOcultoTienda}>🚫 No se vende online</div>
-                  )}
-                  {item.fabricante && <div className={styles.cardFabricante}>🏭 {item.fabricante}</div>}
-                  {(item.equivalencias || []).length > 0 && (
-                    <div className={styles.cardEquivalencias}>
-                      ≡ {(item.equivalencias || []).slice(0, 3).map((e: Equivalencia) => `${e.fabricante} ${e.codigo}`).join(" · ")}
-                      {(item.equivalencias || []).length > 3 ? ` +${(item.equivalencias || []).length - 3}` : ""}
-                    </div>
-                  )}
-                  <div className={styles.cardBadgesRow}>
-                    {item.tipoPieza && <span className={styles.badgeTipo}>{item.tipoPieza}</span>}
-                    {item.posicion && item.posicion !== "NO APLICA" && <span className={styles.badgePosicion}>{item.posicion}</span>}
-                    {item.lado     && item.lado     !== "NO APLICA" && <span className={styles.badgeLado}>{item.lado}</span>}
-                  </div>
-                  {(item.marcasCompatibles || []).length > 0 && (
-                    <div className={styles.cardBadgesRow}>
-                      {(item.marcasCompatibles || []).slice(0,3).map(m => <span key={m} className={styles.badgeMarca}>{m}</span>)}
-                      {(item.marcasCompatibles || []).length > 3 && <span className={styles.badgeMore}>+{(item.marcasCompatibles||[]).length - 3}</span>}
-                    </div>
-                  )}
-                  {modResumen && <div className={styles.cardModelos}>🚗 {modResumen}</div>}
-                  {(item.anioDesde || item.anioHasta) && <div className={styles.cardAnios}>Años: {item.anioDesde||"?"} — {item.anioHasta||"actual"}</div>}
-                  {item.codigo && <div className={styles.cardCodigo}>🔫 SKU/Barra: {item.codigo}</div>}
-                  {item.codigoProducto && (
-                    <div className={styles.cardCodigo} style={{ color: '#0369a1', fontWeight: 800 }}>
-                      🔩 Cód. Producto (OEM): {item.codigoProducto}
-                      {item.origen ? ` · ${item.origen}` : ''}
-                    </div>
-                  )}
-                  {!esProveedor && item.skuPublicoFrp && (
-                    <div style={{ fontSize: '0.73rem', fontFamily: 'monospace', color: '#0369a1', fontWeight: 700, marginTop: 2 }}>
-                      SKU Público: {item.skuPublicoFrp}{' '}
-                      {item.needsWooSync ? (
-                        <span style={{ color: '#d97706', marginLeft: 4 }}>⚡ Pend. Woo</span>
-                      ) : item.wooProductId ? (
-                        <span style={{ color: '#059669', marginLeft: 4 }}>✓ Woo #{item.wooProductId}</span>
-                      ) : null}
-                    </div>
-                  )}
-                  {!esProveedor && item.proveedor && <div className={styles.cardProveedor}>📦 {item.proveedor}</div>}
-                  <StockBar item={item} />
-                  <div className="inv-prices">
-                    <div className="inv-price-item"><span className="inv-price-lbl">{esProveedor ? "Precio neto" : "Compra neto"}</span><span className={`inv-price-val ${styles.colorGray}`}>{fmtCLP(item.precioCompra||0)}</span><span className={styles.ivaLinea}>c/IVA {fmtCLP(conIva(item.precioCompra||0))}</span></div>
-                    {!esProveedor && <div className="inv-price-item"><span className="inv-price-lbl">Venta neto</span><span className={`inv-price-val ${styles.priceVenta}`}>{fmtCLP(item.precioVenta||0)}</span><span className={styles.ivaLinea}>c/IVA {fmtCLP(conIva(item.precioVenta||0))}</span></div>}
-                    {!esProveedor && margen && <div className="inv-price-item"><span className="inv-price-lbl">Margen</span><span className={`inv-price-val ${styles.colorSuccess}`}>{margen}%</span></div>}
-                  </div>
-                  <div className={styles.cardActions}>
-                    <button className="btn btn-dark btn-sm"    onClick={() => openEditar(item)}>✏ Editar</button>
-                    <button
-                      className="btn btn-outline btn-sm"
-                      onClick={() => {
-                        setItemBancoFotoPreseleccionado(item);
-                        setModalBancoFotos(true);
-                      }}
-                      title="Sacar foto con el teléfono y guardar en el Banco de Fotos de este repuesto"
-                    >
-                      📸 Foto
-                    </button>
-                    <button className="btn btn-outline btn-sm" onClick={() => handleAjusteStock(item)}>± Stock</button>
-                    <button className={`btn btn-sm ${styles.btnDanger}`} onClick={() => handleDelete(item.id!, item.nombre)}>✕</button>
-                  </div>
-                </div>
-              );
-            })}
+            <select
+              id="select-filtro-categoria"
+              className={styles.cleanFilterSelect}
+              value={filtrocat}
+              onChange={e => {
+                setFiltrocat(e.target.value);
+                setFiltroSubcat("");
+              }}
+            >
+              <option value="">Todas las categorías ({inventarioVisible.length})</option>
+              {categoriasConConteo.map(([nombreCat, cant]) => (
+                <option key={nombreCat} value={nombreCat}>
+                  {nombreCat} ({cant})
+                </option>
+              ))}
+            </select>
+
+            {subcategoriasFiltroOpciones.length > 0 && (
+              <select
+                id="select-filtro-subcategoria"
+                className={styles.cleanFilterSelect}
+                value={filtroSubcat}
+                onChange={e => setFiltroSubcat(e.target.value)}
+              >
+                <option value="">Todas las subcategorías</option>
+                {subcategoriasFiltroOpciones.map(sub => (
+                  <option key={sub.nombre} value={sub.nombre}>
+                    {sub.nombre}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <select
+              id="select-filtro-marca"
+              className={styles.cleanFilterSelect}
+              value={filtroMarca}
+              onChange={e => setFiltroMarca(e.target.value)}
+            >
+              <option value="">Todas las marcas</option>
+              {marcasVehiculoConConteo.map(([marca, cant]) => (
+                <option key={marca} value={marca}>
+                  {marca} ({cant})
+                </option>
+              ))}
+            </select>
           </div>
-      )}
 
-      {/* Vista Tabla */}
-      {vista === "tabla" && (
-        <div className="tbl-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Nombre</th><th>Tipo Pieza</th><th>Pos. / Lado</th>
-                <th>Marcas / Modelos</th><th>Años</th>
-                {!esProveedor && <th>Proveedor</th>}<th className="r">Disponible</th>
-                <th className={`r ${styles.thReservado}`}>Reservado</th>
-                <th className="r">{esProveedor ? "Precio" : "P. Venta"}</th><th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 && <tr><td colSpan={esProveedor ? 9 : 10} className={styles.emptyTableRow}>No hay repuestos</td></tr>}
-              {paged.map(item => {
-                const info       = getStockInfo(item);
-                const isLow      = info.disponible <= (item.stockMinimo || 0);
-                const modResumen = resumenModelos(item);
-                return (
-                  <tr key={item.id}>
-                    <td data-label="Nombre">
-                      <div className={styles.itemNombre}>{item.nombre}</div>
-                      {item.codigo && <div className={styles.itemCodigo}>🔫 SKU: {item.codigo}</div>}
-                      {item.codigoProducto && (
-                        <div className={styles.itemCodigo} style={{ color: '#0369a1', fontWeight: 700 }}>
-                          🔩 OEM: {item.codigoProducto}
+          <div className={styles.filterRightRow}>
+            {(filtrocat !== "" || filtroSubcat !== "" || filtroMarca !== "" || search !== "" || soloStockCritico) ? (
+              <button
+                type="button"
+                className={styles.btnClearFiltersPill}
+                onClick={() => {
+                  setFiltrocat("");
+                  setFiltroSubcat("");
+                  setFiltroMarca("");
+                  setSearch("");
+                  setSoloStockCritico(false);
+                }}
+              >
+                ✕ Limpiar filtros
+              </button>
+            ) : (
+              <span className={styles.filterStaticBadge}>☰ Filtros</span>
+            )}
+
+            <button
+              type="button"
+              className={`${styles.btnCriticalStockPill} ${
+                soloStockCritico ? styles.btnCriticalStockPillActive : ""
+              }`}
+              onClick={() => setSoloStockCritico(prev => !prev)}
+            >
+              <span>⚠</span> Stock Crítico {lowStock.length > 0 ? `(${lowStock.length})` : ""}
+            </button>
+          </div>
+        </div>
+
+        {/* Vista Tabla Moderna (Estilo InventIA) */}
+        {vista === "tabla" && (
+          <div className={styles.modernTableContainer}>
+            <table className={styles.modernProductTable}>
+              <thead>
+                <tr>
+                  <th style={{ width: 36, textAlign: "center" }}>
+                    <input type="checkbox" disabled />
+                  </th>
+                  <th>PRODUCTO / SKU ↑</th>
+                  <th style={{ textAlign: "center" }}>ROTACIÓN</th>
+                  <th>STOCK</th>
+                  <th className="r">{esProveedor ? "PRECIO c/IVA" : "PRECIO VENTA"}</th>
+                  <th className="r">{esProveedor ? "COSTO NETO" : "COSTO"}</th>
+                  <th className="r">{esProveedor ? "TIENDA WEB" : "MARGEN"}</th>
+                  <th style={{ textAlign: "right" }}>ACCIONES</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className={styles.emptyTableRow}>
+                      No se encontraron repuestos con los filtros seleccionados.
+                    </td>
+                  </tr>
+                )}
+                {paged.map(item => {
+                  const info = getStockInfo(item);
+                  const isLow = info.disponible <= (item.stockMinimo || 0);
+                  const margenNum =
+                    item.precioCompra && item.precioVenta
+                      ? Math.round(((item.precioVenta - item.precioCompra) / item.precioVenta) * 100)
+                      : 23;
+                  const jerCard = resolverJerarquiaCategoria(item);
+                  const catUpper = (jerCard.categoria || item.categoria || "GENERAL").toUpperCase();
+                  const subUpper = [jerCard.subcategoria, jerCard.subcategoriaDetalle]
+                    .filter(Boolean)
+                    .join(", ")
+                    .toUpperCase();
+                  const pctBarra = Math.min(
+                    100,
+                    Math.max(12, Math.round((info.disponible / Math.max(10, (item.stockMinimo || 2) * 4)) * 100))
+                  );
+
+                  return (
+                    <tr key={item.id} className={styles.modernRow}>
+                      <td style={{ textAlign: "center" }}>
+                        <input type="checkbox" />
+                      </td>
+                      <td data-label="Producto / SKU">
+                        <div className={styles.productMainCell}>
+                          <div
+                            className={styles.productThumbBox}
+                            onClick={() => {
+                              setItemBancoFotoPreseleccionado(item);
+                              setModalBancoFotos(true);
+                            }}
+                            title="Haz clic para ver o subir foto de este repuesto"
+                          >
+                            {item.imagenUrl ? (
+                              <img src={item.imagenUrl} alt={item.nombre} className={styles.productThumbImg} />
+                            ) : (
+                              <span className={styles.productThumbPlaceholder}>📦</span>
+                            )}
+                          </div>
+
+                          <div className={styles.productMetaInfo}>
+                            <div className={styles.productTitleText}>{item.nombre}</div>
+                            {(item.codigo || item.codigoProducto) && (
+                              <div className={styles.productSkuLine}>
+                                {item.codigoProducto || item.codigo}
+                                {item.codigo && item.codigoProducto && item.codigo !== item.codigoProducto
+                                  ? ` · Barra: ${item.codigo}`
+                                  : ""}
+                              </div>
+                            )}
+                            <div className={styles.productTagsWrap}>
+                              <span className={styles.tagCatMain}>📦 {catUpper}</span>
+                              {subUpper && <span className={styles.tagSubcat}>{subUpper}</span>}
+                              {item.fabricante && <span className={styles.tagBrand}>🏭 {item.fabricante}</span>}
+                              {(item.marcasCompatibles || []).slice(0, 2).map(m => (
+                                <span key={m} className={styles.tagAutoMarca}>
+                                  {m}
+                                </span>
+                              ))}
+                              {item.ocultarEnTienda && (
+                                <span className={styles.badgeOcultoTienda}>🚫 Oculto online</span>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      )}
-                      {isLow && <div className={styles.itemStockBajo}>⚠ Stock bajo</div>}
+                      </td>
+
+                      <td data-label="Rotación" style={{ textAlign: "center" }}>
+                        <span className={isLow ? styles.rotationBadgeLow : styles.rotationBadgeMid}>
+                          {isLow ? "Baja" : "Media"}
+                        </span>
+                      </td>
+
+                      <td data-label="Stock">
+                        <div className={styles.stockCellWrap}>
+                          <div className={styles.stockNumberBold}>
+                            {info.disponible}
+                            {info.reservado > 0 && (
+                              <span className={styles.stockReservedTag}> ({info.reservado} res.)</span>
+                            )}
+                          </div>
+                          <div className={styles.miniStockBarTrack}>
+                            <div
+                              className={`${styles.miniStockBarFill} ${
+                                isLow ? styles.miniStockBarLow : styles.miniStockBarOk
+                              }`}
+                              style={{ width: `${pctBarra}%` }}
+                            />
+                          </div>
+                          {isLow && <div className={styles.lowStockMicroText}>⚠ Stock bajo</div>}
+                        </div>
+                      </td>
+
+                      <td data-label={esProveedor ? "Precio c/IVA" : "Precio Venta"} className="r">
+                        <span className={styles.tablePriceMain}>
+                          {fmtCLP(esProveedor ? conIva(item.precioCompra || 0) : item.precioVenta || 0)}
+                        </span>
+                        {!esProveedor && (
+                          <span className={styles.ivaLinea}>
+                            c/IVA {fmtCLP(conIva(item.precioVenta || 0))}
+                          </span>
+                        )}
+                      </td>
+
+                      <td data-label="Costo" className="r">
+                        <span className={styles.tableCostSecondary}>{fmtCLP(item.precioCompra || 0)}</span>
+                      </td>
+
+                      <td data-label={esProveedor ? "Tienda Web" : "Margen"} className="r">
+                        {esProveedor ? (
+                          item.wooProductId ? (
+                            <span className={styles.wooSyncedBadge}>✓ En tienda</span>
+                          ) : (
+                            <span className={styles.wooPendingBadge}>Sincronizando</span>
+                          )
+                        ) : (
+                          <span className={styles.marginPctText}>{margenNum}%</span>
+                        )}
+                      </td>
+
+                      <td data-label="Acciones">
+                        <div className={styles.iconActionsRow}>
+                          <button
+                            type="button"
+                            className={styles.iconActionBtn}
+                            onClick={() => openEditar(item)}
+                            title="Editar repuesto"
+                          >
+                            ✎
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.iconActionBtn} ${styles.iconActionBtnPhoto}`}
+                            onClick={() => {
+                              setItemBancoFotoPreseleccionado(item);
+                              setModalBancoFotos(true);
+                            }}
+                            title="Fotografiar o ver Banco de Fotos de este repuesto"
+                          >
+                            🖼
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.iconActionBtn}
+                            onClick={() => handleAjusteStock(item)}
+                            title="Ajustar stock rápidamente (±)"
+                          >
+                            ±
+                          </button>
+                          <button
+                            type="button"
+                            className={`${styles.iconActionBtn} ${styles.iconActionBtnDelete}`}
+                            onClick={() => handleDelete(item.id!, item.nombre)}
+                            title="Eliminar repuesto"
+                          >
+                            🗑
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Vista Cuadrícula (Grid) */}
+        {vista === "grid" && (
+          <div style={{ padding: "1rem 1.25rem" }}>
+            {filtered.length === 0 ? (
+              <div className={styles.emptyState}>
+                <div className={styles.emptyStateIcon}>📦</div>
+                <div>No hay repuestos en inventario</div>
+              </div>
+            ) : (
+              <div className="inv-grid" style={{ marginTop: 0 }}>
+                {paged.map(item => {
+                  const margen =
+                    item.precioCompra && item.precioVenta
+                      ? (((item.precioVenta - item.precioCompra) / item.precioVenta) * 100).toFixed(0)
+                      : null;
+                  const modResumen = resumenModelos(item);
+                  const jerCard = resolverJerarquiaCategoria(item);
+                  const rutaCatTxt = [
+                    jerCard.categoria || item.categoria,
+                    jerCard.subcategoria,
+                    jerCard.subcategoriaDetalle,
+                  ]
+                    .filter(Boolean)
+                    .join(" › ");
+                  return (
+                    <div className="inv-card" key={item.id}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "flex-start",
+                          gap: "0.6rem",
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div className="inv-card-cat">{rutaCatTxt}</div>
+                          <div className="inv-card-name">{item.nombre}</div>
+                        </div>
+                        {item.imagenUrl && (
+                          <img
+                            src={item.imagenUrl}
+                            alt={item.nombre}
+                            onClick={() => {
+                              setItemBancoFotoPreseleccionado(item);
+                              setModalBancoFotos(true);
+                            }}
+                            title="Ver / agregar fotos en el Banco de Fotos"
+                            style={{
+                              width: 52,
+                              height: 52,
+                              objectFit: "cover",
+                              borderRadius: 8,
+                              border: "1px solid #cbd5e1",
+                              cursor: "pointer",
+                              flexShrink: 0,
+                            }}
+                          />
+                        )}
+                      </div>
                       {item.ocultarEnTienda && (
                         <div className={styles.badgeOcultoTienda}>🚫 No se vende online</div>
                       )}
-                    </td>
-                    <td data-label="Tipo Pieza">
-                      {item.tipoPieza ? <span className="badge badge-entregado">{item.tipoPieza}</span> : <span className={styles.dash}>—</span>}
-                    </td>
-                    <td data-label="Pos. / Lado" className={styles.cellPosLado}>
-                      <div>{item.posicion !== "NO APLICA" ? item.posicion : "—"}</div>
-                      <div className={styles.colorGray}>{item.lado !== "NO APLICA" ? item.lado : ""}</div>
-                    </td>
-                    <td data-label="Marcas / Modelos">
-                      <div className={styles.tableMarcasRow}>
-                        {(item.marcasCompatibles || []).slice(0,3).map(m => <span key={m} className={styles.badgeMarcaTable}>{m}</span>)}
-                        {(item.marcasCompatibles || []).length > 3 && <span className={styles.badgeMore}>+{(item.marcasCompatibles||[]).length - 3}</span>}
-                        {!(item.marcasCompatibles || []).length && <span className={styles.dash}>—</span>}
+                      {item.fabricante && <div className={styles.cardFabricante}>🏭 {item.fabricante}</div>}
+                      {(item.equivalencias || []).length > 0 && (
+                        <div className={styles.cardEquivalencias}>
+                          ≡{" "}
+                          {(item.equivalencias || [])
+                            .slice(0, 3)
+                            .map((e: Equivalencia) => `${e.fabricante} ${e.codigo}`)
+                            .join(" · ")}
+                          {(item.equivalencias || []).length > 3
+                            ? ` +${(item.equivalencias || []).length - 3}`
+                            : ""}
+                        </div>
+                      )}
+                      <div className={styles.cardBadgesRow}>
+                        {item.tipoPieza && <span className={styles.badgeTipo}>{item.tipoPieza}</span>}
+                        {item.posicion && item.posicion !== "NO APLICA" && (
+                          <span className={styles.badgePosicion}>{item.posicion}</span>
+                        )}
+                        {item.lado && item.lado !== "NO APLICA" && (
+                          <span className={styles.badgeLado}>{item.lado}</span>
+                        )}
                       </div>
-                      {modResumen && <div className={styles.tableModelos}>🚗 {modResumen}</div>}
-                    </td>
-                    <td data-label="Años" className={styles.cellAnios}>
-                      {item.anioDesde || item.anioHasta ? `${item.anioDesde||"?"} — ${item.anioHasta||"actual"}` : "—"}
-                    </td>
-                    {!esProveedor && <td data-label="Proveedor" className="hide-mobile">{item.proveedor||"—"}</td>}
-                    <td data-label="Disponible" className="r"><span className={styles.dispNum}>{info.disponible}</span></td>
-                    <td data-label="Reservado" className="r td-dark hide-mobile">
-                      {info.reservado > 0 ? <span className={styles.reservNum}>{info.reservado}</span> : <span className={styles.dashDark}>—</span>}
-                    </td>
-                    <td data-label={esProveedor ? "Precio" : "P. Venta"} className="r price-cell">{fmtCLP((esProveedor ? item.precioCompra : item.precioVenta)||0)}<div className={styles.ivaLinea}>c/IVA {fmtCLP(conIva((esProveedor ? item.precioCompra : item.precioVenta)||0))}</div></td>
-                    <td data-label="Acciones">
-                      <div className={styles.tableActionsCol}>
-                        <button className="btn btn-dark btn-sm"    onClick={() => openEditar(item)}>✏ Editar</button>
+                      {(item.marcasCompatibles || []).length > 0 && (
+                        <div className={styles.cardBadgesRow}>
+                          {(item.marcasCompatibles || []).slice(0, 3).map(m => (
+                            <span key={m} className={styles.badgeMarca}>
+                              {m}
+                            </span>
+                          ))}
+                          {(item.marcasCompatibles || []).length > 3 && (
+                            <span className={styles.badgeMore}>
+                              +{(item.marcasCompatibles || []).length - 3}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                      {modResumen && <div className={styles.cardModelos}>🚗 {modResumen}</div>}
+                      {(item.anioDesde || item.anioHasta) && (
+                        <div className={styles.cardAnios}>
+                          Años: {item.anioDesde || "?"} — {item.anioHasta || "actual"}
+                        </div>
+                      )}
+                      {item.codigo && <div className={styles.cardCodigo}>🔫 SKU/Barra: {item.codigo}</div>}
+                      {item.codigoProducto && (
+                        <div className={styles.cardCodigo} style={{ color: "#0369a1", fontWeight: 800 }}>
+                          🔩 Cód. Producto (OEM): {item.codigoProducto}
+                          {item.origen ? ` · ${item.origen}` : ""}
+                        </div>
+                      )}
+                      {!esProveedor && item.proveedor && (
+                        <div className={styles.cardProveedor}>📦 {item.proveedor}</div>
+                      )}
+                      <StockBar item={item} />
+                      <div className="inv-prices">
+                        <div className="inv-price-item">
+                          <span className="inv-price-lbl">
+                            {esProveedor ? "Precio neto" : "Compra neto"}
+                          </span>
+                          <span className={`inv-price-val ${styles.colorGray}`}>
+                            {fmtCLP(item.precioCompra || 0)}
+                          </span>
+                          <span className={styles.ivaLinea}>
+                            c/IVA {fmtCLP(conIva(item.precioCompra || 0))}
+                          </span>
+                        </div>
+                        {!esProveedor && (
+                          <div className="inv-price-item">
+                            <span className="inv-price-lbl">Venta neto</span>
+                            <span className={`inv-price-val ${styles.priceVenta}`}>
+                              {fmtCLP(item.precioVenta || 0)}
+                            </span>
+                            <span className={styles.ivaLinea}>
+                              c/IVA {fmtCLP(conIva(item.precioVenta || 0))}
+                            </span>
+                          </div>
+                        )}
+                        {!esProveedor && margen && (
+                          <div className="inv-price-item">
+                            <span className="inv-price-lbl">Margen</span>
+                            <span className={`inv-price-val ${styles.colorSuccess}`}>{margen}%</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className={styles.cardActions}>
+                        <button className="btn btn-dark btn-sm" onClick={() => openEditar(item)}>
+                          ✏ Editar
+                        </button>
                         <button
                           className="btn btn-outline btn-sm"
                           onClick={() => {
@@ -1086,17 +1361,39 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
                         >
                           📸 Foto
                         </button>
-                        <button className="btn btn-outline btn-sm" onClick={() => handleAjusteStock(item)}>± Stock</button>
-                        <button className={`btn btn-sm ${styles.btnDanger}`} onClick={() => handleDelete(item.id!, item.nombre)}>✕ Eliminar</button>
+                        <button
+                          className="btn btn-outline btn-sm"
+                          onClick={() => handleAjusteStock(item)}
+                        >
+                          ± Stock
+                        </button>
+                        <button
+                          className={`btn btn-sm ${styles.btnDanger}`}
+                          onClick={() => handleDelete(item.id!, item.nombre)}
+                        >
+                          ✕
+                        </button>
                       </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Pie de Paginación Integrado */}
+        <div className={styles.catalogFooterBar}>
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            pageSize={pageSize}
+            onPage={goTo}
+            onPageSize={changeSize}
+          />
         </div>
-      )}
+      </div>
 
       {/* ── MODAL ─────────────────────────────────────────── */}
       {modal && (

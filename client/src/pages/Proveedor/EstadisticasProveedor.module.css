@@ -1,107 +1,505 @@
 /* ═══════════════════════════════════════════════════════════════════════════
-   EstadisticasProveedor.module.css — Reportes y Métricas del Proveedor
+   EstadisticasProveedor.module.css — Dashboard Analítico Gráfico de Proveedor
    ═══════════════════════════════════════════════════════════════════════════ */
+
+.analyticsWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+  padding-bottom: 1.5rem;
+}
 
 .estado {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.8rem;
-  padding: 3rem 1rem;
+  justify-content: center;
+  gap: 0.85rem;
+  padding: 4rem 1rem;
   color: var(--prov-text-muted, #64748b);
   text-align: center;
+  font-weight: 600;
 }
 
-.nota {
-  background: var(--prov-surface, #ffffff);
-  border: 1px solid var(--prov-border, #e2e8f0);
-  border-left: 4px solid var(--prov-accent, #f95a16);
-  border-radius: 12px;
-  padding: 0.85rem 1.1rem;
-  margin-bottom: 1.35rem;
-  font-size: 0.84rem;
-  line-height: 1.48;
-  color: var(--prov-text-muted, #475569);
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+.spinner {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 3px solid #dbeafe;
+  border-top-color: #2563eb;
+  animation: spin 0.8s linear infinite;
 }
 
-.seccion {
-  margin-top: 1.5rem;
-  min-width: 0;
-  background: var(--prov-surface, #ffffff);
-  border: 1px solid var(--prov-border, #e2e8f0);
-  border-radius: 14px;
-  padding: 1.15rem 1.25rem;
-  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.04);
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
-.seccionTitulo {
-  font-family: 'Barlow Condensed', sans-serif;
-  font-size: 1.05rem;
-  font-weight: 800;
-  letter-spacing: 1.2px;
-  text-transform: uppercase;
-  color: var(--prov-text, #0f172a);
-  margin-bottom: 0.75rem;
+/* ── CABECERA ANALYTICS ────────────────────────────────────────────────── */
+.topHeaderBar {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
-.seccionTitulo::before {
-  content: '';
-  width: 4px;
-  height: 16px;
-  border-radius: 99px;
-  background: var(--prov-accent, #f95a16);
+.analyticsTitle {
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: var(--prov-text, #0f172a);
+  letter-spacing: -0.02em;
+  margin: 0;
 }
 
-.dosColumnas {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1.25rem;
-  min-width: 0;
+.analyticsSubtitle {
+  font-size: 0.82rem;
+  color: var(--prov-text-muted, #64748b);
+  margin: 2px 0 0;
 }
 
-.colBarra {
-  width: 34%;
+.topHeaderControls {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
 }
 
-.barraPista {
-  background: #f1f5f9;
-  height: 10px;
+.searchBox {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--prov-surface, #ffffff);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  border-radius: 10px;
+  padding: 0.42rem 0.75rem 0.42rem 2.1rem;
+  min-width: 240px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
+}
+
+.searchIcon {
+  position: absolute;
+  left: 0.7rem;
+  font-size: 0.82rem;
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.searchBox input {
+  border: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  font-size: 0.82rem;
+  color: var(--prov-text, #0f172a);
   width: 100%;
-  border-radius: 999px;
-  overflow: hidden;
+  outline: none;
+  box-shadow: none !important;
 }
 
-.barraRelleno {
-  background: linear-gradient(90deg, var(--prov-accent, #ff6b1a), var(--prov-accent-end, #e94216));
-  height: 100%;
+.clearBtn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 0.8rem;
+  margin-left: 0.35rem;
+}
+
+.refreshBtn {
+  background: var(--prov-surface, #ffffff);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  color: var(--prov-text, #0f172a);
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.48rem 0.9rem;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
+}
+
+.refreshBtn:hover {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+/* ── TARJETA BASE DE GRÁFICO ───────────────────────────────────────────── */
+.chartCard {
+  background: var(--prov-surface, #ffffff);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  border-radius: 16px;
+  padding: 1.15rem 1.25rem;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
   min-width: 0;
-  border-radius: 999px;
+}
+
+.cardHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.cardTitle {
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: var(--prov-text, #0f172a);
+}
+
+.cardMutedLabel {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--prov-text-muted, #64748b);
+}
+
+.cardDots {
+  color: #94a3b8;
+  font-size: 0.85rem;
+  letter-spacing: 1px;
+  user-select: none;
+}
+
+.pillBadgeBlue {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 8px;
+}
+
+.pillBadgeDark {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  font-size: 0.74rem;
+  font-weight: 800;
+  padding: 0.2rem 0.6rem;
+  border-radius: 8px;
+}
+
+/* ── FILA 1: 3 TARJETAS GRÁFICAS SUPERIORES ────────────────────────────── */
+.topCardsRow {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr 1.15fr;
+  gap: 1.15rem;
+}
+
+.bigMetricRow {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-top: 0.1rem;
+}
+
+.bigMetricValue {
+  font-size: 2.05rem;
+  font-weight: 900;
+  color: var(--prov-text, #0f172a);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.metricDeltaBadge {
+  font-size: 0.8rem;
+  font-weight: 800;
+  padding: 0.15rem 0.45rem;
+  border-radius: 6px;
+}
+
+.deltaPositive {
+  color: #ea580c;
+  background: #fff7ed;
+}
+
+.deltaNeutral {
+  color: #64748b;
+  background: #f1f5f9;
+}
+
+.subMetricCode {
+  font-size: 0.76rem;
+  color: var(--prov-text-muted, #64748b);
+  margin-top: 0.25rem;
+  font-weight: 500;
+}
+
+.sparklineContainer {
+  margin-top: 0.6rem;
+  height: 58px;
+  width: 100%;
+}
+
+.miniChartWrap {
+  width: 100%;
+  height: 118px;
+}
+
+.svgChart {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.axisText {
+  font-size: 9px;
+  fill: #94a3b8;
+  font-weight: 600;
+}
+
+/* ── FILA 2: MÉTRICAS 2x2 + GRÁFICO COMPARATIVO DOBLE ──────────────────── */
+.middleRow {
+  display: grid;
+  grid-template-columns: 1fr 1.35fr;
+  gap: 1.15rem;
+}
+
+.metricsQuadGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.metricMiniCard {
+  background: var(--prov-surface-2, #f8fafc);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  border-radius: 12px;
+  padding: 0.85rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  transition: transform 0.14s ease, border-color 0.14s ease;
+}
+
+.metricMiniCard:hover {
+  transform: translateY(-1px);
+  border-color: #cbd5e1;
+}
+
+.metricIconBox {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.iconBoxBlue {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.iconBoxOrange {
+  background: #fff7ed;
+  color: #f97316;
+}
+
+.metricInfo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.metricLabel {
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: var(--prov-text-muted, #64748b);
+}
+
+.metricNumber {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--prov-text, #0f172a);
+  line-height: 1.2;
+  margin-top: 2px;
+}
+
+.metricHint {
+  font-size: 0.69rem;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.legendAndSelector {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--prov-text-muted, #64748b);
+}
+
+.legendDotBlue {
+  width: 10px;
+  height: 4px;
+  border-radius: 99px;
+  background: #2563eb;
+}
+
+.legendDotOrange {
+  width: 10px;
+  height: 4px;
+  border-radius: 99px;
+  background: #f97316;
+}
+
+.periodSelect {
+  padding: 0.25rem 1.6rem 0.25rem 0.55rem !important;
+  font-size: 0.74rem !important;
+  font-weight: 700 !important;
+  border-radius: 7px !important;
+  border: 1px solid #cbd5e1 !important;
+  background-color: #f8fafc !important;
+  color: #334155 !important;
+}
+
+.dualChartWrap {
+  width: 100%;
+  height: 185px;
+  margin-top: 0.25rem;
+}
+
+/* ── FILA 3: TABLA MODERNA + DONUT DE CRECIMIENTO/SALUD ────────────────── */
+.bottomRow {
+  display: grid;
+  grid-template-columns: 1.65fr 1fr;
+  gap: 1.15rem;
+}
+
+.tableHeaderBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.tabsGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.tabButton {
+  background: var(--prov-surface-2, #f8fafc);
+  border: 1px solid var(--prov-border, #e2e8f0);
+  color: var(--prov-text-muted, #64748b);
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0.38rem 0.75rem;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.tabButton:hover {
+  color: var(--prov-text, #0f172a);
+  border-color: #cbd5e1;
+}
+
+.tabButtonActive {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #ffffff !important;
+}
+
+.modernTableWrap {
+  overflow-x: auto;
+  max-height: 290px;
+  overflow-y: auto;
+}
+
+.modernTable {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 480px;
+}
+
+.modernTable thead tr {
+  background: transparent;
+  border-bottom: 1px solid var(--prov-border, #e2e8f0);
+}
+
+.modernTable th {
+  background: transparent;
+  color: #94a3b8;
+  font-family: 'Barlow', sans-serif;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: none;
+  padding: 0.55rem 0.65rem;
+}
+
+.modernTable td {
+  padding: 0.65rem;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.83rem;
+  color: var(--prov-text, #1e293b);
+}
+
+.modernTable tbody tr:hover td {
+  background: #f8fafc;
+}
+
+.productCell {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.rowIconBlue,
+.rowIconOrange {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.82rem;
+  flex-shrink: 0;
+}
+
+.rowIconBlue {
+  background: #eff6ff;
+}
+
+.rowIconOrange {
+  background: #fff7ed;
 }
 
 .itemNombre {
   font-weight: 700;
   color: var(--prov-text, #0f172a);
+  line-height: 1.25;
 }
 
 .itemCodigo {
-  font-size: 0.74rem;
-  color: var(--prov-text-muted, #64748b);
+  font-size: 0.71rem;
+  color: #94a3b8;
   font-family: monospace;
 }
 
-.vacio {
-  text-align: center;
-  padding: 1.5rem;
-  color: var(--prov-text-muted, #64748b);
-}
-
-.valorAviso {
-  color: #d97706;
-  font-weight: 700;
+.greenAmount {
+  color: #16a34a;
+  font-weight: 800;
 }
 
 .valorAlerta {
@@ -109,15 +507,155 @@
   font-weight: 800;
 }
 
-.masItems {
-  margin-top: 0.6rem;
-  font-size: 0.8rem;
-  color: var(--prov-text-muted, #64748b);
+.alertPill {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
 }
 
-@media (max-width: 1100px) {
-  .dosColumnas {
+.neutralPill {
+  background: #f1f5f9;
+  color: #64748b;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.posTag {
+  color: #2563eb;
+  font-weight: 700;
+}
+
+.vacio {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: #94a3b8;
+}
+
+/* ── TARJETA DONUT DE CRECIMIENTO Y SALUD ──────────────────────────────── */
+.growthCardBody {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex: 1;
+  padding: 0.5rem 0;
+}
+
+.growthLeftInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.growthCaption {
+  font-size: 0.76rem;
+  color: var(--prov-text-muted, #64748b);
+  font-weight: 600;
+}
+
+.growthBigPct {
+  font-size: 2.2rem;
+  font-weight: 900;
+  color: var(--prov-text, #0f172a);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.growthSubtext {
+  font-size: 0.74rem;
+  color: #94a3b8;
+  line-height: 1.35;
+}
+
+.growthLegendList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.55rem;
+}
+
+.growthLegendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--prov-text-muted, #475569);
+}
+
+.dotBlue {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2563eb;
+}
+
+.dotOrange {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f97316;
+}
+
+.donutWrap {
+  position: relative;
+  width: 124px;
+  height: 124px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.donutCenterContent {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.donutArrow {
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #0f172a;
+  line-height: 1;
+}
+
+.donutCenterLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+/* ── RESPONSIVE ────────────────────────────────────────────────────────── */
+@media (max-width: 1120px) {
+  .topCardsRow {
     grid-template-columns: 1fr;
-    gap: 0;
+  }
+
+  .middleRow,
+  .bottomRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .metricsQuadGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .growthCardBody {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }

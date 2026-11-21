@@ -278,6 +278,133 @@ function normalizarNombreModeloAuto(marca, modeloRaw) {
   return mod;
 }
 
+const RANGOS_COMERCIALES_MODELOS_CHILE = {
+  'GREAT WALL WINGLE 5': [2011, 2024],
+  'GREAT WALL WINGLE 6': [2015, 2021],
+  'GREAT WALL WINGLE 7': [2019, 2026],
+  'GREAT WALL POER': [2020, 2026],
+  'GREAT WALL VOLEEX C10': [2011, 2016],
+  'GREAT WALL VOLEEX C30': [2011, 2019],
+  'GREAT WALL HOVER': [2008, 2015],
+  'GREAT WALL H3': [2011, 2018],
+  'GREAT WALL H5': [2011, 2018],
+  'GREAT WALLH6': [2014, 2024],
+  'HAVAL H2': [2015, 2022],
+  'HAVAL H6': [2015, 2026],
+  'HAVAL JOLION': [2021, 2026],
+  'HAVAL DARGO': [2022, 2026],
+  'JAC S1': [2014, 2020],
+  'JAC S2': [2016, 2025],
+  'JAC S3': [2015, 2024],
+  'JAC S4': [2019, 2025],
+  'JAC S5': [2014, 2020],
+  'JAC JS2': [2021, 2026],
+  'JAC JS3': [2021, 2026],
+  'JAC JS4': [2021, 2026],
+  'JAC J2': [2012, 2017],
+  'JAC J3': [2011, 2017],
+  'JAC J4': [2014, 2020],
+  'JAC J5': [2011, 2017],
+  'JAC A137': [2010, 2016],
+  'JAC T6': [2016, 2025],
+  'JAC T8': [2019, 2026],
+  'JAC SUNRAY': [2013, 2025],
+  'JAC REFINE': [2011, 2022],
+  'CHANGAN A500': [2017, 2023],
+  'CHANGAN MD201': [2014, 2025],
+  'CHANGAN MS201': [2014, 2025],
+  'CHANGAN M201': [2014, 2025],
+  'CHANGAN CM5': [2010, 2017],
+  'CHANGAN CM10': [2011, 2018],
+  'CHANGAN CS15': [2016, 2025],
+  'CHANGAN CS35': [2013, 2023],
+  'CHANGAN CS35 PLUS': [2019, 2026],
+  'CHANGAN CS55': [2018, 2025],
+  'CHANGAN CS55 PLUS': [2022, 2026],
+  'CHANGAN ALSVIN': [2020, 2026],
+  'CHANGAN HUNTER': [2020, 2026],
+  'CHANGAN CX70': [2017, 2024],
+  'CHERY IQ': [2008, 2016],
+  'CHERY FACE': [2010, 2016],
+  'CHERY SKIN': [2010, 2016],
+  'CHERY FULWIN': [2011, 2019],
+  'CHERY ARRIZO 3': [2015, 2020],
+  'CHERY ARRIZO 5': [2017, 2024],
+  'CHERY TIGGO': [2009, 2017],
+  'CHERY TIGGO 2': [2017, 2025],
+  'CHERY TIGGO 2 PRO': [2021, 2026],
+  'CHERY TIGGO 3': [2014, 2023],
+  'CHERY TIGGO 4': [2018, 2025],
+  'CHERY TIGGO 7': [2018, 2026],
+  'CHERY TIGGO 8': [2020, 2026],
+  'MG ZS': [2018, 2026],
+  'MG ZX': [2021, 2026],
+  'MG GT': [2016, 2026],
+  'MG 3': [2012, 2025],
+  'MG 5': [2014, 2025],
+  'MG 6': [2011, 2019],
+  'MG RX5': [2018, 2025],
+  'BAIC PLUS': [2014, 2021],
+  'BAIC UP': [2014, 2020],
+  'BAIC X25': [2016, 2022],
+  'BAIC X35': [2017, 2025],
+  'BAIC X55': [2017, 2025],
+  'BRILLIANCE V3': [2016, 2022],
+  'BRILLIANCE V5': [2013, 2020],
+  'BRILLIANCE FSV': [2010, 2016],
+  'BRILLIANCE FRV': [2010, 2016],
+  'BRILLIANCE EUPHORIA': [2012, 2018],
+  'BYD F0': [2010, 2019],
+  'BYD F3': [2009, 2018],
+  'BYD S6': [2012, 2019],
+  'GEELY CK': [2009, 2016],
+  'GEELY MK': [2009, 2016],
+  'GEELY LC': [2011, 2017],
+  'GEELY EMGRAND': [2012, 2020],
+  'GEELY GX3 PRO': [2022, 2026],
+  'GEELY COOLRAY': [2021, 2026],
+  'LIFAN X50': [2015, 2021],
+  'LIFAN X60': [2012, 2020],
+  'LIFAN 320': [2010, 2016],
+  'LIFAN 520': [2009, 2015],
+  'LIFAN 620': [2010, 2016],
+  'FOTON MIDI': [2011, 2019],
+  'FOTON TERRACOTA': [2012, 2019],
+  'FOTON TUNLAND': [2013, 2025],
+  'FOTON TM3': [2018, 2026],
+  'MAXUS T60': [2017, 2026],
+  'MAXUS V80': [2014, 2025],
+  'MAXUS G10': [2016, 2025],
+  'JMC GRAND AVENUE': [2023, 2026],
+  'JMC VIGUS': [2016, 2025],
+  'ZNA RICH': [2011, 2022],
+};
+
+function inferirRangoComercialVehiculo(marca = '', modelo = '') {
+  const m = String(marca || '').trim().toUpperCase();
+  const mod = String(modelo || '').trim().toUpperCase();
+  const etiqueta = mod ? `${m} ${mod}` : m;
+
+  // 1. Coincidencia exacta o por prefijo en tabla de modelos comerciales en Chile
+  if (RANGOS_COMERCIALES_MODELOS_CHILE[etiqueta]) {
+    return RANGOS_COMERCIALES_MODELOS_CHILE[etiqueta];
+  }
+  for (const [clave, rango] of Object.entries(RANGOS_COMERCIALES_MODELOS_CHILE)) {
+    if (etiqueta.startsWith(`${clave} `)) {
+      if (/\bOLD\b/.test(mod)) return [rango[0], Math.min(rango[1], 2019)];
+      if (/\bNEW\b/.test(mod)) return [Math.max(rango[0], 2018), Math.max(rango[1], 2025)];
+      return rango;
+    }
+  }
+
+  // 2. Reglas por generación (OLD vs NEW / PRO / PLUS)
+  if (/\bOLD\b/.test(mod)) return [2010, 2018];
+  if (/\b(?:NEW|PRO|PLUS)\b/.test(mod)) return [2018, 2026];
+
+  // 3. Ventana comercial activa del parque automotriz compatible en Chile
+  return [2012, 2024];
+}
+
 export function formatearRangoAniosCompatibilidad(anioDesdeRaw, anioHastaRaw, nombreProducto = '') {
   let d = Number(anioDesdeRaw) || null;
   let h = Number(anioHastaRaw) || null;
@@ -322,12 +449,15 @@ export function formatearRangoAniosCompatibilidad(anioDesdeRaw, anioHastaRaw, no
   // Expandir años individuales (ej. 2016..2023) para atributo de filtro por año puntual
   const aniosIndividuales = [];
   if (d) {
-    const fin = h || Math.min(new Date().getFullYear() + 1, d + 6);
+    const fin = h || Math.min(new Date().getFullYear(), d + 7);
     for (let y = d; y <= Math.min(fin, d + 20); y++) {
       aniosIndividuales.push(String(y));
     }
   } else if (h) {
-    aniosIndividuales.push(String(h));
+    const ini = Math.max(2008, h - 6);
+    for (let y = ini; y <= h; y++) {
+      aniosIndividuales.push(String(y));
+    }
   }
 
   return {
@@ -509,6 +639,24 @@ export function extraerCompatibilidadesVehiculoDeItem(item = {}) {
     }
   }
 
+  // Si el producto tiene vehículo compatible (marca/modelo) pero no traía un sub-rango explícito en el SKU,
+  // expandir los años comerciales del modelo para que el filtro global `Año` (`pa_anio`) en WordPress
+  // permita filtrar por Marca + Modelo + Año específico en todo el catálogo.
+  if (aniosIndividualesSet.size === 0 && (modelosJerarquicos.length > 0 || marcas.length > 0)) {
+    if (modelosJerarquicos.length > 0) {
+      for (const m of modelosJerarquicos) {
+        const [ini, fin] = inferirRangoComercialVehiculo(m.marca, m.modelo);
+        for (let y = ini; y <= fin; y++) {
+          aniosIndividualesSet.add(String(y));
+        }
+      }
+    } else {
+      for (let y = 2012; y <= 2024; y++) {
+        aniosIndividualesSet.add(String(y));
+      }
+    }
+  }
+
   return {
     marcas,
     modelosJerarquicos,
@@ -523,6 +671,68 @@ export function extraerCompatibilidadesVehiculoDeItem(item = {}) {
 let _cacheMarcasWooMemoria = null;
 let _cacheMarcasWooTimestamp = 0;
 const CACHE_MARCAS_WOO_TTL_MS = 10 * 60 * 1000; // 10 minutos
+
+let _cacheAtributoAnioGlobalId = null;
+let _cacheAtributoAnioTs = 0;
+
+/**
+ * Asegura que exista el atributo global `Año` (`slug: pa_anio`) en `Productos -> Atributos` de WordPress
+ * con todos los años individuales (`1995`..`2026`), devolviendo su `id` numérico global para vincularlo a los productos.
+ */
+export async function asegurarAtributoGlobalAnioWooCommerce() {
+  if (_cacheAtributoAnioGlobalId && Date.now() - _cacheAtributoAnioTs < 30 * 60 * 1000) {
+    return _cacheAtributoAnioGlobalId;
+  }
+  try {
+    const attrs = await wcFetch('/products/attributes');
+    let attrAnio = Array.isArray(attrs)
+      ? attrs.find(
+          (a) =>
+            a.slug === 'pa_anio' ||
+            a.slug === 'anio' ||
+            String(a.name || '').toLowerCase() === 'año' ||
+            String(a.name || '').toLowerCase() === 'ano'
+        )
+      : null;
+
+    if (!attrAnio) {
+      attrAnio = await wcFetch('/products/attributes', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Año',
+          slug: 'anio',
+          type: 'select',
+          order_by: 'name_num',
+          has_archives: true,
+        }),
+      });
+    }
+
+    if (attrAnio?.id) {
+      const terms = await wcFetch(`/products/attributes/${attrAnio.id}/terms?per_page=100`).catch(() => []);
+      const existentes = new Set((Array.isArray(terms) ? terms : []).map((t) => String(t.name).trim()));
+      const faltantes = [];
+      const maxAnio = Math.max(2026, new Date().getFullYear() + 1);
+      for (let y = 1995; y <= maxAnio; y++) {
+        if (!existentes.has(String(y))) {
+          faltantes.push({ name: String(y), slug: String(y) });
+        }
+      }
+      if (faltantes.length > 0) {
+        await wcFetch(`/products/attributes/${attrAnio.id}/terms/batch`, {
+          method: 'POST',
+          body: JSON.stringify({ create: faltantes }),
+        }).catch(() => null);
+      }
+      _cacheAtributoAnioGlobalId = Number(attrAnio.id);
+      _cacheAtributoAnioTs = Date.now();
+      return _cacheAtributoAnioGlobalId;
+    }
+  } catch (err) {
+    console.warn('[woo-attr-anio] Aviso asegurando atributo global Año:', err.message);
+  }
+  return 1; // Fallback al ID 1 creado en WordPress (`pa_anio`)
+}
 
 /**
  * Trae y crea en WooCommerce (`Productos -> Marcas`, endpoint `/products/brands`)
@@ -707,6 +917,8 @@ export async function prepararMarcasVehiculoWooCommerce(items = [], { maxCreacio
     cacheRutasBrand.set(clave, [...new Set(ids)]);
   }
 
+  const atributoAnioGlobalId = await asegurarAtributoGlobalAnioWooCommerce();
+
   const resolverParaItem = (item) => {
     const compat = extraerCompatibilidadesVehiculoDeItem(item);
     const idsSet = new Set();
@@ -718,8 +930,17 @@ export async function prepararMarcasVehiculoWooCommerce(items = [], { maxCreacio
 
     const brands = Array.from(idsSet).map((id) => ({ id }));
 
-    // Construir también atributos estructurados para filtros de barra lateral y ficha técnica
+    // Construir atributos estructurados incluyendo el atributo global `Año` (`pa_anio`) de WordPress
     const attributes = [];
+    if (compat.aniosIndividuales.length > 0) {
+      attributes.push({
+        ...(atributoAnioGlobalId ? { id: atributoAnioGlobalId } : {}),
+        name: 'Año',
+        visible: true,
+        variation: false,
+        options: compat.aniosIndividuales,
+      });
+    }
     if (compat.marcas.length > 0) {
       attributes.push({
         name: 'Marca Vehículo',
@@ -753,14 +974,6 @@ export async function prepararMarcasVehiculoWooCommerce(items = [], { maxCreacio
         visible: true,
         variation: false,
         options: compat.rangosTexto,
-      });
-    }
-    if (compat.aniosIndividuales.length > 0) {
-      attributes.push({
-        name: 'Año Vehículo',
-        visible: true,
-        variation: false,
-        options: compat.aniosIndividuales,
       });
     }
 
@@ -1936,16 +2149,25 @@ export async function aplicarMarcasDirectoAProductosWoo(
     if (item.ocultarEnTienda) continue;
     const info = resolver(item);
     const brandIds = (info?.brands || []).map((b) => Number(b.id)).filter((id) => id > 0);
-    if (brandIds.length === 0) continue;
+    const aniosList = info?.compat?.aniosIndividuales || [];
+    if (brandIds.length === 0 && aniosList.length === 0) continue;
 
-    const hashBrands = [...brandIds].sort((a, b) => a - b).join(',');
+    const hashSoloBrands = [...brandIds].sort((a, b) => a - b).join(',');
+    const hashBrands = `${hashSoloBrands}::Y:${aniosList.join(',')}`;
     if (item.wooBrandsAppliedHash === hashBrands && item.wooProductId) {
       continue;
     }
 
+    const yaTeniaBrandsAplicados =
+      Boolean(item.wooBrandsAppliedHash) &&
+      (item.wooBrandsAppliedHash === hashSoloBrands ||
+        String(item.wooBrandsAppliedHash).startsWith(`${hashSoloBrands}::`));
+
     if (!item.wooProductId) {
       necesitanMapaGlobalSku = true;
     }
+
+    const globalAttrs = (info.attributes || []).filter((a) => Number(a.id) > 0);
 
     candidatos.push({
       docId: item.id,
@@ -1953,7 +2175,8 @@ export async function aplicarMarcasDirectoAProductosWoo(
       codigoInterno: item.codigo ? String(item.codigo).trim().toUpperCase() : '',
       wooProductId: item.wooProductId ? Number(item.wooProductId) : 0,
       brands: brandIds.map((id) => ({ id })),
-      attributes: info.attributes || [],
+      yaTeniaBrandsAplicados,
+      attributes: globalAttrs.length > 0 ? globalAttrs : info.attributes || [],
       hashBrands,
     });
   }
@@ -1962,11 +2185,10 @@ export async function aplicarMarcasDirectoAProductosWoo(
     return { procesados: 0, actualizados: 0, pendientesRestantes: 0 };
   }
 
-  let mapaSkuWoo = null;
-  if (necesitanMapaGlobalSku || !_cacheMapaSkuAWooId) {
+  const candidatosConIdDirecto = candidatos.filter((c) => c.wooProductId > 0);
+  let mapaSkuWoo = _cacheMapaSkuAWooId;
+  if (candidatosConIdDirecto.length === 0 && necesitanMapaGlobalSku && !mapaSkuWoo) {
     mapaSkuWoo = await obtenerMapaRapidoSkuAWooId();
-  } else {
-    mapaSkuWoo = _cacheMapaSkuAWooId;
   }
 
   const conWooIdValido = [];
@@ -1986,8 +2208,8 @@ export async function aplicarMarcasDirectoAProductosWoo(
   const loteEjecutar = maxProductos > 0 ? conWooIdValido.slice(0, maxProductos) : conWooIdValido;
   const pendientesRestantes = Math.max(0, conWooIdValido.length - loteEjecutar.length);
 
-  const CHUNK_SIZE = 80;
-  const CONCURRENCY = 2;
+  const CHUNK_SIZE = 90;
+  const CONCURRENCY = 3;
   let actualizados = 0;
   const ahora = new Date().toISOString();
 
@@ -2002,7 +2224,8 @@ export async function aplicarMarcasDirectoAProductosWoo(
       grupo.map(async (chunk) => {
         const updatePayload = chunk.map((c) => ({
           id: c.wooProductId,
-          brands: c.brands,
+          ...(c.yaTeniaBrandsAplicados ? {} : { brands: c.brands }),
+          attributes: c.attributes,
         }));
 
         try {
@@ -2136,7 +2359,7 @@ export async function iniciarJobAsignacionMarcasEnBackground() {
 // Al iniciar el servidor en producción, verificar tras 15s si quedan marcas o productos pendientes
 // de asignación en WooCommerce y procesarlos automáticamente en segundo plano.
 const _autoStartBrandsTimer = setTimeout(() => {
-  if (isWooConfigured()) {
+  if (isWooConfigured() && process.env.DISABLE_AUTO_BRANDS_JOB !== '1') {
     iniciarJobAsignacionMarcasEnBackground().catch(() => null);
   }
 }, 15000);

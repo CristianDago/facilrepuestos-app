@@ -239,13 +239,21 @@ async function prepararCategoriasWooCommerce(items = []) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 const MARCAS_VEHICULOS_CONOCIDAS = [
-  'GREAT WALL', 'LAND ROVER', 'MERCEDES-BENZ', 'ALFA ROMEO', 'SSANGYONG',
-  'CHANGAN', 'CHANGLIN', 'DONGFENG', 'CHEVROLET', 'MITSUBISHI', 'VOLKSWAGEN',
-  'PEUGEOT', 'CITROËN', 'CITROEN', 'HYUNDAI', 'RENAULT', 'TOYOTA', 'SUZUKI',
-  'SUBARU', 'NISSAN', 'CHERY', 'HAVAL', 'MAZDA', 'HONDA', 'MAXUS', 'FOTON',
-  'DODGE', 'VOLVO', 'LEXUS', 'ISUZU', 'MAHINDRA', 'GEELY', 'DFSK', 'FORD',
-  'JEEP', 'FIAT', 'AUDI', 'OPEL', 'MINI', 'JAC', 'KIA', 'MG', 'BYD', 'DFM',
-  'RAM', 'BMW', 'ZNA',
+  'GREAT WALL', 'LAND ROVER', 'MERCEDES-BENZ', 'ALFA ROMEO', 'GAC GONOW', 'SSANGYONG',
+  'BRILLIANCE', 'MITSUBISHI', 'VOLKSWAGEN', 'CHEVROLET', 'CHANGLIN', 'DONGFENG',
+  'MAHINDRA', 'CHRYSLER', 'SHINERAY', 'CHANGAN', 'CITROËN', 'CITROEN', 'PEUGEOT',
+  'HYUNDAI', 'RENAULT', 'TOYOTA', 'SUZUKI', 'SUBARU', 'NISSAN', 'JETOUR', 'GONOW',
+  'CHERY', 'HAVAL', 'MAZDA', 'HONDA', 'MAXUS', 'FOTON', 'DODGE', 'VOLVO', 'LEXUS',
+  'ISUZU', 'GEELY', 'LIFAN', 'ZOTYE', 'OMODA', 'KAIYI', 'IVECO', 'HAFEI', 'DFSK',
+  'FORD', 'JEEP', 'FIAT', 'AUDI', 'OPEL', 'MINI', 'BAIC', 'JAC', 'KIA', 'FAW',
+  'JMC', 'SWM', 'MG', 'BYD', 'DFM', 'RAM', 'BMW', 'ZNA',
+];
+
+const MODELOS_HUERFANOS_A_MARCA = [
+  { regex: /\b(ARRIZO\s*\d*|TIGGO\s*\d*(?:\s*PRO)?|FULWIN\s*\d*|FACE|SKIN)\b/i, marca: 'CHERY' },
+  { regex: /\b(MD201|MS201|M201|CM5|CM10|CS15|CS35(?:\s*PLUS)?|CS55(?:\s*PLUS)?|CS75|ALSVIN|HUNTER|UNI-T|UNI-K)\b/i, marca: 'CHANGAN' },
+  { regex: /\b(WINGLE\s*\d*|POER|VOLEEX\s*\w*|FLORID|HOVER|DEER|SAFE)\b/i, marca: 'GREAT WALL' },
+  { regex: /\b(JOLION|DARGO|H2|H6)\b/i, marca: 'HAVAL' },
 ];
 
 function normalizarNombreMarcaAuto(raw) {
@@ -397,7 +405,7 @@ export function extraerCompatibilidadesVehiculoDeItem(item = {}) {
   }
 
   // 3. Fallback: extraer marca y modelo desde el título ("... PARA GREAT WALL WINGLE 5", "... PARA JAC S3")
-  if (marcasSet.size === 0 && item.nombre) {
+  if ((marcasSet.size === 0 || entradasMap.size === 0) && item.nombre) {
     const upper = String(item.nombre).toUpperCase();
     for (const marcaConocida of MARCAS_VEHICULOS_CONOCIDAS) {
       const regex = new RegExp(`\\b${marcaConocida.replace('-', '[\\s-]')}\\b`, 'i');
@@ -415,6 +423,27 @@ export function extraerCompatibilidadesVehiculoDeItem(item = {}) {
             const primerModelo = post.split(/[,/]/)[0]?.trim() || '';
             const mod = normalizarNombreModeloAuto(mNorm, primerModelo.split(/\s+/).slice(0, 2).join(' '));
             if (mod && mod.length >= 2) {
+              entradasMap.set(`${mNorm}::${mod}`, {
+                marca: mNorm,
+                modelo: mod,
+                anioDesde: rangoGlobal.anioDesde,
+                anioHasta: rangoGlobal.anioHasta,
+              });
+            }
+          }
+        }
+      }
+    }
+
+    if (marcasSet.size === 0) {
+      for (const regla of MODELOS_HUERFANOS_A_MARCA) {
+        const match = upper.match(regla.regex);
+        if (match) {
+          const mNorm = normalizarNombreMarcaAuto(regla.marca);
+          const mod = normalizarNombreModeloAuto(mNorm, match[1]);
+          if (mNorm) {
+            marcasSet.add(mNorm);
+            if (mod) {
               entradasMap.set(`${mNorm}::${mod}`, {
                 marca: mNorm,
                 modelo: mod,
@@ -503,7 +532,7 @@ const CACHE_MARCAS_WOO_TTL_MS = 10 * 60 * 1000; // 10 minutos
  *   Nivel 3 (Rango de años hijo del modelo): `JAC S3 (2016 - 2023)`...
  * Devuelve una función `obtenerBrandsYAtributosItem(item)` lista para inyectar en `construirPayload`.
  */
-async function prepararMarcasVehiculoWooCommerce(items = [], { maxCreacionesPorPase = 160, forzarRefrescoCache = false } = {}) {
+export async function prepararMarcasVehiculoWooCommerce(items = [], { maxCreacionesPorPase = 160, forzarRefrescoCache = false } = {}) {
   let existentes = [];
   let endpointMarcasDisponible = true;
 
@@ -1957,45 +1986,55 @@ export async function aplicarMarcasDirectoAProductosWoo(
   const loteEjecutar = maxProductos > 0 ? conWooIdValido.slice(0, maxProductos) : conWooIdValido;
   const pendientesRestantes = Math.max(0, conWooIdValido.length - loteEjecutar.length);
 
-  const CHUNK_SIZE = 75;
+  const CHUNK_SIZE = 80;
+  const CONCURRENCY = 2;
   let actualizados = 0;
   const ahora = new Date().toISOString();
 
+  const chunks = [];
   for (let i = 0; i < loteEjecutar.length; i += CHUNK_SIZE) {
-    const chunk = loteEjecutar.slice(i, i + CHUNK_SIZE);
-    const updatePayload = chunk.map((c) => ({
-      id: c.wooProductId,
-      brands: c.brands,
-    }));
+    chunks.push(loteEjecutar.slice(i, i + CHUNK_SIZE));
+  }
 
-    try {
-      const resBatch = await wcFetch('/products/batch', {
-        method: 'POST',
-        body: JSON.stringify({ update: updatePayload }),
-      });
-      const updatedList = resBatch?.update || [];
-      actualizados += updatedList.filter((u) => u && !u.error).length;
+  for (let g = 0; g < chunks.length; g += CONCURRENCY) {
+    const grupo = chunks.slice(g, g + CONCURRENCY);
+    await Promise.all(
+      grupo.map(async (chunk) => {
+        const updatePayload = chunk.map((c) => ({
+          id: c.wooProductId,
+          brands: c.brands,
+        }));
 
-      const fsBatch = db.batch();
-      let fsCount = 0;
-      for (let j = 0; j < chunk.length; j++) {
-        const c = chunk[j];
-        const uw = updatedList[j];
-        if (!uw || !uw.error) {
-          fsBatch.update(db.collection('inventario').doc(c.docId), {
-            wooProductId: c.wooProductId,
-            wooBrandsAppliedHash: c.hashBrands,
-            wooBrandsSyncAt: ahora,
+        try {
+          const resBatch = await wcFetch('/products/batch', {
+            method: 'POST',
+            body: JSON.stringify({ update: updatePayload }),
           });
-          fsCount++;
+          const updatedList = resBatch?.update || [];
+          actualizados += updatedList.filter((u) => u && !u.error).length;
+
+          const fsBatch = db.batch();
+          let fsCount = 0;
+          for (let j = 0; j < chunk.length; j++) {
+            const c = chunk[j];
+            const uw = updatedList[j];
+            if (!uw || !uw.error) {
+              fsBatch.update(db.collection('inventario').doc(c.docId), {
+                wooProductId: c.wooProductId,
+                wooBrandsAppliedHash: c.hashBrands,
+                wooBrandsSyncAt: ahora,
+              });
+              fsCount++;
+            }
+          }
+          if (fsCount > 0) {
+            await fsBatch.commit();
+          }
+        } catch (err) {
+          console.warn('[woo-brands-apply] Aviso aplicando lote de marcas a productos:', err.message);
         }
-      }
-      if (fsCount > 0) {
-        await fsBatch.commit();
-      }
-    } catch (err) {
-      console.warn('[woo-brands-apply] Aviso aplicando lote de marcas a productos:', err.message);
-    }
+      })
+    );
   }
 
   return {

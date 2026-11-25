@@ -1085,6 +1085,92 @@ export async function eliminarProductoDeWooCommerce(id, item = {}) {
   };
 }
 
+/**
+ * Publica de forma instantánea (en ~1-2 segundos) un único Producto Temporal en WordPress/WooCommerce
+ * proveniente de la Mesa de Abastecimiento WhatsApp, asignándole su foto referencial (reutilizando `media_id`
+ * nativo de WordPress o URL limpia), categoría, marcas compatibles y aviso de validez por 4 horas.
+ * Devuelve el `wooProductId` y el link directo del producto en la tienda (`https://facilrepuestos.cl/?p=<id>`).
+ */
+export async function publicarProductoTemporalEnWooCommerce(id, item = {}) {
+  const baseUrl = obtenerUrlBaseTiendaWoo();
+  const sku = skuDeItem(id, item);
+
+  if (!isWooConfigured()) {
+    const simId = Number(item.wooProductId) || Math.floor(800000 + Math.random() * 99999);
+    return {
+      creadoEnWoo: false,
+      wooProductId: simId,
+      urlProductoTienda: `${baseUrl}/?p=${simId}`,
+      permalink: `${baseUrl}/?p=${simId}`,
+    };
+  }
+
+  try {
+    const [obtenerCategoriasItem, obtenerMarcasCompatibilidadItem] = await Promise.all([
+      prepararCategoriasWooCommerce([item]),
+      prepararMarcasVehiculoWooCommerce([item], { maxCreacionesPorPase: 5 }),
+    ]);
+
+    const payload = construirPayload(
+      id,
+      item,
+      obtenerCategoriasItem,
+      true,
+      true,
+      null,
+      obtenerMarcasCompatibilidadItem
+    );
+    delete payload._imagenUrlPendienteCache;
+
+    const ttlHoras = Number(item.ttlHoras) || 4;
+    payload.short_description = `<p>⏱️ <strong>Cotización especial verificada en bodega:</strong> Stock y precio garantizados por <strong>${ttlHoras} horas</strong> en facilrepuestos.cl. Despacho a domicilio en Santiago y todo Chile.</p>`;
+    payload.meta_data = [
+      ...(payload.meta_data || []),
+      { key: '_frp_temporal_wsp', value: 'true' },
+      { key: '_frp_expira_en', value: String(item.expiraEn || '') },
+    ];
+
+    // Verificar si ya existe por SKU o wooProductId
+    let idExistente = Number(item.wooProductId) || 0;
+    if (!idExistente && sku) {
+      const encontrados = await wcFetch(`/products?sku=${encodeURIComponent(sku)}&_fields=id,sku,permalink`).catch(() => []);
+      if (Array.isArray(encontrados) && encontrados[0]?.id) {
+        idExistente = Number(encontrados[0].id);
+      }
+    }
+
+    const prodWoo = idExistente
+      ? await wcFetch(`/products/${idExistente}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        })
+      : await wcFetch('/products', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+
+    const wooId = Number(prodWoo?.id || idExistente) || null;
+    const urlProductoTienda = wooId
+      ? `${baseUrl}/?p=${wooId}`
+      : prodWoo?.permalink || `${baseUrl}/?s=${encodeURIComponent(sku)}&post_type=product`;
+
+    return {
+      creadoEnWoo: Boolean(wooId),
+      wooProductId: wooId,
+      urlProductoTienda,
+      permalink: prodWoo?.permalink || urlProductoTienda,
+    };
+  } catch (err) {
+    console.warn('[woo-temp-product] Aviso publicando producto temporal en WooCommerce:', err.message);
+    return {
+      creadoEnWoo: false,
+      wooProductId: Number(item.wooProductId) || null,
+      urlProductoTienda: `${baseUrl}/?s=${encodeURIComponent(sku)}&post_type=product`,
+      permalink: `${baseUrl}/?s=${encodeURIComponent(sku)}&post_type=product`,
+    };
+  }
+}
+
 // Limpia productos "huérfanos": los que el propio sistema creó en WooCommerce
 // (tienen el meta _drmotors_inventario_id o SKU con prefijo FRP-) pero cuyo documento/SKU ya no existe en el
 // inventario actual — típicamente porque se eliminaron del inventario.

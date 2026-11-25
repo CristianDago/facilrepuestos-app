@@ -6,7 +6,13 @@ import {
   obtenerConfigMetaWhatsapp,
   manejarWebhookGetMeta,
   manejarWebhookPostMeta,
+  enviarRespuestaClienteMetaWhatsapp,
 } from './agenteOmnicanal.js';
+import {
+  seleccionarTop3ProveedoresMesaWsp,
+  elegirMejorOfertaMesaWsp,
+  crearYPublicarProductoTemporalMesaWsp,
+} from '../agents/agente4MesaYPublicadorTemporal.js';
 
 const router = Router();
 
@@ -535,33 +541,16 @@ router.post('/solicitudes', requireAuth, async (req, res, next) => {
     const marcaUpper = String(marcaVehiculo || '').trim().toUpperCase();
     const catUpper = String(categoriaRepuesto || '').trim().toUpperCase();
 
-    // Si el usuario seleccionó proveedores específicos, usarlos; si no, filtrar por marca y especialidad compatible
+    // Si el usuario seleccionó proveedores específicos, usarlos; si no, Agente 4 selecciona el TOP 3 por marca, categoría y cercanía
     let seleccionados = [];
     if (Array.isArray(proveedorIds) && proveedorIds.length > 0) {
       seleccionados = todosProveedores.filter((p) => proveedorIds.includes(p.id));
     } else {
-      seleccionados = todosProveedores.filter((p) => {
-        const marcasProv = (p.marcas || p.marcasVehiculo || []).map((m) => String(m).toUpperCase());
-        const catsProv = [
-          p.categoria,
-          ...(Array.isArray(p.categoriasEspecialidad) ? p.categoriasEspecialidad : []),
-        ]
-          .filter(Boolean)
-          .map((c) => String(c).toUpperCase());
-
-        const matchMarca = !marcaUpper || marcasProv.includes(marcaUpper);
-        const matchCat =
-          !catUpper || catUpper === 'GENERAL' || catsProv.length === 0 || catsProv.includes(catUpper);
-        return matchMarca && matchCat;
+      seleccionados = seleccionarTop3ProveedoresMesaWsp({
+        proveedores: todosProveedores,
+        marcaVehiculo: marcaUpper,
+        categoriaRepuesto: catUpper,
       });
-      if (seleccionados.length === 0 && marcaUpper) {
-        seleccionados = todosProveedores.filter((p) =>
-          (p.marcas || p.marcasVehiculo || []).map((m) => String(m).toUpperCase()).includes(marcaUpper)
-        );
-      }
-      if (seleccionados.length === 0) {
-        seleccionados = todosProveedores.slice(0, 3);
-      }
     }
 
     const codigoSolicitud = generarCodigoSolicitud();
@@ -757,23 +746,107 @@ router.post('/solicitudes/:id/respuesta', requireAuth, async (req, res, next) =>
         ? 'con_ofertas'
         : 'esperando_respuestas';
 
-    await solRef.update({
+    // Agente 4: Selección automática de la mejor alternativa, creación del Producto Temporal (4h) en Firebase + WordPress
+    // con foto referencial y envío directo del link de la tienda al WhatsApp del cliente (< 24h)
+    let publicacionTemporal = null;
+    const mejorOferta = elegirMejorOfertaMesaWsp(ofertasActualizadas);
+    let ofertasFinales = ofertasActualizadas;
+    let estadoFinal = nuevoEstado;
+    const updatePayload = {
       ofertasRecibidas: ofertasActualizadas,
       proveedoresContactados: contactosActualizados,
       estado: nuevoEstado,
       updatedAt: now,
-    });
+    };
+
+    if (mejorOferta && solicitud.estado !== 'adjudicada') {
+      publicacionTemporal = await crearYPublicarProductoTemporalMesaWsp({
+        solicitud,
+        ofertaGanadora: mejorOferta,
+        ttlHoras: 4,
+      });
+
+      ofertasFinales = ofertasActualizadas.map((o) => ({
+        ...o,
+        ganadora: o.id === mejorOferta.id,
+      }));
+      estadoFinal = 'adjudicada';
+
+      Object.assign(updatePayload, {
+        ofertasRecibidas: ofertasFinales,
+        estado: 'adjudicada',
+        ofertaGanadoraId: mejorOferta.id,
+        skuPublicoGenerado: publicacionTemporal.skuPublicoFrp,
+        inventarioCreadoId: publicacionTemporal.inventarioId,
+        wooProductIdTemporal: publicacionTemporal.wooProductId,
+        urlProductoTienda: publicacionTemporal.urlProductoTienda,
+        expiraEn: publicacionTemporal.expiraEn,
+        mensajeCotizacionCliente: publicacionTemporal.mensajeClienteWsp,
+        adjudicadaEn: now,
+      });
+
+      // Enviar push directo al WhatsApp del cliente (< 24h) con el link del producto en la tienda
+      let telCliente = String(solicitud.clienteTelefonoReal || solicitud.clienteTelefono || '').trim();
+      if (solicitud.sesionAgenteId) {
+        const sesRef = db.collection('sesiones_agente_omnicanal').doc(solicitud.sesionAgenteId);
+        const sesSnap = await sesRef.get().catch(() => null);
+        if (sesSnap?.exists) {
+          const sesData = sesSnap.data() || {};
+          if ((!telCliente || telCliente === 'CONFIDENCIAL-FRP') && sesData.clienteTelefono) {
+            telCliente = String(sesData.clienteTelefono).trim();
+          }
+          const mensajes = Array.isArray(sesData.mensajes) ? [...sesData.mensajes] : [];
+          mensajes.push({
+            id: `msg-wsp-temp-${Date.now()}`,
+            rol: 'agente',
+            autor: 'Repuestín · facilrepuestos.cl',
+            texto: publicacionTemporal.mensajeClienteWsp,
+            creadoEn: now,
+            origen: 'producto_temporal_mesa_wsp',
+          });
+          const carrito = Array.isArray(sesData.carritoCotizado) ? [...sesData.carritoCotizado] : [];
+          carrito.push({
+            id: publicacionTemporal.inventarioId,
+            skuPublicoFrp: publicacionTemporal.skuPublicoFrp,
+            nombre: publicacionTemporal.itemPublicado.nombre,
+            fabricante: mejorOferta.fabricante,
+            origen: 'mesa_whatsapp_temporal_4h',
+            proveedorNombre: 'FácilRepuestos SpA',
+            stock: 1,
+            cantidad: 1,
+            precioVentaNeto: mejorOferta.precioVentaFrpNeto,
+            precioVentaConIva: mejorOferta.precioVentaFrpConIva,
+            wooProductId: publicacionTemporal.wooProductId,
+            urlProductoWoo: publicacionTemporal.urlProductoTienda,
+            esProductoTemporalWsp: true,
+            expiraEn: publicacionTemporal.expiraEn,
+          });
+          await sesRef.update({
+            mensajes,
+            carritoCotizado: carrito,
+            updatedAt: now,
+          });
+        }
+      }
+
+      if (telCliente && /\d{8,15}/.test(telCliente.replace(/\D/g, ''))) {
+        await enviarRespuestaClienteMetaWhatsapp({
+          telefonoDestino: telCliente,
+          texto: publicacionTemporal.mensajeClienteWsp,
+        }).catch(() => null);
+      }
+    }
+
+    await solRef.update(updatePayload);
 
     res.json({
       success: true,
       data: {
         oferta: nuevaOferta,
+        publicacionTemporal,
         solicitud: {
           ...solicitud,
-          ofertasRecibidas: ofertasActualizadas,
-          proveedoresContactados: contactosActualizados,
-          estado: nuevoEstado,
-          updatedAt: now,
+          ...updatePayload,
         },
       },
     });
@@ -1053,14 +1126,68 @@ router.post('/webhook', async (req, res, next) => {
     };
 
     const ofertasActualizadas = [...(solicitudMatch.ofertasRecibidas || []), nuevaOferta];
+    const mejorOfertaAuto = elegirMejorOfertaMesaWsp(ofertasActualizadas);
+    const updateWebhook = {
+      ofertasRecibidas: ofertasActualizadas,
+      estado: 'con_ofertas',
+      updatedAt: now,
+    };
+
+    if (mejorOfertaAuto && solicitudMatch.estado !== 'adjudicada') {
+      const pubTemp = await crearYPublicarProductoTemporalMesaWsp({
+        solicitud: solicitudMatch,
+        ofertaGanadora: mejorOfertaAuto,
+        ttlHoras: 4,
+      });
+      Object.assign(updateWebhook, {
+        ofertasRecibidas: ofertasActualizadas.map((o) => ({
+          ...o,
+          ganadora: o.id === mejorOfertaAuto.id,
+        })),
+        estado: 'adjudicada',
+        ofertaGanadoraId: mejorOfertaAuto.id,
+        skuPublicoGenerado: pubTemp.skuPublicoFrp,
+        inventarioCreadoId: pubTemp.inventarioId,
+        wooProductIdTemporal: pubTemp.wooProductId,
+        urlProductoTienda: pubTemp.urlProductoTienda,
+        expiraEn: pubTemp.expiraEn,
+        mensajeCotizacionCliente: pubTemp.mensajeClienteWsp,
+        adjudicadaEn: now,
+      });
+
+      let telCliente = String(solicitudMatch.clienteTelefonoReal || solicitudMatch.clienteTelefono || '').trim();
+      if (solicitudMatch.sesionAgenteId) {
+        const sesRef = db.collection('sesiones_agente_omnicanal').doc(solicitudMatch.sesionAgenteId);
+        const sesSnap = await sesRef.get().catch(() => null);
+        if (sesSnap?.exists) {
+          const sesData = sesSnap.data() || {};
+          if ((!telCliente || telCliente === 'CONFIDENCIAL-FRP') && sesData.clienteTelefono) {
+            telCliente = String(sesData.clienteTelefono).trim();
+          }
+          const mensajes = Array.isArray(sesData.mensajes) ? [...sesData.mensajes] : [];
+          mensajes.push({
+            id: `msg-wsp-temp-${Date.now()}`,
+            rol: 'agente',
+            autor: 'Repuestín · facilrepuestos.cl',
+            texto: pubTemp.mensajeClienteWsp,
+            creadoEn: now,
+            origen: 'producto_temporal_mesa_wsp',
+          });
+          await sesRef.update({ mensajes, updatedAt: now });
+        }
+      }
+      if (telCliente && /\d{8,15}/.test(telCliente.replace(/\D/g, ''))) {
+        await enviarRespuestaClienteMetaWhatsapp({
+          telefonoDestino: telCliente,
+          texto: pubTemp.mensajeClienteWsp,
+        }).catch(() => null);
+      }
+    }
+
     await db
       .collection(COLECCION_SOLICITUDES_WSP)
       .doc(solicitudMatch.id)
-      .update({
-        ofertasRecibidas: ofertasActualizadas,
-        estado: 'con_ofertas',
-        updatedAt: now,
-      });
+      .update(updateWebhook);
 
     return res.status(200).json({ received: true, matched: true, solicitudId: solicitudMatch.id });
   } catch (error) {

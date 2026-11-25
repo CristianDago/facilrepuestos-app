@@ -15,6 +15,8 @@ import {
   sincronizarTodosLosNodosAiloo,
   calcularHashCatalogoItem,
 } from '../services/ailooCatalogSync.js';
+import { enviarRespuestaClienteMetaWhatsapp } from './agenteOmnicanal.js';
+import { confirmarPagoWordPressPorWhatsapp } from '../agents/agente5CajeroYWebhookWoo.js';
 
 const router = Router();
 
@@ -622,6 +624,13 @@ router.post('/webhook/pedido', async (req, res, next) => {
         totalPedido: pedido.total || null,
       });
       await batch.commit();
+
+      // Agente 5: Confirmar automáticamente al cliente por WhatsApp cuando se registra el pago en WordPress
+      await confirmarPagoWordPressPorWhatsapp({
+        pedidoWoo: pedido,
+        itemsProcesados,
+        enviarWhatsappFn: enviarRespuestaClienteMetaWhatsapp,
+      });
 
       return res.json({ success: true, itemsDescontados: itemsProcesados.length });
     }

@@ -26,6 +26,7 @@ import {
   calcularPromesaRetiroYDespacho,
   NODOS_DESPACHO_DEFAULT,
 } from './logisticaTarifarioService.js';
+import { esItemStockPropioOlivares224 } from '../agents/agente2BuscadorErp.js';
 
 
 const GCP_PROJECT = process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'facilrepuestos-prod';
@@ -410,35 +411,17 @@ export async function conducirFlujoCompraDeterministico({
 
   // Inicio del flujo COMPRAR: arma de inmediato el carro consolidado en WooCommerce con todos los productos disponibles
   if (esComandoComprar) {
-    const modalidadInicial = sesion.modalidadEntrega || null;
+    const todosPermitenLaFlorida =
+      carritoActual.length > 0 && carritoActual.every((it) => esItemStockPropioOlivares224(it));
+    // Regla estricta: solo stock propio en Enrique Olivares 224 permite retiro/pago en La Florida; todo lo demás va con Despacho
+    const modalidadInicial = !todosPermitenLaFlorida
+      ? 'despacho_domicilio'
+      : sesion.modalidadEntrega || null;
     const comunaInicial = sesion.comunaCliente || null;
 
-    let pedidoPreCreado = null;
-    if (typeof crearPedidoRealFn === 'function') {
-      try {
-        pedidoPreCreado = await crearPedidoRealFn({
-          sesion: {
-            ...sesion,
-            carritoCotizado: carritoActual,
-          },
-          modalidadEntrega: modalidadInicial || 'retiro_bodega',
-          comunaEntrega: comunaInicial || 'La Florida, Santiago (RM)',
-          documentoTributario: 'BOLETA',
-          datosCliente: {
-            nombre: sesion.clienteNombre || 'Cliente FácilRepuestos',
-            email: 'ventas@facilrepuestos.cl',
-          },
-        });
-      } catch {
-        // Ignorar si falla pre-creación
-      }
-    }
-
-    const linkCarroConsolidado =
-      pedidoPreCreado?.urlPagoCheckoutWoo ||
-      pedidoPreCreado?.urlCarroWooCommerce ||
-      carritoActual.find((it) => it.urlAgregarAlCarroWoo)?.urlAgregarAlCarroWoo ||
-      'https://facilrepuestos.cl/finalizar-compra/';
+    const linksTiendaProductos = carritoActual
+      .map((it) => `• **${it.nombre}** (\`${it.skuPublicoFrp}\`): ${it.urlProductoWoo || 'https://facilrepuestos.cl/tienda/'}`)
+      .join('\n');
 
     if (!modalidadInicial) {
       const nuevoEstado = {
@@ -454,15 +437,11 @@ export async function conducirFlujoCompraDeterministico({
       return {
         interceptado: true,
         flujoCompra: nuevoEstado,
-        pedidoCreado: pedidoPreCreado || null,
+        pedidoCreado: null,
         respuestaTexto:
-          `¡Perfecto! 🛒 Ya armé **un único carro consolidado** con todos tus repuestos disponibles:\n${lineasResumen}\n• **Subtotal repuestos en stock:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
-          `👉 **Ir a comprar todos tus productos juntos en facilrepuestos.cl:**\n${linkCarroConsolidado}` +
+          `¡Perfecto! 🛒 Aquí tienes el link directo de tu repuesto en nuestra tienda **facilrepuestos.cl**:\n${linksTiendaProductos}\n• **Subtotal repuestos:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**` +
           `${notaFaltanteEnBusqueda}\n\n` +
-          `⏱️ **Tiempos de entrega para tu pedido:**\n` +
-          `• **Retiro sin costo en tienda:** ${promesaSla.promesaRetiroCorta}\n` +
-          `• **Despacho en Santiago:** ${promesaSla.promesaDespachoSantiagoCorta}\n\n` +
-          `📍 ¿Prefieres **Retiro en Enrique Olivares 224, La Florida** o **Despacho a domicilio**?`,
+          `📍 Como este producto está en nuestro stock local de **Enrique Olivares 224, La Florida**, ¿prefieres **Retiro y pago en nuestra tienda de La Florida** o **Despacho a domicilio**?`,
         accionTomada: 'flujo_compra_paso_modalidad',
       };
     }
@@ -490,12 +469,11 @@ export async function conducirFlujoCompraDeterministico({
       return {
         interceptado: true,
         flujoCompra: nuevoEstado,
-        pedidoCreado: pedidoPreCreado || null,
+        pedidoCreado: null,
         respuestaTexto:
-          `¡Perfecto! 🛒 Ya armé **tu carro consolidado** con **Despacho a domicilio** (${promesaSla.promesaDespachoSantiagoCorta}):\n${lineasResumen}\n• **Subtotal repuestos en stock:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
-          `👉 **Ir a comprar todos tus productos juntos en facilrepuestos.cl:**\n${linkCarroConsolidado}` +
+          `¡Perfecto! 🛒 Aquí tienes el link directo de tu producto en nuestra tienda **facilrepuestos.cl**:\n${linksTiendaProductos}\n• **Subtotal repuestos:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**` +
           `${notaFaltanteEnBusqueda}\n\n` +
-          `📍 Mándame tu **dirección de entrega** (calle, número y comuna/ciudad) si quieres que te deje calculado el despacho exacto saliendo desde **Enrique Olivares 224, La Florida**.`,
+          `🚚 Este pedido va con **Despacho a domicilio**. Mándame tu **comuna o dirección de entrega** para darte el valor exacto del despacho según nuestra tabla de Santiago y Regiones.`,
         accionTomada: 'flujo_compra_paso_direccion',
       };
     }
@@ -503,10 +481,9 @@ export async function conducirFlujoCompraDeterministico({
     return {
       interceptado: true,
       flujoCompra: nuevoEstado,
-      pedidoCreado: pedidoPreCreado || null,
+      pedidoCreado: null,
       respuestaTexto:
-        `¡Perfecto! 🛒 Ya armé **tu carro consolidado** para retiro sin costo (**${promesaSla.promesaRetiroCorta}**):\n${lineasResumen}\n• **Total repuestos en stock:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n\n` +
-        `👉 **Ir a comprar todos tus productos juntos en facilrepuestos.cl:**\n${linkCarroConsolidado}` +
+        `¡Perfecto! 🛒 Aquí tienes el link de tu producto en **facilrepuestos.cl** (también puedes pagarlo al retirar en **Enrique Olivares 224, La Florida**):\n${linksTiendaProductos}\n• **Total repuestos:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**` +
         `${notaFaltanteEnBusqueda}\n\n` +
         `¿Necesitas **boleta** o **factura**?`,
       accionTomada: 'flujo_compra_paso_documento',
@@ -934,17 +911,12 @@ REGLAS INQUEBRANTABLES (HEREDADAS DE LUNA SOLUPARTS):
 3. Si el cliente pide un repuesto pero falta saber para qué vehículo es, NO inventes opciones: pregúntale para qué vehículo lo necesita y ofrécele darte la patente ("si tienes la patente a mano me la das y lo veo al tiro").
 4. Si el cliente dio la patente o el vehículo pero aún no dice qué repuesto necesita, confírmale el vehículo identificado y pregúntale qué pieza anda buscando.
 5. Cuando ofrezcas productos con stock confirmado en [DATOS VERIFICADOS DEL SISTEMA]:
-   - Muestra siempre el nombre del producto, su código SKU exacto entre backticks (ej. \`FRP-...\`) y su precio final CON IVA incluido en pesos chilenos.
-   - Si en los datos verificados viene el link para ver el producto en la página (\`https://facilrepuestos.cl/?p=...\`), mantenlo intacto para que el cliente pueda verlo en facilrepuestos.cl (NUNCA escribas fácilrepuestos.cl con tilde) y dile que al confirmar escriba **COMPRAR** para armarle un solo carro con todos los productos.
-   - Si quedan 5 unidades o menos, menciona la cantidad como dato sin presionar.
-   - Recomienda el Retiro sin costo en nuestra sucursal ubicada en **Enrique Olivares 224, La Florida, Santiago** o **Despacho a domicilio pre-calculado** en Santiago (Delivery en 2 horas de Lunes a Viernes de 09:00 a 18:00 hrs; compras después de las 16:00 hrs se despachan al día siguiente) y a todo Chile.
-   - REGLAS DE RETIRO EN ENRIQUE OLIVARES 224, LA FLORIDA:
-     * Si el producto está en nuestro stock directo en tienda: Retiro inmediato / automático.
-     * Si el producto está en portal de proveedor asociado: Retiro en 1 hora 30 minutos (1h 30m).
-     * Si el producto es SKU \`FRP-SOL-...\` (bodega central): Todas las compras antes de las 12:00 del día se pueden retirar en Enrique Olivares 224 a las 15:00 hrs (3:00 de la tarde) del mismo día; si la compra es después de las 12:00 del día y hasta el día siguiente a las 12:00 del día, se puede retirar siempre desde las 15:00 hrs (3:00 de la tarde) del día siguiente en Enrique Olivares 224.
+   - Muestra siempre el nombre del producto, su código SKU exacto entre backticks (ej. \`FRP-...\`), su precio final CON IVA incluido y el link directo del producto en nuestra tienda (\`https://facilrepuestos.cl/?p=...\`). NUNCA envíes links de pago sueltos: siempre envía el link del producto en la tienda facilrepuestos.cl (sin tilde).
+   - REGLA ESTRICTA DE PAGO Y DESPACHO:
+     * Los ÚNICOS productos que pueden retirarse y pagarse presencialmente en nuestra tienda de **Enrique Olivares 224, La Florida** son los de nuestro stock local propio (\`FRP-OWN-*\` / \`DRM-*\`).
+     * Todo el resto de los productos (\`FRP-SOL-*\`, \`FRP-GLB-*\`, \`FRP-WSP-*\`) son **100% con Despacho a domicilio** (con tarifa pre-calculada en Santiago por anillos y en Regiones por talla) y se compran directamente desde el link del producto en **facilrepuestos.cl**.
 6. NUNCA menciones nombres de proveedores mayoristas internos (jamás nombres a Soluparts, Global Repuestos ni bodegas externas). Todo el stock y la gestión son de facilrepuestos.cl (escrito siempre sin tilde cuando lleva .cl).
-7. Horario de nuestra sucursal (Enrique Olivares 224, La Florida): lunes a jueves de 9:30 a 18:00, viernes de 9:30 a 17:00 y sábados de 9:30 a 14:00. Domingos y festivos cerrado.
-8. Usa negritas (**texto**) solo para destacar el vehículo, el precio o la palabra **COMPRAR**. No uses títulos largos ni lenguaje robótico.`;
+7. Sé breve y directo (máximo 3 a 4 líneas). No divagues ni mezcles preguntas de pasos futuros.`;
 
     const ultimosTurnos = (historialMensajes || []).slice(-6).map((m) => ({
       role: m.autor === 'cliente' ? 'user' : 'model',

@@ -50,6 +50,14 @@ import {
   redactarRespuestaConGeminiLuna,
 } from '../services/lunaConversacional.js';
 import {
+  perfilarNecesidadYComunaCliente,
+  construirRespuestaAgente1Recepcion,
+  redactarCotizacionOrquestada,
+  seleccionarTop3ProveedoresMesaWsp,
+  fusionarPedidoAdicionalEnCarrito,
+  evaluarLogisticaYDespachoAgente3,
+} from '../agents/orquestadorRepuestin.js';
+import {
   construirLinksCarroWooCommerce,
   crearPedidoPendienteWooCommerce,
   obtenerUrlBaseTiendaWoo,
@@ -1809,12 +1817,10 @@ async function ejecutarCascadaAgenteOmnicanal({
         `¿Qué repuesto estás buscando y para qué vehículo?`;
     } else if (clasificacion.tipo === 'SOLO_VEHICULO_SIN_REPUESTO') {
       accionTomadaConv = 'vehiculo_identificado_esperando_repuesto';
-      const v = vehiculo;
-      hechoBase =
-        `¡Perfecto! 🚗 Ya dejé registrado tu **${v.marca} ${v.modelo || ''} ${v.anio ? `(${v.anio})` : ''}${
-          v.motor ? ` · Motor ${v.motor}` : ''
-        }${v.patente ? ` [Patente ${v.patente}]` : ''}**.\n\n` +
-        `¿Qué repuesto necesitas para tu ${v.marca} ${v.modelo || ''}?`;
+      hechoBase = construirRespuestaAgente1Recepcion({
+        intencion: 'SOLO_VEHICULO_SIN_REPUESTO',
+        vehiculo,
+      });
     } else if (clasificacion.tipo === 'SOLO_REPUESTO_SIN_VEHICULO') {
       accionTomadaConv = 'repuesto_identificado_esperando_vehiculo';
       repuestoPendienteNuevo = clasificacion.repuestoDetectado || {
@@ -1822,15 +1828,17 @@ async function ejecutarCascadaAgenteOmnicanal({
         resumenRepuesto: infoRepuestoActual.resumenRepuesto,
         textoOriginal: textoBruto,
       };
-      hechoBase =
-        `¡Claro! Para buscar **${repuestoPendienteNuevo.resumenRepuesto}** exacto y darte precio y stock al tiro, ¿para qué vehículo lo necesitas? Si tienes la **patente** a mano me la das (o dime **marca, modelo, año y cilindrada**).`;
+      hechoBase = construirRespuestaAgente1Recepcion({
+        intencion: 'SOLO_REPUESTO_SIN_VEHICULO',
+        vehiculo,
+        repuestoDetectado: repuestoPendienteNuevo,
+      });
     } else {
       accionTomadaConv = 'saludo_conversacional';
-      hechoBase = vehiculo
-        ? `¡Hola! 👋 Tengo en pantalla tu **${vehiculo.marca} ${vehiculo.modelo || ''} ${
-            vehiculo.anio || ''
-          }**. Cuéntame, ¿qué repuesto andas buscando hoy?`
-        : '¡Hola! 👋 Bienvenido a **facilrepuestos.cl**. Cuéntame, ¿qué repuesto andas buscando y para qué vehículo? Si tienes la **patente** a mano me la das y lo reviso al tiro.';
+      hechoBase = construirRespuestaAgente1Recepcion({
+        intencion: 'SALUDO_O_CONVERSACION_INICIAL',
+        vehiculo,
+      });
     }
 
     // Registrar en CRM WhatsApp incluso si solo dio vehículo o repuesto parcial
@@ -2287,53 +2295,64 @@ async function ejecutarCascadaAgenteOmnicanal({
       }`.trim()
     : 'Vehículo en consulta';
 
-  // Actualizar el carrito cotizado de la sesión con los ítems disponibles
-  if (candidatosEncontradosGlobal.length > 0) {
-    carritoActual = candidatosEncontradosGlobal.map((c) => ({ ...c, cantidad: 1 }));
+  // Agente 1: Perfilar urgencia y comuna del cliente si la mencionó en este turno
+  const perfilCliente = perfilarNecesidadYComunaCliente({
+    textoCliente: textoBruto,
+    sesion,
+  });
+  if (perfilCliente.comunaCliente && !sesion.comunaCliente) {
+    sesion.comunaCliente = perfilCliente.comunaCliente;
   }
 
-  const linksCarroCotizacion = construirLinksCarroWooCommerce(candidatosEncontradosGlobal);
+  // Agente 6: Evaluar si el cliente está sumando un repuesto adicional sobre un carrito previo
+  const fusionAgente6 = fusionarPedidoAdicionalEnCarrito({
+    textoCliente: textoBruto,
+    carritoPrevio: carritoActual,
+    nuevosCandidatos: candidatosEncontradosGlobal,
+  });
+  if (candidatosEncontradosGlobal.length > 0) {
+    carritoActual = fusionAgente6.carritoConsolidado;
+  }
+
+  const linksCarroCotizacion = construirLinksCarroWooCommerce(carritoActual);
 
   const notaRespuestasPrevias =
     respuestasVivas.length > 0
       ? `🔔 **Actualización en vivo de tu consulta anterior:** Confirmamos **${respuestasVivas[0].repuesto}** (\`${respuestasVivas[0].skuPublicoFrp}\`) a **$${respuestasVivas[0].precioVentaConIva.toLocaleString('es-CL')} IVA inc.**\n\n`
       : '';
 
-  // ─── RAMA A: COTIZACIÓN DIRECTA (100% EN STOCK O MEMORIA APRENDIDA) ───────
+  // ─── RAMA A: COTIZACIÓN DIRECTA (ORQUESTADA CON AGENTES 2, 3 Y 6) ──────────
   if (accionTomada === 'cotizacion_directa') {
-    const lineasOpciones = candidatosEncontradosGlobal.map(
-      (c) =>
-        `• **${c.nombre}** (\`${c.skuPublicoFrp}\`) — Marca **${c.fabricante}** · Stock: **${c.stock} un.** · **$${c.precioVentaConIva.toLocaleString(
-          'es-CL'
-        )} IVA inc.**\n  🔎 Ver producto en web: ${c.urlProductoWoo}`
-    );
-
     const notaAprendida =
       reglasAplicadasGlobal.length > 0
-        ? `\n\n🧠 **Nota Técnica Verificada en FácilRepuestos:** ${sanitizarMensajeHaciaClienteFinal(reglasAplicadasGlobal[0].explicacionExperta)}`
+        ? `\n\n🧠 **Nota Técnica:** ${sanitizarMensajeHaciaClienteFinal(reglasAplicadasGlobal[0].explicacionExperta)}`
         : '';
 
-    if (lineasOpciones.length > 0) {
-      const promesaCot = calcularPromesaRetiroYDespacho({
-        itemsCarrito: candidatosEncontradosGlobal,
+    if (candidatosEncontradosGlobal.length > 0) {
+      respuestaTexto = redactarCotizacionOrquestada({
+        etiquetaVehiculo,
+        candidatosNuevos: candidatosEncontradosGlobal,
+        carritoConsolidado: carritoActual,
+        esPedidoAdicional: fusionAgente6.esPedidoAdicional,
+        comunaCliente: sesion.comunaCliente || null,
+        notaRespuestasPrevias,
+        notaAprendida,
       });
-      respuestaTexto =
-        `${notaRespuestasPrevias}¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** tenemos disponibilidad confirmada en FácilRepuestos:\n\n` +
-        `${lineasOpciones.join('\n')}${notaAprendida}\n\n` +
-        `📍 **Retiro en tienda:** ${promesaCot.textoRetiroCarrito}\n` +
-        `🚚 **Despacho Delivery Santiago:** ${promesaCot.textoDespachoSantiago}\n\n` +
-        `👉 Puedes revisar cada producto en el link web de arriba y, cuando confirmes lo que quieres llevar, escribe **COMPRAR** aquí mismo para armarte **un solo carro con todos tus productos**.`;
     } else if (reglasAplicadasGlobal.length > 0) {
       const r = reglasAplicadasGlobal[0];
       const conIva = Math.round(r.precioVentaFrp || 0);
+      const logisticaRegla = evaluarLogisticaYDespachoAgente3({
+        items: [r],
+        comunaCliente: sesion.comunaCliente || null,
+      });
       respuestaTexto =
-        `${notaRespuestasPrevias}¡Hola! 🚗 Según nuestra base técnica verificada en FácilRepuestos para **${etiquetaVehiculo}**:\n\n` +
+        `${notaRespuestasPrevias}¡Hola! 🚗 Según nuestra base técnica en **facilrepuestos.cl** para **${etiquetaVehiculo}**:\n\n` +
         `• **${r.nombreRepuesto}** (\`${r.skuPublicoFrp}\`)${
           r.precioVentaFrp > 0
-            ? ` — Valor FácilRepuestos: **$${conIva.toLocaleString('es-CL')} IVA inc.**`
+            ? ` — **$${conIva.toLocaleString('es-CL')} IVA inc.**`
             : ''
         }.\n🧠 **Detalle técnico:** ${sanitizarMensajeHaciaClienteFinal(r.explicacionExperta)}\n\n` +
-        `📍 Disponible con **Despacho a domicilio en Santiago y todo Chile** o **Retiro en Enrique Olivares 224, La Florida, Santiago de Chile**.`;
+        `${logisticaRegla.resumenLogisticoParaCliente}`;
     }
   }
 
@@ -2496,57 +2515,53 @@ async function ejecutarCascadaAgenteOmnicanal({
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter((p) => p.activo !== false && p.canalWspActivo !== false && p.telefono);
 
-      const marcaUpper = String(vehiculo?.marca || '').toUpperCase();
-      const catUpper = String(categoria || '').toUpperCase();
-      let seleccionados = proveedores.filter((p) => {
-        const marcas = (p.marcas || p.marcasVehiculo || p.marcasEspecialidad || []).map((m) =>
-          String(m).toUpperCase()
-        );
-        const cats = [
-          p.categoria,
-          ...(Array.isArray(p.categoriasEspecialidad) ? p.categoriasEspecialidad : []),
-        ]
-          .filter(Boolean)
-          .map((c) => String(c).toUpperCase());
-        const matchMarca = !marcaUpper || marcas.includes(marcaUpper);
-        const matchCat = !catUpper || cats.length === 0 || cats.includes(catUpper);
-        return matchMarca && matchCat;
+      // Agente 4: Seleccionar TOP 3 proveedores compatibles según Marca, Categoría y Cercanía
+      const seleccionados = seleccionarTop3ProveedoresMesaWsp({
+        proveedores,
+        marcaVehiculo: vehiculo?.marca || '',
+        categoriaRepuesto: categoria || '',
+        comunaCliente: sesion.comunaCliente || '',
       });
-      if (seleccionados.length === 0 && marcaUpper) {
-        seleccionados = proveedores.filter((p) => {
-          const marcas = (p.marcas || p.marcasVehiculo || p.marcasEspecialidad || []).map((m) =>
-            String(m).toUpperCase()
-          );
-          return marcas.includes(marcaUpper);
-        });
-      }
-      if (seleccionados.length === 0) {
-        seleccionados = proveedores.slice(0, 2);
-      }
 
       const codigoSolicitud = `WSP-${Math.floor(1000 + Math.random() * 9000)}`;
       const repuestoTexto = `${resumenFaltantes} ${vehiculo?.marca || ''} ${vehiculo?.modelo || ''}`.trim();
-      const proveedoresContactados = seleccionados.map((p) => ({
-        proveedorId: p.id,
-        proveedorNombre: p.nombre,
-        contacto: p.contacto || 'Mesón WhatsApp',
-        telefono: p.telefono,
-        especialidad: p.categoria || p.especialidad || 'Multimarca',
-        especialidadMarcas: p.marcas || p.marcasVehiculo || p.marcasEspecialidad || ['MULTIMARCA'],
-        marcasVehiculo: p.marcas || p.marcasVehiculo || [],
-        estadoContacto: 'enviado',
-        modoEnvio: 'simulacion_meta_local',
-        metaMessageId: `wamid.AUTO.${Date.now()}`,
-        mensajeEnviado: `Hola ${p.contacto || p.nombre} 👋 Compra B2B urgente FácilRepuestos SpA (#${codigoSolicitud}): ${repuestoTexto}${
-          vehiculo?.patente ? ` · Patente ${vehiculo.patente}` : ''
-        }${vehiculo?.vin ? ` · VIN ${vehiculo.vin}` : ''}. ¿Disponibilidad y precio costo neto para retiro por nuestro móvil?`,
-        enviadoEn: now,
-        respondidoEn: null,
-      }));
+      const proveedoresContactados = [];
+
+      for (const p of seleccionados) {
+        const mensajeEnviado = `Hola ${p.contacto || p.nombre} 👋 Consulta de abastecimiento (#${codigoSolicitud}): Buscamos **${repuestoTexto}**${
+          vehiculo?.anio ? ` (${vehiculo.anio})` : ''
+        }${vehiculo?.patente ? ` · Patente ${vehiculo.patente}` : ''}${
+          vehiculo?.vin ? ` · VIN ${vehiculo.vin}` : ''
+        }. ¿Tienes stock disponible y precio costo neto para retiro inmediato?`;
+
+        const envioReal = await enviarRespuestaClienteMetaWhatsapp({
+          telefonoDestino: p.telefono,
+          texto: mensajeEnviado,
+        }).catch(() => null);
+
+        proveedoresContactados.push({
+          proveedorId: p.id,
+          proveedorNombre: p.nombre,
+          contacto: p.contacto || 'Mesón WhatsApp',
+          telefono: p.telefono,
+          especialidad: p.categoria || p.especialidad || 'Multimarca',
+          especialidadMarcas: p.marcas || p.marcasVehiculo || p.marcasEspecialidad || ['MULTIMARCA'],
+          marcasVehiculo: p.marcas || p.marcasVehiculo || [],
+          estadoContacto: 'enviado',
+          modoEnvio: envioReal?.enviado ? 'meta_cloud_api_live' : 'simulacion_meta_local',
+          metaMessageId: envioReal?.metaMessageId || `wamid.AUTO.${Date.now()}`,
+          mensajeEnviado,
+          enviadoEn: now,
+          respondidoEn: null,
+        });
+      }
 
       const nuevaSolWsp = {
         codigoSolicitud,
         sesionAgenteId: sesion.id,
+        clienteTelefonoReal: sesion.clienteTelefono || '',
+        comunaCliente: sesion.comunaCliente || null,
+        urgenciaCliente: perfilCliente.urgencia || 'normal',
         solicitante: 'FácilRepuestos SpA (Adquisiciones B2B)',
         estado: 'esperando_respuestas',
         canalCliente: sesion.canal === 'web_cliente' ? 'web' : 'whatsapp',

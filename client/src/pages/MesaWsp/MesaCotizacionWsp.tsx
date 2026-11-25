@@ -686,8 +686,8 @@ export default function MesaCotizacionWsp() {
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))',
-                  gap: 12,
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',
+                  gap: 14,
                 }}
               >
                 {Object.values(configAgentes.agentes || {}).map((ag) => (
@@ -697,7 +697,7 @@ export default function MesaCotizacionWsp() {
                       background: '#f8fafc',
                       border: '1px solid #cbd5e1',
                       borderRadius: 10,
-                      padding: 12,
+                      padding: 14,
                       display: 'flex',
                       flexDirection: 'column',
                       gap: 8,
@@ -711,7 +711,7 @@ export default function MesaCotizacionWsp() {
                         gap: 8,
                       }}
                     >
-                      <strong style={{ fontSize: '0.88rem', color: '#0f172a' }}>{ag.nombre}</strong>
+                      <strong style={{ fontSize: '0.92rem', color: '#0f172a' }}>{ag.nombre}</strong>
                       <select
                         className={styles.select}
                         style={{ fontSize: '0.76rem', padding: '3px 6px' }}
@@ -737,13 +737,18 @@ export default function MesaCotizacionWsp() {
                         ))}
                       </select>
                     </div>
-                    <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{ag.rol}</div>
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>
-                      Instrucciones base del agente:
+                    <div style={{ fontSize: '0.8rem', color: '#475569' }}>{ag.rol}</div>
+                    <label style={{ fontSize: '0.76rem', fontWeight: 800, color: '#1e293b' }}>
+                      📋 Base de Conocimiento e Instrucciones Operativas Completas del Agente:
                     </label>
                     <textarea
                       className={styles.textarea}
-                      style={{ minHeight: 58, fontSize: '0.8rem' }}
+                      style={{
+                        minHeight: 190,
+                        fontSize: '0.79rem',
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                        lineHeight: 1.45,
+                      }}
                       value={ag.instrucciones}
                       onChange={(e) =>
                         setConfigAgentes((prev) =>
@@ -759,13 +764,18 @@ export default function MesaCotizacionWsp() {
                         )
                       }
                     />
-                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>
-                      Contexto nuevo / Reglas adicionales (editable en caliente):
+                    <label style={{ fontSize: '0.76rem', fontWeight: 800, color: '#1e293b' }}>
+                      🗂️ Tablas de Datos / Tarifario / Diccionario y Contexto Adicional (Editable en Vivo):
                     </label>
                     <textarea
                       className={styles.textarea}
-                      style={{ minHeight: 52, fontSize: '0.8rem' }}
-                      placeholder="Ej: Proveedor X cierra a las 17:30, priorizar pastillas cerámicas..."
+                      style={{
+                        minHeight: 145,
+                        fontSize: '0.79rem',
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                        lineHeight: 1.45,
+                      }}
+                      placeholder="Ej: Tarifario, diccionarios, reglas de nuevos proveedores..."
                       value={ag.contextoExtra}
                       onChange={(e) =>
                         setConfigAgentes((prev) =>

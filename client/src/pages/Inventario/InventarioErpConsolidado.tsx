@@ -47,22 +47,8 @@ function clasificarTiendaDeItem(item: ItemInventario): {
       key: 'erp_soluparts',
       nombre: 'Soluparts (ERP Ailoo)',
       prefijo: 'FRP-SOL',
-      promesaRetiro: 'Retiro Enrique Olivares 224 desde 15:00 hrs (corte 12:00)',
+      promesaRetiro: 'Retiro Enrique Olivares 224 desde 15:30 hrs (compras antes de 11:30 hrs)',
       color: '#4f46e5',
-    };
-  }
-
-  if (
-    skuPub.startsWith('FRP-GLB') ||
-    origenDatos.includes('global') ||
-    /global/i.test(prov)
-  ) {
-    return {
-      key: 'erp_global',
-      nombre: 'Global Repuestos (ERP Ailoo)',
-      prefijo: 'FRP-GLB',
-      promesaRetiro: 'Retiro en 1h 30m en Enrique Olivares 224',
-      color: '#0284c7',
     };
   }
 
@@ -71,7 +57,7 @@ function clasificarTiendaDeItem(item: ItemInventario): {
       key: 'mesa_wsp',
       nombre: 'Mesa Abastecimiento WSP',
       prefijo: 'FRP-WSP',
-      promesaRetiro: 'Retiro en 1h 30m en Enrique Olivares 224',
+      promesaRetiro: 'Despacho según dimensión en Santiago y Chile (vigencia 4h)',
       color: '#16a34a',
     };
   }
@@ -94,7 +80,7 @@ function clasificarTiendaDeItem(item: ItemInventario): {
     key: cleanKey,
     nombre: `Portal Tienda: ${prov}`,
     prefijo: 'FRP-LOC',
-    promesaRetiro: 'Retiro en 1h 30m en Enrique Olivares 224',
+    promesaRetiro: 'Despacho según dimensión en Santiago y Chile',
     color: '#0d9488',
   };
 }
@@ -157,7 +143,7 @@ export default function InventarioErpConsolidado() {
   const tiendasErpDisponibles = useMemo<TiendaErpOpcion[]>(() => {
     const mapa = new Map<string, TiendaErpOpcion>();
 
-    // Inicializar las 3 tiendas/ERPs base para que siempre aparezcan claras en los checkboxes
+    // Inicializar las tiendas/ERPs base para que siempre aparezcan claras en los checkboxes
     const base: TiendaErpOpcion[] = [
       {
         id: 'bodega_olivares_224',
@@ -173,18 +159,8 @@ export default function InventarioErpConsolidado() {
         id: 'erp_soluparts',
         nombre: '🏭 ERP Soluparts (Ailoo)',
         prefijo: 'FRP-SOL',
-        promesaRetiro: 'Retiro 15:00 hrs en Olivares 224 (corte 12:00)',
+        promesaRetiro: 'Retiro 15:30 hrs en Olivares 224 (compras antes de 11:30 hrs)',
         color: '#4f46e5',
-        totalSkus: 0,
-        conStock: 0,
-        unidades: 0,
-      },
-      {
-        id: 'erp_global',
-        nombre: '🌍 ERP Global Repuestos (Ailoo)',
-        prefijo: 'FRP-GLB',
-        promesaRetiro: 'Retiro en 1h 30m en Olivares 224',
-        color: '#0284c7',
         totalSkus: 0,
         conStock: 0,
         unidades: 0,
@@ -444,7 +420,7 @@ export default function InventarioErpConsolidado() {
       const tA = clasificarTiendaDeItem(a).key;
       const tB = clasificarTiendaDeItem(b).key;
       const prio = (k: string) =>
-        k === 'bodega_olivares_224' ? 4 : k === 'erp_soluparts' ? 3 : k === 'erp_global' ? 2 : 1;
+        k === 'bodega_olivares_224' ? 4 : k === 'erp_soluparts' ? 3 : 1;
       if (prio(tA) !== prio(tB)) return prio(tB) - prio(tA);
 
       return (a.nombre || '').localeCompare(b.nombre || '');
@@ -498,7 +474,7 @@ export default function InventarioErpConsolidado() {
     try {
       const r = await woocommerceService.syncAilooTodos({ forzar: false });
       if (r.success) {
-        notify('✓ Catálogos ERP Ailoo (Soluparts + Global) sincronizados', 'success');
+        notify('✓ Catálogo ERP Ailoo (Soluparts) sincronizado', 'success');
         await cargarTodo();
       }
     } catch {
@@ -697,7 +673,7 @@ export default function InventarioErpConsolidado() {
               2️⃣ Prioridad Comercial por Velocidad de Retiro
             </div>
             <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 4 }}>
-              Orden recomendado: <strong>1° Bodega Enrique Olivares 224</strong> (Retiro Inmediato) → <strong>2° ERP Soluparts</strong> (Retiro 15:00 hrs) → <strong>3° Portales / Global</strong> (Retiro 1h 30m).
+              Orden recomendado: <strong>1° Bodega Enrique Olivares 224</strong> (Retiro Inmediato) → <strong>2° ERP Soluparts</strong> (Retiro desde 15:30 hrs comprando antes de 11:30 hrs) → <strong>3° Portales ERP Asociados</strong> (Despacho según dimensión).
             </div>
           </div>
 
@@ -706,7 +682,7 @@ export default function InventarioErpConsolidado() {
               3️⃣ SKU Público Trazable sin Exponer Proveedor
             </div>
             <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 4 }}>
-              En WooCommerce y en Repuestín el cliente ve <code>FRP-OWN-*</code>, <code>FRP-SOL-*</code>, <code>FRP-GLB-*</code> o <code>FRP-LOC-*</code>, manteniendo oculto el proveedor mayorista pero identificando al instante la bodega de retiro.
+              En WooCommerce y en Repuestín el cliente ve <code>FRP-OWN-*</code>, <code>FRP-SOL-*</code>, <code>FRP-LOC-*</code> o <code>FRP-WSP-*</code>, manteniendo oculto el proveedor mayorista pero identificando al instante el origen logístico.
             </div>
           </div>
 

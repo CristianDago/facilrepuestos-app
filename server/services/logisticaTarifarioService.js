@@ -660,9 +660,9 @@ function resolverZonaDestinoYHub(direccionOComuna = "", nodosActivos = NODOS_DES
  * origen del stock de los repuestos:
  *   1. Stock propio FácilRepuestos -> Retiro inmediato / automático en Enrique Olivares 224.
  *   2. Soluparts (`FRP-SOL-*` / `soluparts_ailoo`):
- *      - Compras antes de las 12:00 del día -> Retiro a las 15:00 hrs (3:00 PM) del mismo día en Enrique Olivares 224.
- *      - Compras después de las 12:00 del día (y hasta las 12:00 del día siguiente) -> Retiro desde las 15:00 hrs (3:00 PM) del día siguiente en Enrique Olivares 224.
- *   3. Portal de cualquier proveedor (`portal_proveedor_local`, `global_ailoo`, `mesa_whatsapp`) -> Retiro en 1 hora 30 minutos (1h 30m) en Enrique Olivares 224.
+ *      - Compras antes de las 11:30 del día -> Retiro a partir de las 15:30 hrs (3:30 PM) del mismo día en Enrique Olivares 224.
+ *      - Compras posteriores a las 11:30 hrs -> pasan al corte de antes de las 12:00 del día siguiente, pudiendo retirar desde las 15:30 hrs (3:30 PM) del día siguiente en Enrique Olivares 224; o bien se calcula y entrega cotización de despacho según dimensión en Santiago y Chile.
+ *   3. Portal de proveedores ERP locales (`portal_proveedor_local`) -> Despacho calculado según dimensión en Santiago y Chile (o retiro coordinado en 1h 30m).
  *   4. Despacho Delivery a todo Santiago -> 2 horas (Lunes a Viernes de 09:00 a 18:00 hrs; compras después de las 16:00 hrs se despachan al día hábil siguiente).
  */
 function calcularPromesaRetiroYDespacho({
@@ -693,6 +693,7 @@ function calcularPromesaRetiroYDespacho({
     "jueves",
     "viernes",
   ].includes(diaSemana);
+  const antesDeLas1130 = minutosDia < 11 * 60 + 30;
   const antesDeLas12 = minutosDia < 12 * 60;
   const enVentanaDeliveryHoy =
     esLunesAViernes && minutosDia >= 9 * 60 && minutosDia < 16 * 60;
@@ -717,13 +718,12 @@ function calcularPromesaRetiroYDespacho({
       tieneSoluparts = true;
     } else if (
       origen === "portal_proveedor_local" ||
-      origen === "global_ailoo" ||
       origen === "mesa_whatsapp" ||
       origen === "mesa_whatsapp_etapa3" ||
-      nodo === "global" ||
-      sku.startsWith("FRP-GLB-") ||
       sku.startsWith("FRP-WSP-") ||
       sku.startsWith("FRP-PROV-") ||
+      sku.startsWith("FRP-LOC-") ||
+      sku.startsWith("FRP-TND-") ||
       Boolean(it?.proveedorId)
     ) {
       tienePortalProveedor = true;
@@ -752,42 +752,35 @@ function calcularPromesaRetiroYDespacho({
 
   if (tieneSoluparts) {
     tipoOrigenConsolidado = "soluparts";
-    if (esLunesAViernes && antesDeLas12) {
+    if (esLunesAViernes && antesDeLas1130) {
       promesaRetiroCorta =
-        "Retiro HOY desde las 15:00 hrs (3:00 PM) en Enrique Olivares 224, La Florida";
+        "Retiro HOY desde las 15:30 hrs (3:30 PM) en Enrique Olivares 224, La Florida (comprando antes de las 11:30 hrs en nuestro portal)";
       promesaRetiroDetallada =
-        "Como tu compra es antes de las 12:00 del día, puedes retirar hoy mismo desde las 15:00 hrs (3:00 de la tarde) en nuestra tienda en Enrique Olivares 224, La Florida.";
+        "Si compras en nuestro portal antes de las 11:30 del día, puedes retirar hoy mismo a partir de las 15:30 hrs (3:30 de la tarde) en nuestra sucursal de Enrique Olivares 224, La Florida; o bien te calculamos despacho según dimensión en Santiago y todo Chile.";
     } else {
       promesaRetiroCorta =
-        "Retiro desde las 15:00 hrs (3:00 PM) del siguiente día hábil en Enrique Olivares 224, La Florida";
+        "Retiro desde las 15:30 hrs (3:30 PM) del siguiente día hábil en Enrique Olivares 224, La Florida";
       promesaRetiroDetallada =
-        "Para compras realizadas después de las 12:00 del día (y hasta las 12:00 del día siguiente), el retiro está disponible desde las 15:00 hrs (3:00 de la tarde) del siguiente día hábil en Enrique Olivares 224, La Florida.";
+        "Para compras posteriores a las 11:30 hrs, tu pedido entra en el corte de antes de las 12:00 del día siguiente, por lo que puedes retirar a partir de las 15:30 hrs (3:30 de la tarde) del siguiente día hábil en Enrique Olivares 224, La Florida; o bien te calculamos despacho según dimensión en Santiago y todo Chile.";
     }
   } else if (tienePortalProveedor) {
     tipoOrigenConsolidado = "portal_proveedor";
-    if (esLunesAViernes && minutosDia >= 9 * 60 && minutosDia <= 16 * 60 + 30) {
-      promesaRetiroCorta =
-        "Retiro en 1 hora 30 minutos (1h 30m) en Enrique Olivares 224, La Florida";
-      promesaRetiroDetallada =
-        "Este repuesto se coordina desde el portal de nuestra bodega asociada y queda listo para retiro en 1 hora 30 minutos (1h 30m) en Enrique Olivares 224, La Florida.";
-    } else {
-      promesaRetiroCorta =
-        "Retiro en 1h 30m dentro del horario hábil (09:00 a 18:00 hrs) en Enrique Olivares 224, La Florida";
-      promesaRetiroDetallada =
-        "Este repuesto de portal proveedor demora 1 hora 30 minutos (1h 30m) en estar listo para retiro en Enrique Olivares 224, La Florida (en horario hábil de Lunes a Viernes de 09:00 a 18:00 hrs).";
-    }
+    promesaRetiroCorta =
+      "Despacho calculado según dimensión en Santiago y todo Chile (comprando en facilrepuestos.cl)";
+    promesaRetiroDetallada =
+      "Este repuesto se gestiona con despacho a domicilio calculado según su dimensión y talla logística en Santiago y todo Chile comprando directamente en nuestro portal facilrepuestos.cl.";
   } else if (tieneStockPropio) {
     tipoOrigenConsolidado = "stock_propio";
     promesaRetiroCorta =
       "Retiro inmediato / automático en Enrique Olivares 224, La Florida";
     promesaRetiroDetallada =
-      "¡Está en nuestro stock directo en tienda! Puedes retirarlo automáticamente de inmediato en Enrique Olivares 224, La Florida.";
+      "¡Está en nuestro stock directo en tienda! Puedes retirarlo y pagarlo de inmediato en Enrique Olivares 224, La Florida, o pedir despacho a domicilio.";
   } else {
     tipoOrigenConsolidado = "sin_items_especificos";
     promesaRetiroCorta =
-      "Retiro en Enrique Olivares 224, La Florida (Inmediato en stock propio · 1h 30m en portal proveedor · 15:00 hrs línea bodega central)";
+      "Retiro en Enrique Olivares 224, La Florida (Stock propio inmediato · Línea Soluparts desde 15:30 hrs comprando antes de 11:30 hrs)";
     promesaRetiroDetallada =
-      "En Enrique Olivares 224, La Florida tenemos 3 modalidades según el origen del repuesto: (1) Si está en nuestro stock en tienda, el retiro es automático/inmediato; (2) Si está en el portal de un proveedor asociado, se retira en 1 hora 30 minutos; (3) Para repuestos de bodega central, las compras antes de las 12:00 hrs se retiran hoy mismo desde las 15:00 hrs (3:00 de la tarde), y las compras después de las 12:00 hrs (hasta las 12:00 del día siguiente) se retiran desde las 15:00 hrs del día hábil siguiente.";
+      "En Enrique Olivares 224, La Florida tenemos: (1) Stock propio en tienda con retiro y pago inmediato; (2) Línea Bodega Central (Soluparts): comprando en nuestro portal antes de las 11:30 hrs puedes retirar el mismo día desde las 15:30 hrs (3:30 PM), y si compras después de las 11:30 hrs pasa para retiro desde las 15:30 hrs del día siguiente; (3) O bien calculamos y entregamos cotización de despacho según dimensión en Santiago y todo Chile.";
   }
 
   // Regla de Despacho Delivery a todo Santiago (2 horas entre 09:00 y 18:00 L-V; corte 16:00 hrs)
@@ -800,16 +793,16 @@ function calcularPromesaRetiroYDespacho({
     : `Ofrecemos Delivery en 2 horas para todo Santiago de Lunes a Viernes entre 09:00 y 18:00 hrs. Como son las ${horaStr} hrs (después del corte de las 16:00 hrs o fuera de jornada L-V), tu compra queda programada para despacho a primera hora del día hábil siguiente.`;
 
   const resumenReglasCliente =
-    `📍 **Reglas de Retiro en Enrique Olivares 224, La Florida y Despacho Santiago:**\n` +
-    `• **Stock directo en tienda:** Retiro automático e inmediato en Enrique Olivares 224, La Florida.\n` +
-    `• **Portal de bodegas asociadas:** Retiro en **1 hora 30 minutos (1h 30m)** en Enrique Olivares 224, La Florida.\n` +
-    `• **Línea Bodega Central:** Todas las compras **antes de las 12:00 del día** se pueden retirar en **Enrique Olivares 224 a las 15:00 hrs (3:00 de la tarde) del mismo día**; si compras **después de las 12:00 del día y hasta el día siguiente a las 12:00 del día**, se retiran **desde las 15:00 hrs (3:00 de la tarde)** en Enrique Olivares 224.\n` +
-    `• **Delivery a todo Santiago:** Entrega en **2 horas** entre **09:00 y 18:00 hrs de Lunes a Viernes** (todas las compras **después de las 16:00 hrs** se despachan **al día hábil siguiente**).`;
+    `📍 **Reglas de Retiro en Enrique Olivares 224, La Florida y Despacho en Santiago y Chile:**\n` +
+    `• **Stock directo en tienda (Enrique Olivares 224):** Único con pago presencial en La Florida y retiro inmediato.\n` +
+    `• **Línea Bodega Central (comprando en nuestro portal web):** Si compras **antes de las 11:30 hrs**, puedes retirar el **mismo día a partir de las 15:30 hrs (3:30 PM)** en **Enrique Olivares 224, La Florida**. Si compras **después de las 11:30 hrs**, pasa para el corte de antes de las 12:00 del día siguiente, con retiro **desde las 15:30 hrs (3:30 PM) del día siguiente** en Enrique Olivares 224.\n` +
+    `• **Despacho en Santiago y todo Chile:** Calculamos y entregamos la cotización exacta según la **dimensión / talla volumétrica (XS a XL)** y tu comuna o región.`;
 
   return {
     horaChile: horaStr,
     diaSemana,
     esLunesAViernes,
+    antesDeLas1130,
     antesDeLas12,
     enVentanaDeliveryHoy,
     tipoOrigenConsolidado,

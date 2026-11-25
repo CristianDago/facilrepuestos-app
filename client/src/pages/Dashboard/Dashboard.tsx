@@ -703,8 +703,8 @@ export default function Dashboard() {
                 </div>
                 <div className={styles.allClearBox}>
                   ✓ <strong>Espera inteligente 5 seg.</strong> para unir mensajes seguidos ·{' '}
-                  <strong>Retiro Enrique Olivares 224:</strong> Stock propio inmediato, Portal proveedor 1h 30m, Soluparts 15:00 hrs (compras antes de 12:00 mismo día; después de 12:00 al día siguiente) ·{' '}
-                  <strong>Delivery Santiago:</strong> 2 horas (L-V 09:00 a 18:00; compras tras 16:00 hrs al día siguiente).
+                  <strong>Retiro Enrique Olivares 224:</strong> Stock propio inmediato, Soluparts desde 15:30 hrs (compras antes de 11:30 hrs mismo día; después de 11:30 hrs al día siguiente desde 15:30 hrs) ·{' '}
+                  <strong>Despacho Santiago y Chile:</strong> Cotización calculada según dimensión (Tallas XS a XL).
                 </div>
               </div>
             </div>

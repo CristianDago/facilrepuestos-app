@@ -66,7 +66,7 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
   const [mostrarNuevoModal, setMostrarNuevoModal] = useState(false);
   const [nuevoEsc, setNuevoEsc] = useState({
     canalOrigen: 'whatsapp' as 'whatsapp' | 'web',
-    destinoSelector: 'soluparts', // 'soluparts' | 'global' | 'prov-demo-001'
+    destinoSelector: 'soluparts', // 'soluparts' | 'prov-demo-001'
     patente: 'JPKR42',
     marcaVehiculo: 'HYUNDAI',
     modeloVehiculo: 'PORTER',
@@ -350,12 +350,12 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
           res.data.ingesta;
         if (totalNuevos + totalActualizados > 0) {
           notify(
-            `📦 Multi-Ailoo → Firebase: ${totalNuevos} nuevos, ${totalActualizados} actualizados (${totalSinCambiosOmitidos} sin cambios)`,
+            `📦 Catálogo Soluparts → Firebase: ${totalNuevos} nuevos, ${totalActualizados} actualizados (${totalSinCambiosOmitidos} sin cambios)`,
             'success'
           );
         } else {
           notify(
-            `✓ Catálogos Soluparts + Global sin cambios (${totalLeidos} SKUs con Delta Hash idéntico)`,
+            `✓ Catálogo Soluparts sin cambios (${totalLeidos} SKUs con Delta Hash idéntico)`,
             'info'
           );
         }
@@ -390,8 +390,7 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
   const handleCrearEscalamiento = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const esAiloo =
-        nuevoEsc.destinoSelector === 'soluparts' || nuevoEsc.destinoSelector === 'global';
+      const esAiloo = nuevoEsc.destinoSelector === 'soluparts';
       const payload = {
         canalOrigen: nuevoEsc.canalOrigen,
         tipoDestino: esAiloo ? 'nodo_ailoo' : 'proveedor_local',
@@ -399,9 +398,7 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
         proveedorNombre:
           nuevoEsc.destinoSelector === 'soluparts'
             ? 'Soluparts'
-            : nuevoEsc.destinoSelector === 'global'
-            ? 'Global Repuestos'
-            : 'Proveedor Demo',
+            : 'Proveedor ERP Local',
         nodoAilooId: esAiloo ? nuevoEsc.destinoSelector : null,
         patente: nuevoEsc.patente,
         marcaVehiculo: nuevoEsc.marcaVehiculo,
@@ -440,7 +437,6 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
       if (!esProveedor && filtroOrigen !== 'todos') {
         if (filtroOrigen === 'local' && e.tipoDestino !== 'proveedor_local') return false;
         if (filtroOrigen === 'soluparts' && e.nodoAilooId !== 'soluparts') return false;
-        if (filtroOrigen === 'global' && e.nodoAilooId !== 'global') return false;
       }
       return true;
     });
@@ -453,7 +449,6 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
       if (!esProveedor && filtroOrigen !== 'todos') {
         if (filtroOrigen === 'local' && k.origenTipo !== 'proveedor_local') return false;
         if (filtroOrigen === 'soluparts' && k.nodoAilooId !== 'soluparts') return false;
-        if (filtroOrigen === 'global' && k.nodoAilooId !== 'global') return false;
       }
       if (!q) return true;
       const texto = [
@@ -490,7 +485,7 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
           <p className={styles.subtitle}>
             {esProveedor
               ? 'Responde dudas técnicas de compatibilidad de tus repuestos. Cada respuesta le llega al cliente por WhatsApp, enseña al Agente IA y actualiza tus fichas.'
-              : 'Conecta el Agente de FácilRepuestos con soluparts_ailoo.escalamientos, global_ailoo.escalamientos y el Portal de Proveedores Locales.'}
+              : 'Conecta el Agente de FácilRepuestos con soluparts.escalamientos, los Portales de Proveedores ERP y el traspaso por WhatsApp en Mesa de Abastecimiento.'}
           </p>
         </div>
 
@@ -751,11 +746,6 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
                   </span>
                   <span>·</span>
                   <span>
-                    🟣 Global: <strong>{estadoWoo.desglosePorOrigen.global.total}</strong> (
-                    {estadoWoo.desglosePorOrigen.global.pendientes} pend.)
-                  </span>
-                  <span>·</span>
-                  <span>
                     🟢 Locales/Bodega: <strong>{estadoWoo.desglosePorOrigen.locales.total}</strong> (
                     {estadoWoo.desglosePorOrigen.locales.pendientes} pend.)
                   </span>
@@ -814,9 +804,8 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
                   setNuevoEsc((prev) => ({ ...prev, destinoSelector: e.target.value }))
                 }
               >
-                <option value="soluparts">🔵 Portal Soluparts (soluparts_ailoo.escalamientos)</option>
-                <option value="global">🟣 Portal Global (global_ailoo.escalamientos)</option>
-                <option value="prov-demo-001">🟢 Proveedor Demo (Portal Proveedor Local FRP)</option>
+                <option value="soluparts">🔵 Portal Soluparts (soluparts.escalamientos)</option>
+                <option value="prov-demo-001">🟢 Proveedor Local (Portal Proveedor ERP)</option>
               </select>
             </div>
 
@@ -1012,16 +1001,7 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
               }`}
               onClick={() => setFiltroOrigen('soluparts')}
             >
-              🔵 soluparts_ailoo
-            </button>
-            <button
-              type="button"
-              className={`${styles.pillBtn} ${
-                filtroOrigen === 'global' ? styles.pillBtnActive : ''
-              }`}
-              onClick={() => setFiltroOrigen('global')}
-            >
-              🟣 global_ailoo
+              🔵 Soluparts
             </button>
             <button
               type="button"
@@ -1030,7 +1010,7 @@ export default function EscalamientosIA({ modo = 'admin' }: Props) {
               }`}
               onClick={() => setFiltroOrigen('local')}
             >
-              🟢 Proveedores Locales
+              🟢 Proveedores ERP Locales
             </button>
           </div>
         )}

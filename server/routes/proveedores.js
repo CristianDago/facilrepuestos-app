@@ -112,6 +112,10 @@ function enriquecerProveedorLectura(p = {}) {
 }
 
 async function asegurarNodosAilooBase() {
+  // Eliminar Global como nodo Ailoo/ERP interno (Global opera únicamente como proveedor de cotización WSP si se registra en Mesa WSP)
+  await db.collection('proveedores').doc('prov-ailoo-global').delete().catch(() => null);
+  await db.collection('nodos_ailoo').doc('global').delete().catch(() => null);
+
   const nodosBase = [
     {
       id: 'prov-ailoo-soluparts',
@@ -120,45 +124,20 @@ async function asegurarNodosAilooBase() {
       contacto: 'Conexión Ailoo / BigQuery Soluparts',
       telefono: '',
       email: 'integraciones@soluparts.cl',
-      direccion: 'Dataset BigQuery: soluparts_ailoo · Retiro 15:00 hrs en Enrique Olivares 224',
+      direccion: 'Dataset BigQuery: soluparts · Retiro 15:30 hrs en Enrique Olivares 224 (corte 11:30 hrs)',
       categoria: 'Motor',
       categoriasEspecialidad: ['Motor', 'Frenos', 'Suspensión', 'Embrague', 'Carrocería', 'Eléctrico'],
       marcas: ['JAC', 'CHERY', 'HAVAL', 'GREAT WALL', 'MG', 'DFM', 'CHANGAN', 'HYUNDAI', 'KIA', 'TOYOTA'],
       marcasVehiculo: ['JAC', 'CHERY', 'HAVAL', 'GREAT WALL', 'MG', 'DFM', 'CHANGAN', 'HYUNDAI', 'KIA', 'TOYOTA'],
-      notas: 'Nodo ERP Ailoo conectado por BigQuery. Compras antes de las 12:00 se retiran a las 15:00 hrs del mismo día en Enrique Olivares 224.',
+      notas: 'Nodo ERP Ailoo conectado por BigQuery. Compras antes de las 11:30 hrs en nuestro portal se retiran desde las 15:30 hrs del mismo día en Enrique Olivares 224.',
       tipoIntegracion: 'nodo_ailoo',
       nodoAilooId: 'soluparts',
       canalWspActivo: false,
-      margenPct: 28,
+      margenPct: 0,
       prefijoSku: 'FRP-SOL',
       configApi: {
         tipo: 'bigquery_ailoo',
-        endpointUrl: 'bigquery://soluparts_ailoo.inventario',
-        frecuenciaSync: 'incremental_delta',
-        estadoConexion: 'conectado',
-      },
-    },
-    {
-      id: 'prov-ailoo-global',
-      nombre: 'Global Repuestos (Nodo Enterprise Ailoo)',
-      rut: '76.940.220-8',
-      contacto: 'Conexión Ailoo / BigQuery Global',
-      telefono: '',
-      email: 'integraciones@globalrepuestos.cl',
-      direccion: 'Dataset BigQuery: global_ailoo · Retiro 1h 30m en Enrique Olivares 224',
-      categoria: 'Motor',
-      categoriasEspecialidad: ['Motor', 'Distribución', 'Suspensión', 'Eléctrico', 'Embrague'],
-      marcas: ['PEUGEOT', 'CITROËN', 'TOYOTA', 'MITSUBISHI', 'NISSAN', 'VOLKSWAGEN', 'FORD'],
-      marcasVehiculo: ['PEUGEOT', 'CITROËN', 'TOYOTA', 'MITSUBISHI', 'NISSAN', 'VOLKSWAGEN', 'FORD'],
-      notas: 'Nodo ERP Ailoo conectado por BigQuery con sincronización Delta.',
-      tipoIntegracion: 'nodo_ailoo',
-      nodoAilooId: 'global',
-      canalWspActivo: false,
-      margenPct: 30,
-      prefijoSku: 'FRP-GLB',
-      configApi: {
-        tipo: 'bigquery_ailoo',
-        endpointUrl: 'bigquery://global_ailoo.inventario',
+        endpointUrl: 'bigquery://soluparts.v_agente_catalogo',
         frecuenciaSync: 'incremental_delta',
         estadoConexion: 'conectado',
       },
@@ -183,7 +162,9 @@ router.get('/', async (req, res, next) => {
     const snap = await db.collection('proveedores')
       .orderBy('nombre', 'asc')
       .get();
-    const proveedores = snap.docs.map(doc => enriquecerProveedorLectura({ id: doc.id, ...doc.data() }));
+    const proveedores = snap.docs
+      .filter(doc => doc.id !== 'prov-ailoo-global' && doc.data()?.nodoAilooId !== 'global')
+      .map(doc => enriquecerProveedorLectura({ id: doc.id, ...doc.data() }));
     res.json({ success: true, data: proveedores });
   } catch (error) {
     next(error);

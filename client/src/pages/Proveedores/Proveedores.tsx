@@ -438,7 +438,7 @@ export default function Proveedores() {
             {totalApis} Conectores API
           </div>
           <div style={{ fontSize: '0.78rem', color: '#475569', marginTop: 4 }}>
-            Integra soluciones externas (Soluparts Ailoo, Global Ailoo, APIs REST JSON/XML) con prefijo SKU propio.
+            Integra soluciones externas (Soluparts Ailoo, APIs REST JSON/XML) con prefijo SKU propio.
           </div>
         </div>
 

@@ -143,11 +143,14 @@ async function notificarRespuestaEscalamientoAClienteWsp(esc, updateData) {
 router.use(requireAuth);
 
 // ─── GET /api/escalamientos/nodos ───────────────────────────────────────
-// Lista los nodos Ailoo configurados (soluparts_ailoo, global_ailoo, etc.)
+// Lista los nodos Ailoo configurados (soluparts)
 router.get('/nodos', async (req, res, next) => {
   try {
+    await db.collection('nodos_ailoo').doc('global').delete().catch(() => null);
     const snap = await db.collection('nodos_ailoo').get();
-    const nodos = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    const nodos = snap.docs
+      .filter((doc) => doc.id !== 'global')
+      .map((doc) => ({ id: doc.id, ...doc.data() }));
     res.json({ success: true, data: nodos });
   } catch (err) {
     next(err);

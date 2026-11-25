@@ -1361,14 +1361,20 @@ function construirPayload(
 export async function obtenerEstadoColaWooCommerce() {
   const configured = isWooConfigured();
   const snap = await db.collection('inventario').get();
-  const items = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  const items = snap.docs
+    .map(doc => ({ id: doc.id, ...doc.data() }))
+    .filter(
+      i =>
+        i.nodoAilooId !== 'global' &&
+        i.proveedorId !== 'global' &&
+        !String(i.skuPublicoFrp || '').toUpperCase().startsWith('FRP-GLB-')
+    );
 
   const pendientes = items.filter(i => i.needsWooSync === true || !i.lastWooSyncAt);
   const sincronizados = items.length - pendientes.length;
 
   const desglosePorOrigen = {
     soluparts: { total: 0, pendientes: 0 },
-    global: { total: 0, pendientes: 0 },
     locales: { total: 0, pendientes: 0 },
   };
 
@@ -1377,9 +1383,7 @@ export async function obtenerEstadoColaWooCommerce() {
     const bucket =
       item.nodoAilooId === 'soluparts' || item.proveedorId === 'soluparts'
         ? 'soluparts'
-        : item.nodoAilooId === 'global' || item.proveedorId === 'global'
-          ? 'global'
-          : 'locales';
+        : 'locales';
 
     desglosePorOrigen[bucket].total += 1;
     if (isPendiente) {

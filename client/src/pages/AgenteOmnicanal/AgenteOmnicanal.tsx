@@ -59,7 +59,7 @@ function calcularResumenLogisticoSesion(carrito: CandidatoInventarioCascada[] = 
   const esLunesAViernes = ['lunes', 'martes', 'miércoles', 'miercoles', 'jueves', 'viernes'].includes(
     diaStr
   );
-  const antesDeLas12 = minutosDia < 12 * 60;
+  const antesDeLas1130 = minutosDia < 11 * 60 + 30;
   const enVentanaDeliveryHoy = esLunesAViernes && minutosDia >= 9 * 60 && minutosDia < 16 * 60;
 
   let tieneSoluparts = false;
@@ -75,9 +75,8 @@ function calcularResumenLogisticoSesion(carrito: CandidatoInventarioCascada[] = 
       tieneSoluparts = true;
     } else if (
       origen === 'portal_proveedor_local' ||
-      origen === 'global_ailoo' ||
       origen === 'mesa_whatsapp' ||
-      sku.startsWith('FRP-GLB-') ||
+      sku.startsWith('FRP-LOC-') ||
       sku.startsWith('FRP-WSP-')
     ) {
       tienePortalProveedor = true;
@@ -88,25 +87,25 @@ function calcularResumenLogisticoSesion(carrito: CandidatoInventarioCascada[] = 
 
   let reglaRetiroTitulo = 'Según origen del repuesto';
   let reglaRetiroDetalle =
-    'Stock propio: Inmediato · Portal proveedor: 1h 30m · Soluparts: 15:00 hrs (compras antes de las 12:00 mismo día; después de las 12:00 al día siguiente a las 15:00 hrs).';
+    'Stock propio: Retiro y pago inmediato · Soluparts (portal web): compras antes de 11:30 hrs retiro el mismo día desde 15:30 hrs (después de 11:30 hrs retiro al día siguiente desde 15:30 hrs) · Otros: Despacho según dimensión.';
 
   if (tieneSoluparts) {
     reglaRetiroTitulo =
-      esLunesAViernes && antesDeLas12
-        ? 'Retiro HOY desde las 15:00 hrs (3:00 PM)'
-        : 'Retiro desde las 15:00 hrs (3:00 PM) del día siguiente';
+      esLunesAViernes && antesDeLas1130
+        ? 'Retiro HOY desde las 15:30 hrs (3:30 PM) comprando antes de las 11:30 hrs'
+        : 'Retiro desde las 15:30 hrs (3:30 PM) del día siguiente';
     reglaRetiroDetalle =
-      esLunesAViernes && antesDeLas12
-        ? 'Incluye repuesto Soluparts comprado antes de las 12:00 hrs → Disponible hoy a las 3:00 de la tarde en Enrique Olivares 224.'
-        : 'Incluye repuesto Soluparts después de las 12:00 hrs (hasta las 12:00 del día siguiente) → Disponible desde las 3:00 de la tarde en Enrique Olivares 224.';
+      esLunesAViernes && antesDeLas1130
+        ? 'Comprando en nuestro portal antes de las 11:30 hrs → Disponible hoy a partir de las 15:30 hrs (3:30 PM) en Enrique Olivares 224 (o despacho según dimensión).'
+        : 'Compras posteriores a las 11:30 hrs pasan al corte de antes de las 12:00 del día siguiente → Retiro desde las 15:30 hrs (3:30 PM) en Enrique Olivares 224 (o despacho según dimensión).';
   } else if (tienePortalProveedor) {
-    reglaRetiroTitulo = 'Retiro en 1 hora 30 minutos (1h 30m)';
+    reglaRetiroTitulo = 'Despacho según dimensión en Santiago y Chile';
     reglaRetiroDetalle =
-      'Repuesto de portal proveedor asociado → Listo para retiro en 1h 30m en Enrique Olivares 224, La Florida.';
+      'Repuesto de proveedor externo / Mesa WSP → Se calcula y entrega cotización de despacho según dimensión comprando en facilrepuestos.cl.';
   } else if (tieneStockPropio && carrito.length > 0) {
-    reglaRetiroTitulo = 'Retiro Inmediato / Automático';
+    reglaRetiroTitulo = 'Retiro y Pago Inmediato en Tienda';
     reglaRetiroDetalle =
-      '100% en nuestro stock directo en tienda → Retiro inmediato en Enrique Olivares 224, La Florida.';
+      '100% en nuestro stock directo en tienda → Retiro y pago inmediato en Enrique Olivares 224, La Florida.';
   }
 
   const reglaDeliveryTitulo = enVentanaDeliveryHoy
@@ -1590,10 +1589,10 @@ export default function AgenteOmnicanal() {
                           c.origen === 'soluparts_ailoo' ||
                           String(c.skuPublicoFrp || '').startsWith('FRP-SOL-');
                         const etiquetaRetiroItem = esSol
-                          ? 'Soluparts → Retiro 15:00 hrs (corte 12:00)'
+                          ? 'Soluparts → Retiro desde 15:30 hrs (compras antes de 11:30 hrs)'
                           : c.origen === 'stock_propio'
-                            ? 'Stock Propio → Retiro Inmediato'
-                            : 'Portal Proveedor → Retiro en 1h 30m';
+                            ? 'Stock Propio → Retiro y Pago Inmediato'
+                            : 'Despacho según dimensión en Santiago y Chile';
 
                         return (
                           <div key={c.id || c.skuPublicoFrp} className={styles.candCard}>

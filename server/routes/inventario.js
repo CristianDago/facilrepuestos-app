@@ -141,10 +141,17 @@ router.get('/', requireAuthOrLector, async (req, res, next) => {
       return res.json({ success: true, data });
     }
 
-    let items = snap.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    let items = snap.docs
+      .map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+      .filter(
+        i =>
+          i.nodoAilooId !== 'global' &&
+          i.proveedorId !== 'global' &&
+          !String(i.skuPublicoFrp || '').toUpperCase().startsWith('FRP-GLB-')
+      );
 
     // Un proveedor solo puede ver sus propios repuestos; admin/mecánico ven todo.
     if (req.user?.rol === 'proveedor') {

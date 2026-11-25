@@ -268,89 +268,6 @@ const CATALOGO_SEMILLA_NODOS = {
       ubicacion_bodega: 'Bodega Central Soluparts - Gran Avenida',
     },
   ],
-  global: [
-    {
-      id_ailoo: 55210,
-      codigo: 'GLB-55210',
-      oem: '333202',
-      nombre: 'AMORTIGUADOR DELANTERO DERECHO GAS (3 OREJAS ABS) CHEVROLET SAIL 1.5',
-      categoria: 'SUSPENSIÓN',
-      tipo_pieza: 'AMORTIGUADOR',
-      posicion: 'DELANTERA',
-      lado: 'DERECHO',
-      marca_repuesto: 'GABRIEL',
-      origen_pais: 'EE.UU.',
-      marcas_compatibles: ['CHEVROLET'],
-      modelos_por_marca: {
-        CHEVROLET: ['SAIL'],
-      },
-      anio_desde: 2016,
-      anio_hasta: 2023,
-      stock_disponible: 11,
-      costo_neto: 38000,
-      ubicacion_bodega: 'CD Global Repuestos - Estante S4',
-    },
-    {
-      id_ailoo: 55211,
-      codigo: 'GLB-55211',
-      oem: '333203',
-      nombre: 'AMORTIGUADOR DELANTERO IZQUIERDO GAS (3 OREJAS ABS) CHEVROLET SAIL 1.5',
-      categoria: 'SUSPENSIÓN',
-      tipo_pieza: 'AMORTIGUADOR',
-      posicion: 'DELANTERA',
-      lado: 'IZQUIERDO',
-      marca_repuesto: 'GABRIEL',
-      origen_pais: 'EE.UU.',
-      marcas_compatibles: ['CHEVROLET'],
-      modelos_por_marca: {
-        CHEVROLET: ['SAIL'],
-      },
-      anio_desde: 2016,
-      anio_hasta: 2023,
-      stock_disponible: 10,
-      costo_neto: 38000,
-      ubicacion_bodega: 'CD Global Repuestos - Estante S4',
-    },
-    {
-      id_ailoo: 41098,
-      codigo: 'GLB-41098',
-      oem: '21410-1HS0A',
-      nombre: 'RADIADOR DE AGUA ALUMINIO BRAZADO NISSAN VERSA / MARCH 1.6 HR16DE',
-      categoria: 'MOTOR',
-      tipo_pieza: 'RADIADOR',
-      marca_repuesto: 'KOYORAD',
-      origen_pais: 'JAPÓN',
-      marcas_compatibles: ['NISSAN'],
-      modelos_por_marca: {
-        NISSAN: ['MARCH', 'NOTE'],
-      },
-      anio_desde: 2012,
-      anio_hasta: 2021,
-      stock_disponible: 7,
-      costo_neto: 64000,
-      ubicacion_bodega: 'CD Global Repuestos - Estante R2',
-    },
-    {
-      id_ailoo: 48920,
-      codigo: 'GLB-48920',
-      oem: '25100-2B700',
-      nombre: 'BOMBA DE AGUA ORIGINAL GMB HYUNDAI ACCENT RB / KIA RIO 4 1.4 - 1.6 GAMMA',
-      categoria: 'MOTOR',
-      tipo_pieza: 'BOMBA DE AGUA',
-      marca_repuesto: 'GMB',
-      origen_pais: 'COREA',
-      marcas_compatibles: ['HYUNDAI', 'KIA'],
-      modelos_por_marca: {
-        HYUNDAI: ['ACCENT'],
-        KIA: ['RIO', 'CERATO'],
-      },
-      anio_desde: 2012,
-      anio_hasta: 2022,
-      stock_disponible: 18,
-      costo_neto: 29500,
-      ubicacion_bodega: 'CD Global Repuestos - Estante M1',
-    },
-  ],
 };
 
 /**
@@ -1033,43 +950,33 @@ export async function sincronizarCatalogoNodoAiloo(nodoId, { forzar = false } = 
 }
 
 /**
- * Ejecuta la ingesta Delta de catálogo para todos los nodos Ailoo activos (`soluparts`, `global`).
+ * Ejecuta la ingesta Delta de catálogo para los nodos Ailoo activos (`soluparts`).
+ * Global Repuestos queda excluido como nodo Ailoo/ERP interno ya que opera por cotización WhatsApp en la Mesa de Abastecimiento.
  */
 export async function sincronizarTodosLosNodosAiloo({ forzar = false } = {}) {
+  // Eliminar cualquier nodo 'global' residual en nodos_ailoo
+  await db.collection('nodos_ailoo').doc('global').delete().catch(() => null);
+
   let snap = await db.collection('nodos_ailoo').get();
   if (snap.empty) {
     const ahora = new Date().toISOString();
-    await Promise.all([
-      db.collection('nodos_ailoo').doc('soluparts').set({
-        nombre: 'Soluparts',
-        projectId: 'soluparts-mostrador-prod',
-        datasetId: 'soluparts',
-        tablaEscalamientos: 'escalamientos',
-        tablaConocimiento: 'conocimiento_aprendido',
-        tablaCatalogo: 'v_agente_catalogo',
-        prefijoSku: 'FRP-SOL',
-        margenPct: 0,
-        activo: true,
-        updatedAt: ahora,
-      }),
-      db.collection('nodos_ailoo').doc('global').set({
-        nombre: 'Global Repuestos',
-        projectId: 'global-mostrador-prod',
-        datasetId: 'global_ailoo',
-        tablaEscalamientos: 'escalamientos',
-        tablaConocimiento: 'conocimiento_aprendido',
-        tablaCatalogo: 'v_agente_catalogo',
-        prefijoSku: 'FRP-GLB',
-        margenPct: 28,
-        activo: true,
-        updatedAt: ahora,
-      }),
-    ]);
+    await db.collection('nodos_ailoo').doc('soluparts').set({
+      nombre: 'Soluparts',
+      projectId: 'soluparts-mostrador-prod',
+      datasetId: 'soluparts',
+      tablaEscalamientos: 'escalamientos',
+      tablaConocimiento: 'conocimiento_aprendido',
+      tablaCatalogo: 'v_agente_catalogo',
+      prefijoSku: 'FRP-SOL',
+      margenPct: 0,
+      activo: true,
+      updatedAt: ahora,
+    });
     snap = await db.collection('nodos_ailoo').get();
   }
   const nodos = snap.docs
     .map(d => ({ id: d.id, ...d.data() }))
-    .filter(n => n.activo !== false);
+    .filter(n => n.activo !== false && n.id !== 'global');
 
   const resultados = [];
   for (const nodo of nodos) {

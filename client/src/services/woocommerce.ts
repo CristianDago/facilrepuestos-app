@@ -47,7 +47,6 @@ export interface EstadoColaWooCommerce {
   sincronizados: number;
   desglosePorOrigen: {
     soluparts: { total: number; pendientes: number };
-    global: { total: number; pendientes: number };
     locales: { total: number; pendientes: number };
   };
   itemsPendientes: ItemPendienteWoo[];

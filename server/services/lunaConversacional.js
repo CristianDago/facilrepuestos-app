@@ -413,8 +413,17 @@ export async function conducirFlujoCompraDeterministico({
   if (esComandoComprar) {
     const todosPermitenLaFlorida =
       carritoActual.length > 0 && carritoActual.every((it) => esItemStockPropioOlivares224(it));
-    // Regla estricta: solo stock propio en Enrique Olivares 224 permite retiro/pago en La Florida; todo lo demás va con Despacho
-    const modalidadInicial = !todosPermitenLaFlorida
+    const todosPermitenRetiroSolupartsOPropio =
+      carritoActual.length > 0 &&
+      carritoActual.every(
+        (it) =>
+          esItemStockPropioOlivares224(it) ||
+          it.nodoAilooId === 'soluparts' ||
+          it.origen === 'soluparts_ailoo' ||
+          String(it.skuPublicoFrp || '').toUpperCase().startsWith('FRP-SOL-')
+      );
+    // Si tiene productos que no son ni stock propio ni Soluparts (ej. Mesa WSP o portal proveedor externo), va 100% con Despacho
+    const modalidadInicial = !todosPermitenRetiroSolupartsOPropio
       ? 'despacho_domicilio'
       : sesion.modalidadEntrega || null;
     const comunaInicial = sesion.comunaCliente || null;
@@ -434,6 +443,13 @@ export async function conducirFlujoCompraDeterministico({
         datosCliente: {},
         actualizadoEn: new Date().toISOString(),
       };
+      const textoExplicacionRetiro = todosPermitenLaFlorida
+        ? `📍 Como este producto está en nuestro stock local de **Enrique Olivares 224, La Florida**, ¿prefieres **Retiro y pago en nuestra tienda de La Florida** o **Despacho a domicilio**?`
+        : `📍 Comprando en nuestro portal **facilrepuestos.cl**, ¿prefieres **Retiro sin costo en Enrique Olivares 224, La Florida** (${
+            promesaSla.esLunesAViernes && promesaSla.antesDeLas1130
+              ? 'disponible hoy mismo desde las 15:30 hrs comprando antes de las 11:30 hrs'
+              : 'disponible desde las 15:30 hrs del día hábil siguiente'
+          }) o **Despacho a domicilio** calculado según dimensión en Santiago y Chile?`;
       return {
         interceptado: true,
         flujoCompra: nuevoEstado,
@@ -441,7 +457,7 @@ export async function conducirFlujoCompraDeterministico({
         respuestaTexto:
           `¡Perfecto! 🛒 Aquí tienes el link directo de tu repuesto en nuestra tienda **facilrepuestos.cl**:\n${linksTiendaProductos}\n• **Subtotal repuestos:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**` +
           `${notaFaltanteEnBusqueda}\n\n` +
-          `📍 Como este producto está en nuestro stock local de **Enrique Olivares 224, La Florida**, ¿prefieres **Retiro y pago en nuestra tienda de La Florida** o **Despacho a domicilio**?`,
+          textoExplicacionRetiro,
         accionTomada: 'flujo_compra_paso_modalidad',
       };
     }
@@ -930,10 +946,11 @@ REGLAS INQUEBRANTABLES (HEREDADAS DE LUNA SOLUPARTS):
 4. Si el cliente dio la patente o el vehículo pero aún no dice qué repuesto necesita, confírmale el vehículo identificado y pregúntale qué pieza anda buscando.
 5. Cuando ofrezcas productos con stock confirmado en [DATOS VERIFICADOS DEL SISTEMA]:
    - Muestra siempre el nombre del producto, su código SKU exacto entre backticks (ej. \`FRP-...\`), su precio final CON IVA incluido y el link directo del producto en nuestra tienda (\`https://facilrepuestos.cl/?p=...\`). NUNCA envíes links de pago sueltos: siempre envía el link del producto en la tienda facilrepuestos.cl (sin tilde).
-   - REGLA ESTRICTA DE PAGO Y DESPACHO:
-     * Los ÚNICOS productos que pueden retirarse y pagarse presencialmente en nuestra tienda de **Enrique Olivares 224, La Florida** son los de nuestro stock local propio (\`FRP-OWN-*\` / \`DRM-*\`).
-     * Todo el resto de los productos (\`FRP-SOL-*\`, \`FRP-GLB-*\`, \`FRP-WSP-*\`) son **100% con Despacho a domicilio** (con tarifa pre-calculada en Santiago por anillos y en Regiones por talla) y se compran directamente desde el link del producto en **facilrepuestos.cl**.
-6. NUNCA menciones nombres de proveedores mayoristas internos (jamás nombres a Soluparts, Global Repuestos ni bodegas externas). Todo el stock y la gestión son de facilrepuestos.cl (escrito siempre sin tilde cuando lleva .cl).
+   - REGLA ESTRICTA DE PAGO, RETIRO Y DESPACHO:
+     * Los ÚNICOS productos que pueden pagarse presencialmente en nuestra tienda de **Enrique Olivares 224, La Florida** (con retiro inmediato) son los de nuestro stock local propio (\`FRP-OWN-*\` / \`DRM-*\`).
+     * Para los productos de línea bodega central (\`FRP-SOL-*\`), siempre se compran desde el link en **facilrepuestos.cl**: si el cliente compra **antes de las 11:30 hrs del día** en nuestro portal, se le puede ofrecer **Retiro en Enrique Olivares 224 a partir de las 15:30 hrs (3:30 PM) del mismo día**; si compra **después de las 11:30 hrs**, pasa para las compras de antes de las 12:00 del día siguiente y puede retirar **desde las 15:30 hrs (3:30 PM) del día siguiente** en Enrique Olivares 224; o bien se calcula y entrega cotización de **Despacho según dimensión en Santiago y Chile**.
+     * Los productos de otros proveedores ERP (\`FRP-LOC-*\`, \`FRP-TND-*\`) y productos temporales de Mesa WSP (\`FRP-WSP-*\`) van con **Despacho calculado según dimensión en Santiago y Chile** comprando desde el link en **facilrepuestos.cl**.
+6. NUNCA menciones nombres de proveedores mayoristas internos (jamás nombres a Soluparts ni bodegas externas). Todo el stock y la gestión son de facilrepuestos.cl (escrito siempre sin tilde cuando lleva .cl).
 7. Sé breve y directo (máximo 3 a 4 líneas). No divagues ni mezcles preguntas de pasos futuros.
 ${bloqueContextoEditablePortal ? `\nDIRECTRICES Y CONTEXTO VIVO DE SUBAGENTES (EDITADO EN PORTAL):\n${bloqueContextoEditablePortal}` : ''}`;
 

@@ -13,7 +13,11 @@
  */
 
 import { perfilarNecesidadYComunaCliente, construirRespuestaAgente1Recepcion } from './agente1Recepcion.js';
-import { clasificarCandidatosErpPorReglaOrigen } from './agente2BuscadorErp.js';
+import {
+  clasificarCandidatosErpPorReglaOrigen,
+  resolverRutaEscalamientoAgente2,
+  esItemSoluparts,
+} from './agente2BuscadorErp.js';
 import { evaluarLogisticaYDespachoAgente3 } from './agente3LogisticaYProveedores.js';
 import { seleccionarTop3ProveedoresMesaWsp } from './agente4MesaYPublicadorTemporal.js';
 import { fusionarPedidoAdicionalEnCarrito } from './agente6PedidosAdicionales.js';
@@ -22,6 +26,8 @@ export {
   perfilarNecesidadYComunaCliente,
   construirRespuestaAgente1Recepcion,
   clasificarCandidatosErpPorReglaOrigen,
+  resolverRutaEscalamientoAgente2,
+  esItemSoluparts,
   evaluarLogisticaYDespachoAgente3,
   seleccionarTop3ProveedoresMesaWsp,
   fusionarPedidoAdicionalEnCarrito,

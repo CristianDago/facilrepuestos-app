@@ -56,6 +56,7 @@ import {
   seleccionarTop3ProveedoresMesaWsp,
   fusionarPedidoAdicionalEnCarrito,
   evaluarLogisticaYDespachoAgente3,
+  resolverRutaEscalamientoAgente2,
 } from '../agents/orquestadorRepuestin.js';
 import {
   elegirMejorOfertaMesaWsp,
@@ -120,9 +121,16 @@ async function obtenerCatalogoEInteligenciaCacheada({ forzar = false } = {}) {
     db.collection(COLECCION_INVENTARIO).get(),
   ]);
   const todasReglas = conSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  // Excluir cualquier ítem antiguo de Global (ya que Global es únicamente proveedor de cotización WSP y no de Ailoo/ERP interno)
   const itemsInventario = invSnap.docs
     .map((d) => ({ id: d.id, ...d.data() }))
-    .filter((it) => !it.ocultarEnTienda);
+    .filter(
+      (it) =>
+        !it.ocultarEnTienda &&
+        it.nodoAilooId !== 'global' &&
+        it.proveedorId !== 'global' &&
+        !String(it.skuPublicoFrp || '').toUpperCase().startsWith('FRP-GLB-')
+    );
 
   cacheCatalogoAgente = {
     ...cacheCatalogoAgente,
@@ -2373,13 +2381,11 @@ async function ejecutarCascadaAgenteOmnicanal({
         const origen =
           item.nodoAilooId === 'soluparts'
             ? 'soluparts_ailoo'
-            : item.nodoAilooId === 'global'
-              ? 'global_ailoo'
-              : item.origenCatalogo === 'mesa_whatsapp_etapa3'
-                ? 'mesa_whatsapp'
-                : item.proveedorId
-                  ? 'portal_proveedor_local'
-                  : 'stock_propio';
+            : item.origenCatalogo === 'mesa_whatsapp_etapa3' || item.esProductoTemporalWsp
+              ? 'mesa_whatsapp'
+              : item.proveedorId
+                ? 'portal_proveedor_local'
+                : 'stock_propio';
         const skuPub = item.skuPublicoFrp || `FRP-LOC-${item.codigo}`;
         const wooProductId = Number(item.wooProductId) || null;
         const urlProductoWoo = wooProductId
@@ -2403,11 +2409,10 @@ async function ejecutarCascadaAgenteOmnicanal({
           proveedorId: item.proveedorId || null,
           proveedorNombre:
             item.proveedorNombre ||
+            item.proveedor ||
             (item.nodoAilooId === 'soluparts'
               ? 'Soluparts (Ailoo Enterprise)'
-              : item.nodoAilooId === 'global'
-                ? 'Global Repuestos (Ailoo Enterprise)'
-                : 'Bodega Local FácilRepuestos'),
+              : 'Bodega Local FácilRepuestos'),
           stock: Number(item.stock || 0),
           cantidad: 1,
           precioCostoProveedor: costo,
@@ -2529,16 +2534,17 @@ async function ejecutarCascadaAgenteOmnicanal({
     }
   }
 
-  // ─── RAMA B: ESCALAMIENTO EXPERTO AUTOMÁTICO CON DEDUPLICACIÓN (ETAPA 1) ──
-  // REGLA ANTI-BYPASS: Hacia el proveedor nunca se envía nombre ni teléfono del cliente (solo FácilRepuestos SpA),
-  // y hacia el cliente jamás se menciona el nombre o dirección del proveedor (Soluparts, Global, etc.).
+  // ─── RAMA B: ESCALAMIENTO EXPERTO AUTOMÁTICO CON ENRUTAMIENTO POR ORIGEN (AGENTE 2) ──
+  // REGLA DE TRES CANALES:
+  //   1. Si el producto es de Soluparts -> se carga en Soluparts (`soluparts-mostrador-prod.soluparts.escalamientos`).
+  //   2. Si el producto es de otro proveedor con Portal ERP -> se carga en el Portal ERP de ese proveedor (`tipoDestino = 'proveedor_local'`, `proveedorId`).
+  //   3. Si es una cotización de un tercero por WSP de la Mesa de Abastecimiento -> se traspasa el escalamiento por WhatsApp desde el +56950960294 a esos números específicos.
   if (accionTomada === 'escalamiento_experto') {
-    const mejorCandidato = candidatosEncontradosGlobal[0] || null;
-    const nodoAilooId =
-      mejorCandidato?.nodoAilooId ||
-      (vehiculo?.marca === 'PEUGEOT' || vehiculo?.marca === 'CITROEN' || vehiculo?.marca === 'TOYOTA'
-        ? 'global'
-        : 'soluparts');
+    const mejorCandidato = candidatosEncontradosGlobal[0] || carritoActual[0] || null;
+    const rutaEscalamiento = resolverRutaEscalamientoAgente2({
+      mejorCandidato,
+      solicitudesWspAbiertas: sesion.solicitudesWspAbiertas || [],
+    });
 
     // Deduplicación anti-spam (Mejora C25/C36 Luna): si ya existe un escalamiento abierto en la sesión para el mismo repuesto/vehículo, reutilizarlo
     const existente = (sesion.escalamientosAbiertos || []).find(
@@ -2551,8 +2557,67 @@ async function ejecutarCascadaAgenteOmnicanal({
       escalamientoCreado = existente;
       respuestaTexto =
         `⏳ Estamos validando con nuestros proveedores internos para tu **${etiquetaVehiculo}**; apenas tengamos confirmado tu repuesto te avisaremos por este mismo WhatsApp.`;
+    } else if (rutaEscalamiento.canalEscalamiento === 'traspaso_wsp_mesa') {
+      // Canal 3: Cotización de un tercero por WhatsApp de la Mesa de Abastecimiento -> Traspasar el escalamiento por WhatsApp a esos números específicos
+      const ticketRef = `ESC-WSP-${Math.floor(1000 + Math.random() * 9000)}`;
+      const dudaLimpia = sanitizarTextoParaProveedor(textoCliente || transcripcionAudio || dudaTecnica.motivo);
+      const provSnap = await db.collection(COLECCION_PROVEEDORES).get();
+      const todosProveedores = provSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((p) => p.activo !== false && p.canalWspActivo === true && p.telefono);
+
+      // Si había una solicitud WSP activa o el producto temporal indica el proveedorId, usar esos números específicos; si no, seleccionar el Top 3 de la Mesa WSP
+      let destinatariosWsp = [];
+      if (mejorCandidato?.proveedorId) {
+        destinatariosWsp = todosProveedores.filter((p) => p.id === mejorCandidato.proveedorId);
+      }
+      if (destinatariosWsp.length === 0 && Array.isArray(sesion.solicitudesWspAbiertas) && sesion.solicitudesWspAbiertas.length > 0) {
+        const ultSolId = sesion.solicitudesWspAbiertas[sesion.solicitudesWspAbiertas.length - 1]?.id;
+        if (ultSolId) {
+          const solDoc = await db.collection(COLECCION_SOLICITUDES_WSP).doc(ultSolId).get().catch(() => null);
+          if (solDoc?.exists) {
+            const contactos = solDoc.data()?.proveedoresContactados || [];
+            destinatariosWsp = contactos
+              .filter((c) => c.telefono)
+              .map((c) => ({ id: c.proveedorId, nombre: c.proveedorNombre, telefono: c.telefono }));
+          }
+        }
+      }
+      if (destinatariosWsp.length === 0) {
+        destinatariosWsp = seleccionarTop3ProveedoresMesaWsp({
+          proveedores: todosProveedores,
+          marcaVehiculo: vehiculo?.marca || '',
+          categoriaRepuesto: categoria || '',
+          comunaCliente: sesion.comunaCliente || '',
+        });
+      }
+
+      const textoTraspasoWsp =
+        `Estimado, sobre ${mejorCandidato?.nombre || resumenRepuesto} para ${etiquetaVehiculo}, necesitamos confirmar un detalle técnico: "${dudaLimpia}". ¿Me confirmas por favor si aplica?`;
+
+      for (const dest of destinatariosWsp) {
+        if (!dest.telefono) continue;
+        await enviarMensajeMesaAbastecimientoWhatsapp({
+          telefonoDestino: dest.telefono,
+          texto: textoTraspasoWsp,
+        }).catch(() => null);
+      }
+
+      escalamientoCreado = {
+        id: ticketRef,
+        ticketRef,
+        destino: `WhatsApp Proveedores Mesa (${destinatariosWsp.map((d) => d.nombre).join(', ') || '+56950960294'})`,
+        candidatoSku: mejorCandidato?.skuPublicoFrp || '',
+        resumenRepuesto,
+        patente: vehiculo?.patente || '',
+      };
+
+      respuestaTexto =
+        `🚗 Ya le traspasamos tu consulta técnica directamente por WhatsApp al proveedor especialista para tu **${etiquetaVehiculo}**. Apenas nos confirme te avisamos por aquí.`;
     } else {
-      const esNodoAiloo = Boolean(mejorCandidato ? mejorCandidato.nodoAilooId : true);
+      // Canal 1 (Soluparts -> soluparts-mostrador-prod.soluparts.escalamientos) o Canal 2 (Otro proveedor ERP -> su propio Portal Proveedor)
+      const esNodoSoluparts = rutaEscalamiento.canalEscalamiento === 'nodo_soluparts';
+      const nodoAilooId = esNodoSoluparts ? 'soluparts' : null;
       const ticketRef = `ESC-${Math.floor(100000 + Math.random() * 900000)}`;
       const mensajeSanitizado = sanitizarTextoParaProveedor(textoCliente || transcripcionAudio);
       const audioSanitizado = sanitizarTextoParaProveedor(transcripcionAudio || '');
@@ -2598,19 +2663,15 @@ async function ejecutarCascadaAgenteOmnicanal({
         canalOrigen: sesion.canal === 'web_cliente' ? 'web' : 'whatsapp',
         estado: 'pendiente',
         prioridad: 'alta',
-        tipoDestino: esNodoAiloo ? 'nodo_ailoo' : 'proveedor_local',
-        nodoAilooId: esNodoAiloo ? nodoAilooId : null,
-        datasetDestino: esNodoAiloo
-          ? nodoAilooId === 'soluparts'
-            ? 'soluparts-mostrador-prod.soluparts.escalamientos'
-            : `${nodoAilooId}_ailoo.escalamientos`
+        tipoDestino: esNodoSoluparts ? 'nodo_ailoo' : 'proveedor_local',
+        nodoAilooId,
+        datasetDestino: esNodoSoluparts
+          ? 'soluparts-mostrador-prod.soluparts.escalamientos'
           : null,
-        proveedorId: !esNodoAiloo ? mejorCandidato?.proveedorId || 'prov-demo-001' : null,
-        proveedorNombre: esNodoAiloo
-          ? nodoAilooId === 'global'
-            ? 'Global Repuestos (Ailoo Enterprise)'
-            : 'Soluparts (Ailoo Enterprise)'
-          : mejorCandidato?.proveedorNombre || 'Proveedor Local FácilRepuestos',
+        proveedorId: esNodoSoluparts ? 'soluparts' : rutaEscalamiento.proveedorId,
+        proveedorNombre: esNodoSoluparts
+          ? 'Soluparts (Ailoo Enterprise)'
+          : rutaEscalamiento.proveedorNombre,
         patente: vehiculo?.patente || '',
         vinVehiculo: vehiculo?.vin || '',
         marcaVehiculo: vehiculo?.marca || 'POR CONFIRMAR',
@@ -2634,15 +2695,12 @@ async function ejecutarCascadaAgenteOmnicanal({
 
       const escRef = await db.collection(COLECCION_ESCALAMIENTOS).add(nuevoEsc);
 
-      if (esNodoAiloo) {
+      if (esNodoSoluparts) {
         await despacharEscalamientoANodoAiloo(
           {
-            id: nodoAilooId,
-            projectId:
-              nodoAilooId === 'soluparts'
-                ? 'soluparts-mostrador-prod'
-                : `${nodoAilooId}-mostrador-prod`,
-            datasetId: nodoAilooId === 'soluparts' ? 'soluparts' : `${nodoAilooId}_ailoo`,
+            id: 'soluparts',
+            projectId: 'soluparts-mostrador-prod',
+            datasetId: 'soluparts',
             tablaEscalamientos: 'escalamientos',
           },
           { id: escRef.id, ...nuevoEsc }

@@ -130,57 +130,127 @@ export function extraerOfertaDesdeMensajeWsp({
     }
   }
 
-  // 3. Determinar si el precio mencionado venía con IVA incluido para normalizarlo a NETO
-  const mencionaConIva = /\b(con\s+iva|iva\s+incluido|bruto)\b/i.test(lower) && !/\b(mas\s+iva|\+\s*iva|neto)\b/i.test(lower);
+  // 3. Determinar si el proveedor aclaró explícitamente si es + IVA (neto) o con IVA incluido
+  const mencionaMasIva = /\b(mas\s+iva|m[aá]s\s+iva|\+\s*iva|neto)\b/i.test(lower);
+  const mencionaConIvaExplicito = /\b(con\s+iva|iva\s+incluido|iva\s+inc|bruto)\b/i.test(lower);
+  const tieneIvaExplicito = mencionaMasIva || mencionaConIvaExplicito || Boolean(precioManualNeto);
+  const mencionaConIva = mencionaConIvaExplicito && !mencionaMasIva;
+
   const precioCostoNeto = mencionaConIva
     ? Math.round(precioDetectado / 1.19)
     : Math.round(precioDetectado);
 
   // 4. Detectar fabricante / marca de la pieza
   let fabricante = String(fabricanteManual || '').trim().toUpperCase();
+  let tieneMarcaExplicita = Boolean(fabricante);
   if (!fabricante) {
     const upperFuente = fuente.toUpperCase();
     const encontrado = FABRICANTES_CONOCIDOS.find((fab) => {
       const rx = new RegExp(`\\b${fab.replace('-', '[-\\s]?')}\\b`, 'i');
       return rx.test(upperFuente);
     });
-    fabricante = encontrado || (/\boriginal\b/i.test(fuente) ? 'ORIGINAL OEM' : 'ALTERNATIVO');
+    if (encontrado) {
+      fabricante = encontrado;
+      tieneMarcaExplicita = true;
+    } else if (/\b(original|oem|genuino)\b/i.test(fuente)) {
+      fabricante = 'ORIGINAL OEM';
+      tieneMarcaExplicita = true;
+    } else if (/\b(alternativo|chino|taiwanes|taiwan|coreano|japones)\b/i.test(fuente)) {
+      fabricante = 'ALTERNATIVO';
+      tieneMarcaExplicita = true;
+    } else {
+      fabricante = 'ALTERNATIVO';
+    }
   }
 
   // 5. Detectar origen del repuesto
   let origen = String(origenManual || '').trim().toUpperCase();
+  let tieneOrigenExplicito = Boolean(origen);
   if (!origen) {
     const matchOrigen = ORIGENES_MAP.find((o) => o.regex.test(fuente));
-    origen = matchOrigen ? matchOrigen.valor : 'IMPORTACIÓN';
+    if (matchOrigen) {
+      origen = matchOrigen.valor;
+      tieneOrigenExplicito = true;
+    } else {
+      origen = 'IMPORTACIÓN';
+    }
   }
 
-  // 6. Detectar disponibilidad / tiempo de entrega
+  // 6. Detectar disponibilidad / cuándo lo tiene listo para retiro si lo pagamos
   let disponibilidad = String(disponibilidadManual || '').trim();
+  let tieneTiempoRetiroExplicito = Boolean(disponibilidad);
   if (!disponibilidad) {
     if (!tieneStock) {
       disponibilidad = 'Sin stock';
-    } else if (/\b(inmediat[ao]|en\s+meson|en\s+mesón|retiro\s+inmediato|ahora\s+mismo|disponible\s+aca)\b/i.test(lower)) {
-      disponibilidad = 'Entrega inmediata';
-    } else if (/\b(hoy|esta\s+tarde|en\s+2\s+horas|mediodia)\b/i.test(lower)) {
-      disponibilidad = 'Despacho hoy mismo';
-    } else if (/\b(mañana|manana|24\s*h|24\s*horas)\b/i.test(lower)) {
-      disponibilidad = 'Pedido 24 hrs';
+      tieneTiempoRetiroExplicito = true;
+    } else if (
+      /\b(inmediat[ao]|en\s+meson|en\s+mesón|retiro\s+inmediato|ahora\s+mismo|disponible\s+aca|lo\s+tengo\s+aca|para\s+retirar\s+ahora|llegar\s+y\s+llevar)\b/i.test(
+        lower
+      )
+    ) {
+      disponibilidad = 'Entrega inmediata en mesón';
+      tieneTiempoRetiroExplicito = true;
+    } else if (/\b(hoy|esta\s+tarde|en\s+\d+\s*(?:hora|hr|min)|mediodia|medio\s+dia)\b/i.test(lower)) {
+      disponibilidad = 'Disponible hoy para retiro';
+      tieneTiempoRetiroExplicito = true;
+    } else if (/\b(mañana|manana|24\s*h|24\s*horas|bodega)\b/i.test(lower)) {
+      disponibilidad = 'Disponible en 24 hrs';
+      tieneTiempoRetiroExplicito = true;
     } else if (/\b(48\s*h|2\s*dias|dos\s*dias)\b/i.test(lower)) {
       disponibilidad = 'Pedido 48 hrs';
+      tieneTiempoRetiroExplicito = true;
     } else {
-      disponibilidad = 'Disponible en mesón';
+      disponibilidad = 'Por confirmar retiro';
     }
+  }
+
+  const faltantesCotizacion = [];
+  if (tieneStock) {
+    if (precioCostoNeto <= 0) {
+      faltantesCotizacion.push('precio');
+    } else if (!tieneIvaExplicito) {
+      faltantesCotizacion.push('iva');
+    }
+    if (!tieneMarcaExplicita && !tieneOrigenExplicito) {
+      faltantesCotizacion.push('marca_origen');
+    }
+    if (!tieneTiempoRetiroExplicito) {
+      faltantesCotizacion.push('tiempo_retiro');
+    }
+  }
+
+  let preguntaSeguimientoProveedor = null;
+  if (tieneStock && faltantesCotizacion.length > 0) {
+    const preguntas = [];
+    if (faltantesCotizacion.includes('precio')) {
+      preguntas.push('¿a qué precio lo tienes y si es más IVA o con IVA?');
+    } else if (faltantesCotizacion.includes('iva')) {
+      preguntas.push('¿ese valor es más IVA o con IVA incluido?');
+    }
+    if (faltantesCotizacion.includes('marca_origen')) {
+      preguntas.push('¿qué marca u origen es?');
+    }
+    if (faltantesCotizacion.includes('tiempo_retiro')) {
+      preguntas.push('¿cuándo lo tienes listo para retiro si te lo pagamos?');
+    }
+    preguntaSeguimientoProveedor = `Gracias estimado, ${preguntas.join(' ¿Y ').replace(/\?\s*¿Y\s+/g, ', ')}`;
   }
 
   // 7. Nivel de confianza del parser
   let confianzaIa = 0.72;
-  if (precioCostoNeto > 0 && fabricante !== 'ALTERNATIVO') confianzaIa = 0.96;
-  else if (precioCostoNeto > 0) confianzaIa = 0.89;
+  if (precioCostoNeto > 0 && faltantesCotizacion.length === 0) confianzaIa = 0.98;
+  else if (precioCostoNeto > 0) confianzaIa = 0.85;
 
   return {
     tieneStock,
     precioCostoNeto,
     mencionaConIva,
+    tieneIvaExplicito,
+    tieneMarcaUOrigenExplicito: tieneMarcaExplicita || tieneOrigenExplicito,
+    tieneTiempoRetiroExplicito,
+    faltantesCotizacion,
+    ofertaCompleta: tieneStock && precioCostoNeto > 0 && faltantesCotizacion.length === 0,
+    preguntaSeguimientoProveedor,
     fabricante,
     origen,
     disponibilidad,
@@ -189,11 +259,9 @@ export function extraerOfertaDesdeMensajeWsp({
 }
 
 /**
- * Construye el mensaje de WhatsApp que FácilRepuestos envía a los proveedores reales en vivo.
+ * Construye el mensaje natural de WhatsApp que el agente cotizador envía a los proveedores desde el +56950960294.
  */
-function construirMensajeSalidaWsp({
-  codigoSolicitud,
-  nombreProveedor,
+export function construirMensajeSalidaWsp({
   marcaVehiculo,
   modeloVehiculo,
   anioVehiculo,
@@ -202,27 +270,40 @@ function construirMensajeSalidaWsp({
   vin,
   repuestoBuscado,
   codigoReferencia,
-  notasAdicionales,
 }) {
-  const vehiculoStr = [marcaVehiculo, modeloVehiculo, anioVehiculo, motorVehiculo]
-    .filter(Boolean)
-    .join(' ');
-  const identStr = [
-    patente ? `Patente: ${patente}` : '',
-    vin ? `VIN: ${vin}` : '',
-    codigoReferencia ? `OEM/Ref: ${codigoReferencia}` : '',
+  const repuestoNatural = String(repuestoBuscado || 'repuesto')
+    .trim()
+    .toLowerCase();
+  const formatTitulo = (s) =>
+    String(s || '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((w) => (w.length <= 3 ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()))
+      .join(' ');
+
+  const vehiculoStr = [
+    formatTitulo(marcaVehiculo),
+    String(modeloVehiculo || '').trim().toUpperCase(),
+    anioVehiculo,
+    motorVehiculo,
   ]
     .filter(Boolean)
-    .join(' · ');
+    .join(' ');
+
+  const datosExtra = [
+    patente ? `patente ${String(patente).trim().toUpperCase()}` : '',
+    vin ? `VIN ${String(vin).trim().toUpperCase()}` : '',
+    codigoReferencia ? `código ${String(codigoReferencia).trim().toUpperCase()}` : '',
+  ]
+    .filter(Boolean)
+    .join(', ');
 
   return (
-    `👋 Hola *${nombreProveedor}*, te escribimos de *FácilRepuestos* (Mesa Cotización *#${codigoSolicitud}*).\n\n` +
-    `🔎 Buscamos cotización en vivo para cliente en espera:\n` +
-    `• *Repuesto:* ${repuestoBuscado}\n` +
-    `• *Vehículo:* ${vehiculoStr || 'Por confirmar'}\n` +
-    (identStr ? `• *Datos técnicos:* ${identStr}\n` : '') +
-    (notasAdicionales ? `• *Detalle:* ${notasAdicionales}\n` : '') +
-    `\n💬 Por favor respóndenos por aquí con *precio neto, marca/origen, disponibilidad y foto* si lo tienes en mesón. ¡Gracias!`
+    `Estimado,\n` +
+    `Necesito ${repuestoNatural} para ${vehiculoStr || 'vehículo en consulta'}${
+      datosExtra ? ` ${datosExtra}` : ''
+    }, compárteme por favor las opciones que tengas con stock disponible y precio.`
   );
 }
 
@@ -891,8 +972,18 @@ router.post('/solicitudes/:id/respuesta', requireAuth, async (req, res, next) =>
       };
     }
 
+    // Acumular con respuesta previa del mismo proveedor si venía en conversación multi-turno
+    const prevOfertaProv = [...(solicitud.ofertasRecibidas || [])]
+      .reverse()
+      .find((o) => o.proveedorId === provInfo.proveedorId);
+
+    const textoAcumuladoProv = prevOfertaProv?.mensajeOriginalWsp
+      ? `${prevOfertaProv.mensajeOriginalWsp} . ${mensajeOriginalWsp}`
+      : mensajeOriginalWsp;
+    const turnosReconsultaPrevios = Number(prevOfertaProv?.turnosReconsulta || 0);
+
     const extraido = extraerOfertaDesdeMensajeWsp({
-      mensajeTexto: mensajeOriginalWsp,
+      mensajeTexto: textoAcumuladoProv,
       transcripcionAudio,
       precioManualNeto,
       fabricanteManual,
@@ -909,11 +1000,11 @@ router.post('/solicitudes/:id/respuesta', requireAuth, async (req, res, next) =>
 
     const now = new Date().toISOString();
     const nuevaOferta = {
-      id: `of-wsp-${Date.now()}-${Math.floor(Math.random() * 999)}`,
+      id: prevOfertaProv?.id || `of-wsp-${Date.now()}-${Math.floor(Math.random() * 999)}`,
       proveedorId: provInfo.proveedorId,
       proveedorNombre: provInfo.proveedorNombre,
       telefonoProveedor: provInfo.telefono || '',
-      mensajeOriginalWsp: String(mensajeOriginalWsp || '').trim(),
+      mensajeOriginalWsp: String(textoAcumuladoProv || '').trim(),
       transcripcionAudio: String(transcripcionAudio || '').trim(),
       fotoUrl: String(fotoUrl || '').trim(),
       tieneStock: extraido.tieneStock,
@@ -926,11 +1017,51 @@ router.post('/solicitudes/:id/respuesta', requireAuth, async (req, res, next) =>
       precioVentaFrpNeto,
       precioVentaFrpConIva,
       confianzaIa: extraido.confianzaIa,
+      ofertaCompleta: extraido.ofertaCompleta,
+      faltantesCotizacion: extraido.faltantesCotizacion || [],
+      preguntaSeguimientoProveedor: extraido.preguntaSeguimientoProveedor || null,
+      turnosReconsulta: turnosReconsultaPrevios + (extraido.ofertaCompleta ? 0 : 1),
       ganadora: false,
       recibidoEn: now,
     };
 
-    const ofertasActualizadas = [...(solicitud.ofertasRecibidas || []), nuevaOferta];
+    const ofertasSinPrev = (solicitud.ofertasRecibidas || []).filter((o) => o.id !== nuevaOferta.id);
+    const ofertasActualizadas = [...ofertasSinPrev, nuevaOferta];
+
+    // Si faltan datos clave (¿es más IVA?, marca/origen o cuándo está listo para retiro) y aún no superamos 2 repreguntas,
+    // el Agente Cotizador le repregunta al proveedor por WhatsApp antes de publicar en WordPress.
+    if (
+      extraido.tieneStock &&
+      !extraido.ofertaCompleta &&
+      extraido.preguntaSeguimientoProveedor &&
+      turnosReconsultaPrevios < 2 &&
+      provInfo.telefono
+    ) {
+      await enviarMensajeMetaWhatsApp({
+        telefono: provInfo.telefono,
+        textoMensaje: extraido.preguntaSeguimientoProveedor,
+        codigoSolicitud: solicitud.codigoSolicitud,
+      }).catch(() => null);
+
+      await solRef.update({
+        ofertasRecibidas: ofertasActualizadas,
+        updatedAt: now,
+      });
+
+      return res.json({
+        success: true,
+        data: {
+          oferta: nuevaOferta,
+          reconsultaEnviadaAProveedor: extraido.preguntaSeguimientoProveedor,
+          faltantesCotizacion: extraido.faltantesCotizacion,
+          solicitud: {
+            ...solicitud,
+            ofertasRecibidas: ofertasActualizadas,
+            updatedAt: now,
+          },
+        },
+      });
+    }
     const contactosActualizados = (solicitud.proveedoresContactados || []).map((c) =>
       c.proveedorId === provInfo.proveedorId
         ? {
@@ -1313,8 +1444,17 @@ router.post('/webhook', async (req, res, next) => {
         String(p.telefono || '').replace(/[^\d]/g, '').endsWith(remitenteTel.slice(-8))
       ) || solicitudMatch.proveedoresContactados?.[0];
 
+    const prevOfertaProv = [...(solicitudMatch.ofertasRecibidas || [])]
+      .reverse()
+      .find((o) => String(o.telefonoProveedor || '').replace(/\D/g, '').endsWith(remitenteTel.slice(-8)));
+
+    const textoAcumuladoProv = prevOfertaProv?.mensajeOriginalWsp
+      ? `${prevOfertaProv.mensajeOriginalWsp} . ${textoEntrante}`
+      : textoEntrante;
+    const turnosReconsultaPrevios = Number(prevOfertaProv?.turnosReconsulta || 0);
+
     const extraido = extraerOfertaDesdeMensajeWsp({
-      mensajeTexto: textoEntrante,
+      mensajeTexto: textoAcumuladoProv,
     });
     const margenPct = Number(solicitudMatch.margenPct) || 30;
     const precioVentaFrpNeto =
@@ -1326,11 +1466,11 @@ router.post('/webhook', async (req, res, next) => {
 
     const now = new Date().toISOString();
     const nuevaOferta = {
-      id: `of-wsp-meta-${Date.now()}`,
+      id: prevOfertaProv?.id || `of-wsp-meta-${Date.now()}`,
       proveedorId: provMatch?.proveedorId || 'prov-wsp-meta',
       proveedorNombre: provMatch?.proveedorNombre || `Proveedor WhatsApp (+${remitenteTel})`,
       telefonoProveedor: `+${remitenteTel}`,
-      mensajeOriginalWsp: textoEntrante,
+      mensajeOriginalWsp: textoAcumuladoProv,
       transcripcionAudio: '',
       fotoUrl: '',
       tieneStock: extraido.tieneStock,
@@ -1343,11 +1483,43 @@ router.post('/webhook', async (req, res, next) => {
       precioVentaFrpNeto,
       precioVentaFrpConIva,
       confianzaIa: extraido.confianzaIa,
+      ofertaCompleta: extraido.ofertaCompleta,
+      faltantesCotizacion: extraido.faltantesCotizacion || [],
+      turnosReconsulta: turnosReconsultaPrevios + (extraido.ofertaCompleta ? 0 : 1),
       ganadora: false,
       recibidoEn: now,
     };
 
-    const ofertasActualizadas = [...(solicitudMatch.ofertasRecibidas || []), nuevaOferta];
+    const ofertasSinPrev = (solicitudMatch.ofertasRecibidas || []).filter((o) => o.id !== nuevaOferta.id);
+    const ofertasActualizadas = [...ofertasSinPrev, nuevaOferta];
+
+    // Si faltan datos clave (¿es más IVA?, marca/origen o cuándo está listo para retiro), repreguntar al proveedor
+    if (
+      extraido.tieneStock &&
+      !extraido.ofertaCompleta &&
+      extraido.preguntaSeguimientoProveedor &&
+      turnosReconsultaPrevios < 2
+    ) {
+      await db
+        .collection(COLECCION_SOLICITUDES_WSP)
+        .doc(solicitudMatch.id)
+        .update({
+          ofertasRecibidas: ofertasActualizadas,
+          updatedAt: now,
+        });
+
+      await enviarMensajeMetaWhatsApp({
+        telefono: `+${remitenteTel}`,
+        textoMensaje: extraido.preguntaSeguimientoProveedor,
+        codigoSolicitud: solicitudMatch.codigoSolicitud,
+      }).catch(() => null);
+
+      return res.status(200).json({
+        received: true,
+        matched: true,
+        reconsultaEnviada: extraido.preguntaSeguimientoProveedor,
+      });
+    }
     const mejorOfertaAuto = elegirMejorOfertaMesaWsp(ofertasActualizadas);
     const updateWebhook = {
       ofertasRecibidas: ofertasActualizadas,

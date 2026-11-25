@@ -61,7 +61,7 @@ import {
   elegirMejorOfertaMesaWsp,
   crearYPublicarProductoTemporalMesaWsp,
 } from '../agents/agente4MesaYPublicadorTemporal.js';
-import { extraerOfertaDesdeMensajeWsp } from './mesaWsp.js';
+import { extraerOfertaDesdeMensajeWsp, construirMensajeSalidaWsp } from './mesaWsp.js';
 import {
   construirLinksCarroWooCommerce,
   crearPedidoPendienteWooCommerce,
@@ -1579,11 +1579,15 @@ async function ejecutarCascadaAgenteOmnicanal({
       const proveedoresContactados = [];
 
       for (const p of seleccionados) {
-        const mensajeEnviado = `Hola ${p.contacto || p.nombre} 👋 Consulta de abastecimiento (#${codigoSolicitud}): Buscamos **${repuestoTexto}**${
-          vehiculoPend?.anio ? ` (${vehiculoPend.anio})` : ''
-        }${vehiculoPend?.patente ? ` · Patente ${vehiculoPend.patente}` : ''}${
-          vehiculoPend?.vin ? ` · VIN ${vehiculoPend.vin}` : ''
-        }. ¿Tienes stock disponible y precio costo neto para retiro inmediato?`;
+        const mensajeEnviado = construirMensajeSalidaWsp({
+          marcaVehiculo: vehiculoPend?.marca || '',
+          modeloVehiculo: vehiculoPend?.modelo || '',
+          anioVehiculo: vehiculoPend?.anio || '',
+          motorVehiculo: vehiculoPend?.motor || '',
+          patente: vehiculoPend?.patente || '',
+          vin: vehiculoPend?.vin || '',
+          repuestoBuscado: pend.resumenFaltantes,
+        });
 
         const envioReal = await enviarMensajeMesaAbastecimientoWhatsapp({
           telefonoDestino: p.telefono,
@@ -2688,11 +2692,15 @@ async function ejecutarCascadaAgenteOmnicanal({
       const proveedoresContactados = [];
 
       for (const p of seleccionados) {
-        const mensajeEnviado = `Hola ${p.contacto || p.nombre} 👋 Consulta de abastecimiento (#${codigoSolicitud}): Buscamos **${repuestoTexto}**${
-          vehiculo?.anio ? ` (${vehiculo.anio})` : ''
-        }${vehiculo?.patente ? ` · Patente ${vehiculo.patente}` : ''}${
-          vehiculo?.vin ? ` · VIN ${vehiculo.vin}` : ''
-        }. ¿Tienes stock disponible y precio costo neto para retiro inmediato?`;
+        const mensajeEnviado = construirMensajeSalidaWsp({
+          marcaVehiculo: vehiculo?.marca || '',
+          modeloVehiculo: vehiculo?.modelo || '',
+          anioVehiculo: vehiculo?.anio || '',
+          motorVehiculo: vehiculo?.motor || '',
+          patente: vehiculo?.patente || '',
+          vin: vehiculo?.vin || '',
+          repuestoBuscado: resumenFaltantes,
+        });
 
         const envioReal = await enviarMensajeMesaAbastecimientoWhatsapp({
           telefonoDestino: p.telefono,
@@ -3813,7 +3821,75 @@ export async function manejarWebhookPostMeta(req, res) {
             String(p.telefono || '').replace(/\D/g, '').endsWith(remitenteTel.slice(-8))
           ) || solicitudMatch.proveedoresContactados?.[0];
 
-        const extraido = extraerOfertaDesdeMensajeWsp({ mensajeTexto: textoEntrante });
+        // Acumular mensajes previos de este mismo proveedor en esta solicitud para completar datos en conversación multi-turno
+        const prevOfertaProv = [...(solicitudMatch.ofertasRecibidas || [])]
+          .reverse()
+          .find((o) => String(o.telefonoProveedor || '').replace(/\D/g, '').endsWith(remitenteTel.slice(-8)));
+
+        const textoAcumuladoProv = prevOfertaProv?.mensajeOriginalWsp
+          ? `${prevOfertaProv.mensajeOriginalWsp} . ${textoEntrante}`
+          : textoEntrante;
+        const turnosReconsultaPrevios = Number(prevOfertaProv?.turnosReconsulta || 0);
+
+        const extraido = extraerOfertaDesdeMensajeWsp({ mensajeTexto: textoAcumuladoProv });
+
+        // Si el proveedor tiene el repuesto pero le falta aclarar si es más IVA, la marca/origen o cuándo está listo para retiro,
+        // el Agente Cotizador le repregunta de forma natural antes de dar por cerrada la oferta (máximo 2 repreguntas).
+        if (
+          extraido.tieneStock &&
+          !extraido.ofertaCompleta &&
+          extraido.preguntaSeguimientoProveedor &&
+          turnosReconsultaPrevios < 2
+        ) {
+          const nowParc = new Date().toISOString();
+          const ofertaParcial = {
+            id: prevOfertaProv?.id || `of-wsp-meta-${Date.now()}`,
+            proveedorId: provMatch?.proveedorId || 'prov-wsp-meta',
+            proveedorNombre: provMatch?.proveedorNombre || perfilNombre,
+            telefonoProveedor: `+${remitenteTel}`,
+            mensajeOriginalWsp: textoAcumuladoProv,
+            transcripcionAudio: '',
+            fotoUrl: '',
+            tieneStock: true,
+            fabricante: extraido.fabricante,
+            origen: extraido.origen,
+            disponibilidad: extraido.disponibilidad,
+            garantia: '6 meses',
+            precioCostoNeto: extraido.precioCostoNeto,
+            margenAplicadoPct: Number(solicitudMatch.margenPct) || 30,
+            precioVentaFrpNeto: 0,
+            precioVentaFrpConIva: 0,
+            confianzaIa: extraido.confianzaIa,
+            ofertaCompleta: false,
+            faltantesCotizacion: extraido.faltantesCotizacion,
+            turnosReconsulta: turnosReconsultaPrevios + 1,
+            ganadora: false,
+            recibidoEn: nowParc,
+          };
+
+          const otrasOfertas = (solicitudMatch.ofertasRecibidas || []).filter(
+            (o) => o.id !== ofertaParcial.id
+          );
+          await db
+            .collection(COLECCION_SOLICITUDES_WSP)
+            .doc(solicitudMatch.id)
+            .update({
+              ofertasRecibidas: [...otrasOfertas, ofertaParcial],
+              updatedAt: nowParc,
+            });
+
+          await enviarMensajeMesaAbastecimientoWhatsapp({
+            telefonoDestino: remitenteTel,
+            texto: extraido.preguntaSeguimientoProveedor,
+          }).catch(() => null);
+
+          return res.status(200).json({
+            received: true,
+            handledBy: 'agente4_reconsulta_datos_faltantes_proveedor',
+            faltantes: extraido.faltantesCotizacion,
+            preguntaEnviada: extraido.preguntaSeguimientoProveedor,
+          });
+        }
         const margenPct = Number(solicitudMatch.margenPct) || 30;
         const precioVentaFrpNeto =
           extraido.precioCostoNeto > 0

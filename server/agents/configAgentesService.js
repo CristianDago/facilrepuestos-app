@@ -11,7 +11,7 @@ import { db } from '../config/firebase.js';
 
 const COLECCION_CONFIG = 'configuracion_sistema';
 const DOC_AGENTES_IA = 'cerebros_agentes_ia';
-const VERSION_ESQUEMA_CONOCIMIENTO = 2;
+const VERSION_ESQUEMA_CONOCIMIENTO = 3;
 
 export const MODELOS_GEMINI_DISPONIBLES = [
   { id: 'gemini-4.0-neon', nombre: 'Gemini 4 Neon (Ultra Rápido · Recomendado Agentes)' },
@@ -165,9 +165,13 @@ CAPA 3B — TALLAS LOGÍSTICAS AUTOMOTRICES (VOLUMETRÍA):
      * +15 pts según velocidad histórica de respuesta.
    - Envía la consulta por WhatsApp saliendo desde el número exclusivo de abastecimiento +56 9 5096 0294 a los 3 mejores proveedores.
 
-2. PARSER Y ELECCIÓN AUTOMÁTICA DE LA MEJOR OFERTA:
-   - Lee respuestas en lenguaje natural chileno ("55 mil", "55 lucas", "$55.000 + iva" vs "con iva"), detecta marca/fabricante (Valeo, LuK, Bosch, KYB, Sangsin, Mobis, OEM vs Alternativo) y disponibilidad ("en mesón", "entrega inmediata", "hoy").
-   - Elige automáticamente la mejor alternativa priorizando: 1° Stock confirmado + Entrega inmediata (+30 pts), 2° Calidad OEM/Marca reconocida (+15 pts), 3° Foto adjunta (+10 pts) y 4° Menor precio costo neto.
+2. CONVERSACIÓN MULTI-TURNO DEL AGENTE COTIZADOR CON EL PROVEEDOR:
+   - Si el proveedor responde con stock pero le falta aclarar alguno de estos 3 datos críticos:
+     a) ¿El precio es más IVA o con IVA incluido?
+     b) ¿Cuál es la marca u origen del repuesto?
+     c) ¿Cuándo lo tiene listo para retiro si se lo pagamos?
+   - El Agente Cotizador le repregunta automáticamente de forma natural por WhatsApp (ej: "Gracias estimado, ¿ese valor es más IVA o con IVA incluido? ¿Me confirmas qué marca u origen es y cuándo lo tienes listo para retiro si te lo pagamos?").
+   - Cuando el proveedor responde completando los datos, fusiona ambos mensajes, elige la mejor alternativa y procede a crear el Producto Temporal en WordPress.
 
 3. PUBLICADOR DE PRODUCTO TEMPORAL EN FIREBASE + WORDPRESS (TTL 4 HORAS):
    - Asigna foto referencial limpia: usa foto del proveedor o reutiliza el media_id oficial de WordPress por subcategoría (0 bytes extra en disco).
@@ -176,9 +180,9 @@ CAPA 3B — TALLAS LOGÍSTICAS AUTOMOTRICES (VOLUMETRÍA):
 
 4. AUTO-LIMPIEZA POR EXPIRACIÓN (WORKER CADA 15 MIN):
    - Si pasan las 4 horas y el producto temporal no fue comprado en WordPress (compradoEnTienda === false), lo elimina automáticamente de WooCommerce y lo oculta en Firebase.`,
-      contextoExtra: `FORMATO DE MENSAJE DE SALIDA A PROVEEDORES (DESDE +56 9 5096 0294):
-- Nunca incluye nombre ni teléfono del cliente final.
-- Incluye: Repuesto buscado, Marca, Modelo, Año, Motor, Patente/VIN (si existen) y solicita precio neto, marca/origen y disponibilidad.`,
+      contextoExtra: `FORMATO NATURAL DE MENSAJE DE SALIDA A PROVEEDORES (DESDE +56 9 5096 0294):
+"Estimado,
+Necesito [repuesto] para [Marca Modelo Año Motor] patente [PATENTE], compárteme por favor las opciones que tengas con stock disponible y precio."`,
       activo: true,
     },
 

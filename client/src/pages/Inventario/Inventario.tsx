@@ -862,7 +862,7 @@ export default function Inventario({ modo = "taller" }: InventarioProps) {
               className={styles.proToolBtn}
               onClick={handleSyncAilooCatalogo}
               disabled={sincronizandoAiloo}
-              title="Ingestar catálogos normalizados desde Soluparts y Global hacia Firebase"
+              title="Ingestar catálogo normalizado desde Soluparts hacia Firebase"
             >
               <span className={`${styles.proToolIcon} ${styles.iconIndigo}`}>📦</span>
               <span>{sincronizandoAiloo ? "Ingestando Ailoo..." : "Ingestar Catálogo Ailoo"}</span>

@@ -229,7 +229,12 @@ function construirMensajeSalidaWsp({
 async function enviarMensajeMetaWhatsApp({ telefono, textoMensaje, codigoSolicitud }) {
   const cfg = await obtenerConfigMetaWhatsapp();
   const token = cfg.accessToken || process.env.META_WA_TOKEN;
-  const phoneId = cfg.phoneNumberId || process.env.META_WA_PHONE_ID;
+  // Usar prioritariamente el Phone Number ID exclusivo del nuevo número de Mesa de Abastecimiento (+56950960294)
+  const phoneId =
+    cfg.phoneNumberIdMesaB2b ||
+    process.env.META_WA_MESA_PHONE_ID ||
+    cfg.phoneNumberId ||
+    process.env.META_WA_PHONE_ID;
   const telLimpio = String(telefono || '').replace(/[^\d]/g, '');
 
   if (token && phoneId && telLimpio.length >= 8) {
@@ -365,14 +370,18 @@ router.get('/solicitudes', requireAuth, async (req, res, next) => {
       )
       .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || '')));
 
+    const cfgMeta = await obtenerConfigMetaWhatsapp();
     const credencialesMetaActivas = Boolean(
-      process.env.META_WA_TOKEN && process.env.META_WA_PHONE_ID
+      (cfgMeta.accessToken || process.env.META_WA_TOKEN) &&
+        (cfgMeta.phoneNumberIdMesaB2b || cfgMeta.phoneNumberId || process.env.META_WA_PHONE_ID)
     );
 
     res.json({
       success: true,
       data: {
         credencialesMetaActivas,
+        numeroMesaAbastecimiento: `+${cfgMeta.numeroMesaB2b || '56950960294'}`,
+        numeroRepuestinClientes: `+${cfgMeta.numeroPublico || '56921109851'}`,
         modoOperacionMeta: credencialesMetaActivas
           ? 'meta_cloud_api_live'
           : 'simulacion_meta_local',
@@ -1061,6 +1070,26 @@ router.post('/webhook', async (req, res, next) => {
     }
 
     const remitenteTel = String(msg.from || '').replace(/[^\d]/g, '');
+    const displayReceptor = String(change?.metadata?.display_phone_number || '').replace(/\D/g, '');
+    const phoneIdReceptor = String(change?.metadata?.phone_number_id || '').trim();
+
+    // Si el mensaje entró al número exclusivo de la Mesa de Abastecimiento (+56950960294),
+    // registrar automáticamente su phoneNumberIdMesaB2b en Firestore
+    if (displayReceptor.endsWith('50960294') && phoneIdReceptor) {
+      await db
+        .collection('configuracion_sistema')
+        .doc('whatsapp_meta')
+        .set(
+          {
+            phoneNumberIdMesaB2b: phoneIdReceptor,
+            numeroMesaB2b: '56950960294',
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        )
+        .catch(() => null);
+    }
+
     const textoEntrante =
       msg.text?.body || msg.image?.caption || msg.document?.caption || '';
 

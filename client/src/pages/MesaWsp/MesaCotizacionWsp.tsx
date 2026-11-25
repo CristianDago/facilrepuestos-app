@@ -398,7 +398,8 @@ export default function MesaCotizacionWsp() {
             📲 Mesa de Abastecimiento por WhatsApp
           </h1>
           <p className={styles.subtitle}>
-            Consulta a tus proveedores internos de WhatsApp cuando un repuesto no está disponible en stock propio ni en portales conectados.
+            Consulta automática al Top 3 de proveedores por WhatsApp desde el número exclusivo de abastecimiento{' '}
+            <strong>+56 9 5096 0294</strong> (separado del número de clientes de Repuestín <strong>+56 9 2110 9851</strong>).
           </p>
         </div>
 

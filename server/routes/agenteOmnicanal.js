@@ -58,6 +58,11 @@ import {
   evaluarLogisticaYDespachoAgente3,
 } from '../agents/orquestadorRepuestin.js';
 import {
+  elegirMejorOfertaMesaWsp,
+  crearYPublicarProductoTemporalMesaWsp,
+} from '../agents/agente4MesaYPublicadorTemporal.js';
+import { extraerOfertaDesdeMensajeWsp } from './mesaWsp.js';
+import {
   construirLinksCarroWooCommerce,
   crearPedidoPendienteWooCommerce,
   obtenerUrlBaseTiendaWoo,
@@ -2534,7 +2539,7 @@ async function ejecutarCascadaAgenteOmnicanal({
           vehiculo?.vin ? ` · VIN ${vehiculo.vin}` : ''
         }. ¿Tienes stock disponible y precio costo neto para retiro inmediato?`;
 
-        const envioReal = await enviarRespuestaClienteMetaWhatsapp({
+        const envioReal = await enviarMensajeMesaAbastecimientoWhatsapp({
           telefonoDestino: p.telefono,
           texto: mensajeEnviado,
         }).catch(() => null);
@@ -3338,6 +3343,9 @@ export async function obtenerConfigMetaWhatsapp({ forceRefresh = false } = {}) {
   const config = {
     accessToken: String(docData.accessToken || process.env.META_WA_TOKEN || '').trim(),
     phoneNumberId: String(docData.phoneNumberId || process.env.META_WA_PHONE_ID || '').trim(),
+    phoneNumberIdMesaB2b: String(
+      docData.phoneNumberIdMesaB2b || process.env.META_WA_MESA_PHONE_ID || ''
+    ).trim(),
     wabaId: String(docData.wabaId || process.env.META_WA_WABA_ID || '').trim(),
     verifyToken: String(
       docData.verifyToken || process.env.META_WA_VERIFY_TOKEN || 'facilrepuestos_wsp_verify'
@@ -3345,14 +3353,67 @@ export async function obtenerConfigMetaWhatsapp({ forceRefresh = false } = {}) {
     numeroPublico: String(
       docData.numeroPublico || process.env.WHATSAPP_PUBLIC_NUMBER || '56921109851'
     ).replace(/\D/g, ''),
-    nombreAgente: String(docData.nombreAgente || 'Repuestín · FácilRepuestos.cl').trim(),
+    numeroMesaB2b: String(
+      docData.numeroMesaB2b || process.env.WHATSAPP_MESA_B2B_NUMBER || '56950960294'
+    ).replace(/\D/g, ''),
+    nombreAgente: String(docData.nombreAgente || 'Repuestín · facilrepuestos.cl').trim(),
     graphVersion: String(docData.graphVersion || 'v21.0').trim(),
     activo: docData.activo !== undefined ? Boolean(docData.activo) : true,
     updatedAt: docData.updatedAt || null,
   };
 
+  // Auto-descubrir el Phone Number ID del nuevo número de Mesa de Abastecimiento (+56950960294) en WABA
+  if (config.accessToken && config.wabaId && !config.phoneNumberIdMesaB2b) {
+    try {
+      const rNums = await fetch(
+        `https://graph.facebook.com/${config.graphVersion}/${config.wabaId}/phone_numbers?fields=id,display_phone_number,verified_name`,
+        { headers: { Authorization: `Bearer ${config.accessToken}` } }
+      );
+      if (rNums.ok) {
+        const dNums = await rNums.json();
+        const lista = Array.isArray(dNums?.data) ? dNums.data : [];
+        const matchMesa = lista.find((n) =>
+          String(n.display_phone_number || '').replace(/\D/g, '').endsWith('50960294')
+        );
+        if (matchMesa?.id) {
+          config.phoneNumberIdMesaB2b = String(matchMesa.id);
+          await db
+            .collection(COLECCION_CONFIG_SISTEMA)
+            .doc(DOC_CONFIG_META_WSP)
+            .set(
+              {
+                phoneNumberIdMesaB2b: config.phoneNumberIdMesaB2b,
+                numeroMesaB2b: '56950960294',
+                updatedAt: new Date().toISOString(),
+              },
+              { merge: true }
+            )
+            .catch(() => null);
+        }
+      }
+    } catch {
+      // Ignorar si aún no está asociado al mismo WABA
+    }
+  }
+
   cacheConfigMeta = { data: config, loadedAt: ahora };
   return config;
+}
+
+/**
+ * Envía un mensaje saliente a un proveedor desde el número exclusivo de la Mesa de Abastecimiento (+56950960294).
+ */
+export async function enviarMensajeMesaAbastecimientoWhatsapp({
+  telefonoDestino,
+  texto,
+}) {
+  const cfg = await obtenerConfigMetaWhatsapp();
+  const phoneIdMesa = cfg.phoneNumberIdMesaB2b || process.env.META_WA_MESA_PHONE_ID || cfg.phoneNumberId;
+  return enviarRespuestaClienteMetaWhatsapp({
+    telefonoDestino,
+    texto,
+    phoneNumberIdOverride: phoneIdMesa,
+  });
 }
 
 /**
@@ -3528,9 +3589,29 @@ export async function manejarWebhookPostMeta(req, res) {
     }
 
     const phoneNumberIdReceptor = String(change?.metadata?.phone_number_id || '').trim();
+    const displayReceptor = String(change?.metadata?.display_phone_number || '').replace(/\D/g, '');
     const remitenteTel = String(msg.from || '').replace(/\D/g, '');
     const perfilNombre =
       change?.contacts?.[0]?.profile?.name || `Cliente WhatsApp (+${remitenteTel})`;
+
+    // Si el mensaje entró al número exclusivo de la Mesa de Abastecimiento (+56950960294),
+    // guardar automáticamente su phoneNumberIdMesaB2b en Firestore
+    const esLineaMesaB2b = displayReceptor.endsWith('50960294');
+    if (esLineaMesaB2b && phoneNumberIdReceptor) {
+      await db
+        .collection(COLECCION_CONFIG_SISTEMA)
+        .doc(DOC_CONFIG_META_WSP)
+        .set(
+          {
+            phoneNumberIdMesaB2b: phoneNumberIdReceptor,
+            numeroMesaB2b: '56950960294',
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        )
+        .catch(() => null);
+      cacheConfigMeta = { data: null, loadedAt: 0 };
+    }
 
     // Extraer texto desde texto normal, botones interactivos, listas o pie de foto
     const textoEntrante = String(
@@ -3545,6 +3626,129 @@ export async function manejarWebhookPostMeta(req, res) {
 
     if (!textoEntrante && msg.type !== 'image' && msg.type !== 'audio') {
       return res.status(200).json({ received: true, unsupportedType: msg.type });
+    }
+
+    // ─── INTERCEPTOR AGENTE 4: SI ES UN PROVEEDOR RESPONDIENDO A LA MESA DE ABASTECIMIENTO (+56950960294) ───
+    if (esLineaMesaB2b || remitenteTel.length >= 8) {
+      const solSnap = await db.collection(COLECCION_SOLICITUDES_WSP).get().catch(() => null);
+      const abiertas = (solSnap?.docs || [])
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((s) => s.estado !== 'adjudicada' && s.estado !== 'cerrada')
+        .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+
+      const solicitudMatch = abiertas.find((s) =>
+        (s.proveedoresContactados || []).some((p) =>
+          String(p.telefono || '').replace(/\D/g, '').endsWith(remitenteTel.slice(-8))
+        )
+      ) || (esLineaMesaB2b ? abiertas[0] : null);
+
+      if (solicitudMatch && textoEntrante) {
+        const provMatch =
+          (solicitudMatch.proveedoresContactados || []).find((p) =>
+            String(p.telefono || '').replace(/\D/g, '').endsWith(remitenteTel.slice(-8))
+          ) || solicitudMatch.proveedoresContactados?.[0];
+
+        const extraido = extraerOfertaDesdeMensajeWsp({ mensajeTexto: textoEntrante });
+        const margenPct = Number(solicitudMatch.margenPct) || 30;
+        const precioVentaFrpNeto =
+          extraido.precioCostoNeto > 0
+            ? Math.round(extraido.precioCostoNeto * (1 + margenPct / 100))
+            : 0;
+        const precioVentaFrpConIva =
+          precioVentaFrpNeto > 0 ? Math.round(precioVentaFrpNeto * 1.19) : 0;
+
+        const nowIso = new Date().toISOString();
+        const nuevaOferta = {
+          id: `of-wsp-meta-${Date.now()}`,
+          proveedorId: provMatch?.proveedorId || 'prov-wsp-meta',
+          proveedorNombre: provMatch?.proveedorNombre || perfilNombre,
+          telefonoProveedor: `+${remitenteTel}`,
+          mensajeOriginalWsp: textoEntrante,
+          transcripcionAudio: '',
+          fotoUrl: '',
+          tieneStock: extraido.tieneStock,
+          fabricante: extraido.fabricante,
+          origen: extraido.origen,
+          disponibilidad: extraido.disponibilidad,
+          garantia: '6 meses',
+          precioCostoNeto: extraido.precioCostoNeto,
+          margenAplicadoPct: margenPct,
+          precioVentaFrpNeto,
+          precioVentaFrpConIva,
+          confianzaIa: extraido.confianzaIa,
+          ganadora: false,
+          recibidoEn: nowIso,
+        };
+
+        const ofertasActualizadas = [...(solicitudMatch.ofertasRecibidas || []), nuevaOferta];
+        const mejorOfertaAuto = elegirMejorOfertaMesaWsp(ofertasActualizadas);
+        const updateSol = {
+          ofertasRecibidas: ofertasActualizadas,
+          estado: 'con_ofertas',
+          updatedAt: nowIso,
+        };
+
+        if (mejorOfertaAuto) {
+          const pubTemp = await crearYPublicarProductoTemporalMesaWsp({
+            solicitud: solicitudMatch,
+            ofertaGanadora: mejorOfertaAuto,
+            ttlHoras: 4,
+          });
+          Object.assign(updateSol, {
+            ofertasRecibidas: ofertasActualizadas.map((o) => ({
+              ...o,
+              ganadora: o.id === mejorOfertaAuto.id,
+            })),
+            estado: 'adjudicada',
+            ofertaGanadoraId: mejorOfertaAuto.id,
+            skuPublicoGenerado: pubTemp.skuPublicoFrp,
+            inventarioCreadoId: pubTemp.inventarioId,
+            wooProductIdTemporal: pubTemp.wooProductId,
+            urlProductoTienda: pubTemp.urlProductoTienda,
+            expiraEn: pubTemp.expiraEn,
+            mensajeCotizacionCliente: pubTemp.mensajeClienteWsp,
+            adjudicadaEn: nowIso,
+          });
+
+          let telCliente = String(solicitudMatch.clienteTelefonoReal || solicitudMatch.clienteTelefono || '').trim();
+          if (solicitudMatch.sesionAgenteId) {
+            const sesRef = db.collection(COLECCION_SESIONES_AGENTE).doc(solicitudMatch.sesionAgenteId);
+            const sesSnap = await sesRef.get().catch(() => null);
+            if (sesSnap?.exists) {
+              const sesData = sesSnap.data() || {};
+              if ((!telCliente || telCliente === 'CONFIDENCIAL-FRP') && sesData.clienteTelefono) {
+                telCliente = String(sesData.clienteTelefono).trim();
+              }
+              const mensajes = Array.isArray(sesData.mensajes) ? [...sesData.mensajes] : [];
+              mensajes.push({
+                id: `msg-wsp-temp-${Date.now()}`,
+                rol: 'agente',
+                autor: 'Repuestín · facilrepuestos.cl',
+                texto: pubTemp.mensajeClienteWsp,
+                creadoEn: nowIso,
+                origen: 'producto_temporal_mesa_wsp',
+              });
+              await sesRef.update({ mensajes, updatedAt: nowIso });
+            }
+          }
+          if (telCliente && /\d{8,15}/.test(telCliente.replace(/\D/g, ''))) {
+            await enviarRespuestaClienteMetaWhatsapp({
+              telefonoDestino: telCliente,
+              texto: pubTemp.mensajeClienteWsp,
+            }).catch(() => null);
+          }
+        }
+
+        await db.collection(COLECCION_SOLICITUDES_WSP).doc(solicitudMatch.id).update(updateSol);
+        return res.status(200).json({
+          received: true,
+          handledBy: 'agente4_mesa_abastecimiento_b2b',
+          solicitudId: solicitudMatch.id,
+        });
+      }
+      if (esLineaMesaB2b) {
+        return res.status(200).json({ received: true, handledBy: 'linea_mesa_b2b_sin_solicitud_abierta' });
+      }
     }
 
     // Crear o reanudar la sesión determinística de WhatsApp del cliente (`wsp_<telefono>`)

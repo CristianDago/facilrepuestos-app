@@ -6,6 +6,7 @@ import type {
   ApiResponse,
   CandidatoInventarioCascada,
   SesionAgenteOmnicanal,
+  SolicitudCotizacionWsp,
   TrazaCascadaAgente,
   VehiculoDetectadoAgente,
 } from '../../types';
@@ -209,6 +210,121 @@ export default function AgenteOmnicanal() {
     patenteInicial: '',
   });
 
+  // Panel de Configuración de los 6 Agentes IA (Gemini 4 Neon + Contexto en Vivo) y Prueba Directa (+56951387986)
+  const [mostrarConfigAgentes, setMostrarConfigAgentes] = useState(false);
+  const [guardandoConfigAgentes, setGuardandoConfigAgentes] = useState(false);
+  const [enviandoPruebaPersonal, setEnviandoPruebaPersonal] = useState(false);
+  const [telefonoPruebaPersonal, setTelefonoPruebaPersonal] = useState('+56951387986');
+  const [phoneNumberIdMesaInput, setPhoneNumberIdMesaInput] = useState('');
+  const [configAgentes, setConfigAgentes] = useState<{
+    modeloGlobalPreferido: string;
+    ttlHorasProductoTemporal: number;
+    topProveedoresMesaWsp: number;
+    modelosDisponibles: Array<{ id: string; nombre: string }>;
+    agentes: Record<
+      string,
+      {
+        id: string;
+        nombre: string;
+        modelo: string;
+        rol: string;
+        instrucciones: string;
+        contextoExtra: string;
+        activo: boolean;
+      }
+    >;
+  } | null>(null);
+
+  const cargarConfigAgentes = async () => {
+    try {
+      const [resAgentes, resMesa] = await Promise.all([
+        api.get<ApiResponse<typeof configAgentes>>('/mesa-wsp/agentes-config').catch(() => null),
+        api.get<ApiResponse<{ phoneNumberIdMesaB2b?: string }>>('/mesa-wsp/solicitudes').catch(() => null),
+      ]);
+      if (resAgentes?.success && resAgentes.data) {
+        setConfigAgentes(resAgentes.data);
+      }
+      if (resMesa?.success && resMesa.data?.phoneNumberIdMesaB2b) {
+        setPhoneNumberIdMesaInput(resMesa.data.phoneNumberIdMesaB2b);
+      }
+    } catch {
+      // silencioso
+    }
+  };
+
+  const handleGuardarConfigAgentes = async () => {
+    if (!configAgentes) return;
+    try {
+      setGuardandoConfigAgentes(true);
+      const r = await api.put<ApiResponse<typeof configAgentes>>('/mesa-wsp/agentes-config', configAgentes);
+      if (r.success && r.data) {
+        setConfigAgentes(r.data);
+        notify('✓ Cerebros, modelo (Gemini 4 Neon) y contexto de los 6 agentes actualizados en vivo', 'success');
+      }
+    } catch (err) {
+      notify((err as Error).message || 'Error al guardar configuración de agentes', 'error');
+    } finally {
+      setGuardandoConfigAgentes(false);
+    }
+  };
+
+  const handleGuardarPhoneIdMesa = async () => {
+    try {
+      const r = await api.post<
+        ApiResponse<{ phoneNumberIdMesaB2b: string; numerosRegistradosEnMetaWaba: Array<{ id: string; display_phone_number: string }> }>
+      >('/mesa-wsp/config-numero-mesa', {
+        phoneNumberIdMesaB2b: phoneNumberIdMesaInput,
+        numeroMesaB2b: '56950960294',
+      });
+      if (r.success && r.data) {
+        if (r.data.phoneNumberIdMesaB2b) {
+          setPhoneNumberIdMesaInput(r.data.phoneNumberIdMesaB2b);
+          notify(`✓ Phone Number ID de +56 9 5096 0294 vinculado (${r.data.phoneNumberIdMesaB2b})`, 'success');
+        } else {
+          notify(
+            `ℹ Aún no figura +56 9 5096 0294 en el WABA de Meta. Agrégalo en developers.facebook.com -> WhatsApp o pega su Phone Number ID aquí.`,
+            'info'
+          );
+        }
+      }
+    } catch (err) {
+      notify((err as Error).message || 'Error al verificar número en Meta', 'error');
+    }
+  };
+
+  const handleEnviarPruebaAMiNumero = async () => {
+    try {
+      setEnviandoPruebaPersonal(true);
+      const r = await api.post<
+        ApiResponse<
+          SolicitudCotizacionWsp & {
+            resultadoEnvioMeta?: { enviadoReal?: boolean; modoEnvio?: string; errorMeta?: string };
+          }
+        >
+      >('/mesa-wsp/probar-envio', {
+        telefonoPrueba: telefonoPruebaPersonal,
+      });
+      if (r.success && r.data) {
+        const resMeta = r.data.resultadoEnvioMeta;
+        if (resMeta?.enviadoReal) {
+          notify(
+            `📲 Solicitud #${r.data.codigoSolicitud} enviada por WhatsApp real a ${telefonoPruebaPersonal}. ¡Respóndele desde tu celular para probar la subida temporal de 4h a WordPress!`,
+            'success'
+          );
+        } else {
+          notify(
+            `⚠️ Solicitud #${r.data.codigoSolicitud} creada (${resMeta?.errorMeta || 'Recuerda enviar primero un "Hola" desde tu celular al número de WhatsApp para abrir la ventana de 24h de Meta'}).`,
+            'info'
+          );
+        }
+      }
+    } catch (err) {
+      notify((err as Error).message || 'Error al enviar prueba de cotización', 'error');
+    } finally {
+      setEnviandoPruebaPersonal(false);
+    }
+  };
+
   const cargarSesiones = async (seleccionarId?: string, silencioso = false) => {
     try {
       if (!silencioso) setLoading(true);
@@ -224,13 +340,15 @@ export default function AgenteOmnicanal() {
           setEstadisticasHistoricas(res.data.estadisticasHistoricas);
         }
         setPadronDemo(res.data.padronDemoPatentes || []);
-        if (seleccionarId) {
-          setSesionActivaId(seleccionarId);
-        } else if (!sesionActivaId && lista.length > 0) {
-          setSesionActivaId(lista[0].id);
-        } else if (lista.length === 0) {
-          setSesionActivaId('');
-        }
+        setSesionActivaId((prevId) => {
+          if (seleccionarId) return seleccionarId;
+          if (lista.length === 0) return '';
+          // Si ya hay una conversación seleccionada que existe en la lista, NUNCA cambiarla en el auto-refresco
+          if (prevId && lista.some((s) => s.id === prevId)) {
+            return prevId;
+          }
+          return lista[0].id;
+        });
       }
     } catch (err) {
       if (!silencioso) {
@@ -244,7 +362,9 @@ export default function AgenteOmnicanal() {
 
   useEffect(() => {
     void cargarSesiones();
+    void cargarConfigAgentes();
     // Auto-refresco silencioso cada 8 segundos para ver en vivo los mensajes entrantes de WhatsApp
+    // (usa actualización funcional de sesionActivaId para no resetear jamás el chat que estás leyendo)
     const interval = setInterval(() => {
       void cargarSesiones(undefined, true);
     }, 8000);
@@ -535,6 +655,24 @@ export default function AgenteOmnicanal() {
             type="button"
             className="btn btn-outline btn-sm"
             style={{
+              background: mostrarConfigAgentes ? '#4f46e5' : 'rgba(99, 102, 241, 0.28)',
+              color: '#fff',
+              borderColor: '#818cf8',
+              fontWeight: 800,
+            }}
+            onClick={() => {
+              setMostrarConfigAgentes((v) => !v);
+              if (!configAgentes) void cargarConfigAgentes();
+            }}
+          >
+            {mostrarConfigAgentes
+              ? '✕ Cerrar Cerebros IA'
+              : '🧠 Configurar 6 Agentes IA & Probar'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            style={{
               background: 'rgba(255,255,255,0.12)',
               color: '#fff',
               borderColor: 'rgba(255,255,255,0.28)',
@@ -585,6 +723,260 @@ export default function AgenteOmnicanal() {
           </button>
         </div>
       </div>
+
+      {/* ── PANEL EN VIVO: CONFIGURAR LOS 6 AGENTES IA (GEMINI 4 NEON) + PROBAR COTIZACIÓN ── */}
+      {mostrarConfigAgentes && (
+        <div
+          style={{
+            background: '#ffffff',
+            border: '2px solid #6366f1',
+            borderRadius: 14,
+            padding: 18,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+          }}
+        >
+          {/* Bloque 1: Prueba rápida a +56951387986 y vinculación Meta de +56950960294 */}
+          <div
+            style={{
+              background: '#f0fdf4',
+              border: '1px solid #86efac',
+              borderRadius: 10,
+              padding: 14,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+          >
+            <div style={{ fontWeight: 800, color: '#14532d', fontSize: '0.93rem' }}>
+              🧪 1. Probar Envío de Solicitud de Cotización a tu WhatsApp Personal y Verificar Línea +56 9 5096 0294 en Meta
+            </div>
+            <div style={{ fontSize: '0.81rem', color: '#166534' }}>
+              • Envía una solicitud natural de prueba a tu número personal (ej: <em>"Estimado, Necesito radiador para Jac S3 2019 1.6 patente LKWP42, compárteme por favor las opciones que tengas con stock disponible y precio."</em>). Si le respondes sin IVA, sin marca/origen o sin tiempo de retiro, el agente cotizador te repreguntará automáticamente.
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                className={styles.input}
+                style={{ maxWidth: 200 }}
+                value={telefonoPruebaPersonal}
+                onChange={(e) => setTelefonoPruebaPersonal(e.target.value)}
+                placeholder="+56951387986"
+              />
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                style={{ background: '#16a34a', borderColor: '#16a34a' }}
+                disabled={enviandoPruebaPersonal}
+                onClick={handleEnviarPruebaAMiNumero}
+              >
+                {enviandoPruebaPersonal
+                  ? 'Enviando por Meta...'
+                  : `📲 Enviar Cotización de Prueba a ${telefonoPruebaPersonal}`}
+              </button>
+
+              <span style={{ color: '#64748b', fontSize: '0.8rem', marginLeft: 8 }}>
+                Phone Number ID de +56950960294:
+              </span>
+              <input
+                className={styles.input}
+                style={{ maxWidth: 200 }}
+                value={phoneNumberIdMesaInput}
+                onChange={(e) => setPhoneNumberIdMesaInput(e.target.value)}
+                placeholder="Ej: 1492165227305531"
+              />
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={handleGuardarPhoneIdMesa}
+              >
+                🔄 Vincular / Auto-Detectar en Meta
+              </button>
+            </div>
+          </div>
+
+          {/* Bloque 2: Configuración en Caliente de los 6 Subagentes + Orquestador */}
+          {configAgentes && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '0.96rem' }}>
+                    🧠 2. Cerebros, Modelo IA (Gemini 4 Neon) y Contexto en Vivo de los 6 Agentes de Repuestín
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#475569' }}>
+                    Cualquier regla, instrucción o contexto nuevo que escribas aquí se aplica al instante en WhatsApp sin entrar a Cloud Run.
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>
+                    Modelo Global:
+                  </label>
+                  <select
+                    className={styles.input}
+                    value={configAgentes.modeloGlobalPreferido}
+                    onChange={(e) =>
+                      setConfigAgentes((prev) =>
+                        prev ? { ...prev, modeloGlobalPreferido: e.target.value } : prev
+                      )
+                    }
+                  >
+                    {(configAgentes.modelosDisponibles || []).map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.nombre}
+                      </option>
+                    ))}
+                  </select>
+
+                  <label style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>
+                    Vigencia Producto Temporal (Horas):
+                  </label>
+                  <input
+                    type="number"
+                    className={styles.input}
+                    style={{ width: 70 }}
+                    value={configAgentes.ttlHorasProductoTemporal}
+                    onChange={(e) =>
+                      setConfigAgentes((prev) =>
+                        prev ? { ...prev, ttlHorasProductoTemporal: Number(e.target.value) || 4 } : prev
+                      )
+                    }
+                  />
+
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={guardandoConfigAgentes}
+                    onClick={handleGuardarConfigAgentes}
+                  >
+                    {guardandoConfigAgentes ? 'Guardando...' : '💾 Guardar Cambios en Vivo'}
+                  </button>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',
+                  gap: 14,
+                }}
+              >
+                {Object.values(configAgentes.agentes || {}).map((ag) => (
+                  <div
+                    key={ag.id}
+                    style={{
+                      background: '#f8fafc',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 10,
+                      padding: 14,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      <strong style={{ fontSize: '0.9rem', color: '#0f172a' }}>{ag.nombre}</strong>
+                      <select
+                        className={styles.input}
+                        style={{ fontSize: '0.75rem', padding: '3px 6px' }}
+                        value={ag.modelo}
+                        onChange={(e) =>
+                          setConfigAgentes((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  agentes: {
+                                    ...prev.agentes,
+                                    [ag.id]: { ...ag, modelo: e.target.value },
+                                  },
+                                }
+                              : prev
+                          )
+                        }
+                      >
+                        {(configAgentes.modelosDisponibles || []).map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.id}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ fontSize: '0.79rem', color: '#475569' }}>{ag.rol}</div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#1e293b' }}>
+                      📋 Base de Conocimiento e Instrucciones Operativas Completas del Agente:
+                    </label>
+                    <textarea
+                      className={styles.textarea}
+                      style={{
+                        minHeight: 190,
+                        fontSize: '0.78rem',
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                        lineHeight: 1.45,
+                      }}
+                      value={ag.instrucciones}
+                      onChange={(e) =>
+                        setConfigAgentes((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                agentes: {
+                                  ...prev.agentes,
+                                  [ag.id]: { ...ag, instrucciones: e.target.value },
+                                },
+                              }
+                            : prev
+                        )
+                      }
+                    />
+                    <label style={{ fontSize: '0.75rem', fontWeight: 800, color: '#1e293b' }}>
+                      🗂️ Tablas de Datos / Tarifario / Diccionario y Contexto Adicional (Editable en Vivo):
+                    </label>
+                    <textarea
+                      className={styles.textarea}
+                      style={{
+                        minHeight: 145,
+                        fontSize: '0.78rem',
+                        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                        lineHeight: 1.45,
+                      }}
+                      placeholder="Ej: Tarifario, diccionarios, reglas de nuevos proveedores..."
+                      value={ag.contextoExtra}
+                      onChange={(e) =>
+                        setConfigAgentes((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                agentes: {
+                                  ...prev.agentes,
+                                  [ag.id]: { ...ag, contextoExtra: e.target.value },
+                                },
+                              }
+                            : prev
+                        )
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── 4 INDICADORES OPERATIVOS REALES DE REPUESTÍN ────────── */}
       <div className={styles.pipelineBar}>

@@ -13,6 +13,10 @@ import {
   elegirMejorOfertaMesaWsp,
   crearYPublicarProductoTemporalMesaWsp,
 } from '../agents/agente4MesaYPublicadorTemporal.js';
+import {
+  obtenerConfiguracionAgentesIA,
+  guardarConfiguracionAgentesIA,
+} from '../agents/configAgentesService.js';
 
 const router = Router();
 
@@ -381,7 +385,10 @@ router.get('/solicitudes', requireAuth, async (req, res, next) => {
       data: {
         credencialesMetaActivas,
         numeroMesaAbastecimiento: `+${cfgMeta.numeroMesaB2b || '56950960294'}`,
+        phoneNumberIdMesaB2b: cfgMeta.phoneNumberIdMesaB2b || '',
         numeroRepuestinClientes: `+${cfgMeta.numeroPublico || '56921109851'}`,
+        phoneNumberIdRepuestin: cfgMeta.phoneNumberId || '',
+        wabaId: cfgMeta.wabaId || '',
         modoOperacionMeta: credencialesMetaActivas
           ? 'meta_cloud_api_live'
           : 'simulacion_meta_local',
@@ -391,6 +398,192 @@ router.get('/solicitudes', requireAuth, async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET y PUT /api/mesa-wsp/agentes-config
+// Permite ver y editar desde `sistema.facilrepuestos.cl` (sin entrar a Cloud Run)
+// el modelo IA (`gemini-4.0-neon`), instrucciones, reglas y contexto de los 6 Subagentes + Orquestador
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/agentes-config', requireAuth, async (req, res, next) => {
+  try {
+    const config = await obtenerConfiguracionAgentesIA({ forceRefresh: true });
+    res.json({ success: true, data: config });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.put('/agentes-config', requireAuth, async (req, res, next) => {
+  try {
+    const actualizado = await guardarConfiguracionAgentesIA(req.body || {});
+    res.json({ success: true, data: actualizado });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/mesa-wsp/config-numero-mesa
+// Guarda el Phone Number ID de Meta para el número +56950960294 o lo auto-detecta en el WABA
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/config-numero-mesa', requireAuth, async (req, res, next) => {
+  try {
+    const { phoneNumberIdMesaB2b = '', numeroMesaB2b = '56950960294' } = req.body || {};
+    const cfg = await obtenerConfigMetaWhatsapp({ forceRefresh: true });
+    let idFinal = String(phoneNumberIdMesaB2b || '').trim();
+    let numerosEnWaba = [];
+
+    if (cfg.accessToken && cfg.wabaId) {
+      const rNums = await fetch(
+        `https://graph.facebook.com/${cfg.graphVersion || 'v21.0'}/${cfg.wabaId}/phone_numbers?fields=id,display_phone_number,verified_name,code_verification_status`,
+        { headers: { Authorization: `Bearer ${cfg.accessToken}` } }
+      ).catch(() => null);
+      if (rNums && rNums.ok) {
+        const dNums = await rNums.json();
+        numerosEnWaba = Array.isArray(dNums?.data) ? dNums.data : [];
+        if (!idFinal) {
+          const limp = String(numeroMesaB2b).replace(/\D/g, '').slice(-8);
+          const encontrado = numerosEnWaba.find((n) =>
+            String(n.display_phone_number || '').replace(/\D/g, '').endsWith(limp)
+          );
+          if (encontrado?.id) {
+            idFinal = String(encontrado.id);
+          }
+        }
+      }
+    }
+
+    if (idFinal) {
+      await db
+        .collection('configuracion_sistema')
+        .doc('whatsapp_meta')
+        .set(
+          {
+            phoneNumberIdMesaB2b: idFinal,
+            numeroMesaB2b: String(numeroMesaB2b).replace(/\D/g, '') || '56950960294',
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+    }
+
+    await obtenerConfigMetaWhatsapp({ forceRefresh: true });
+
+    res.json({
+      success: true,
+      data: {
+        phoneNumberIdMesaB2b: idFinal,
+        numeroMesaB2b: String(numeroMesaB2b).replace(/\D/g, '') || '56950960294',
+        numerosRegistradosEnMetaWaba: numerosEnWaba,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/mesa-wsp/probar-envio
+// Dispara una solicitud de cotización de prueba en vivo al número indicado (ej. +56951387986)
+// y deja creada la solicitud abierta para que al responder desde tu WhatsApp personal
+// el Agente 4 cree automáticamente el Producto Temporal (4h) en WordPress.
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/probar-envio', requireAuth, async (req, res, next) => {
+  try {
+    const {
+      telefonoPrueba = '+56951387986',
+      marcaVehiculo = 'JAC',
+      modeloVehiculo = 'S3',
+      anioVehiculo = 2019,
+      patente = 'LKWP42',
+      repuestoBuscado = 'RADIADOR DE AGUA',
+      categoriaRepuesto = 'Refrigeración y Climatización',
+    } = req.body || {};
+
+    const telLimpio = `+${String(telefonoPrueba || '+56951387986').replace(/\D/g, '')}`;
+    const codigoSolicitud = generarCodigoSolicitud();
+    const now = new Date().toISOString();
+
+    const mensajeEnviado = construirMensajeSalidaWsp({
+      codigoSolicitud,
+      nombreProveedor: 'Prueba Personal Abastecimiento',
+      marcaVehiculo,
+      modeloVehiculo,
+      anioVehiculo,
+      motorVehiculo: '1.6',
+      patente,
+      vin: '',
+      repuestoBuscado,
+      codigoReferencia: '',
+      notasAdicionales: 'Prueba en vivo de Mesa de Abastecimiento -> Responde ej: "Sí lo tengo a 55 mil neto entrega inmediata" para probar la subida temporal de 4h a WordPress.',
+    });
+
+    const resMeta = await enviarMensajeMetaWhatsApp({
+      telefono: telLimpio,
+      textoMensaje: mensajeEnviado,
+      codigoSolicitud,
+    });
+
+    const nuevaSolicitud = {
+      codigoSolicitud,
+      estado: 'esperando_respuestas',
+      canalCliente: 'whatsapp',
+      clienteNombre: 'Prueba Directa Usuario (+56951387986)',
+      clienteTelefono: telLimpio,
+      clienteTelefonoReal: telLimpio,
+      comunaCliente: 'La Florida',
+      patente,
+      vin: '',
+      marcaVehiculo,
+      modeloVehiculo,
+      anioVehiculo: Number(anioVehiculo) || 2019,
+      motorVehiculo: '1.6',
+      categoriaRepuesto,
+      repuestoBuscado,
+      codigoReferencia: '',
+      notasAdicionales: 'Prueba de circuito completo Agente 4 (Mesa WSP -> Producto Temporal 4h en WordPress -> Link de tienda)',
+      margenPct: 30,
+      escalamientoOrigenId: null,
+      proveedoresContactados: [
+        {
+          proveedorId: 'prov-prueba-personal',
+          proveedorNombre: `Mi WhatsApp Personal (${telLimpio})`,
+          contacto: 'Prueba Directa',
+          telefono: telLimpio,
+          especialidadMarcas: [marcaVehiculo],
+          estadoContacto: 'enviado',
+          modoEnvio: resMeta.modoEnvio,
+          metaMessageId: resMeta.metaMessageId,
+          errorMeta: resMeta.errorMeta || null,
+          mensajeEnviado,
+          enviadoEn: resMeta.enviadoEn,
+          respondidoEn: null,
+        },
+      ],
+      ofertasRecibidas: [],
+      ofertaGanadoraId: null,
+      skuPublicoGenerado: null,
+      inventarioCreadoId: null,
+      conocimientoCreadoId: null,
+      mensajeCotizacionCliente: '',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const docRef = await db.collection(COLECCION_SOLICITUDES_WSP).add(nuevaSolicitud);
+
+    res.status(201).json({
+      success: true,
+      data: {
+        id: docRef.id,
+        ...nuevaSolicitud,
+        resultadoEnvioMeta: resMeta,
+      },
+    });
+  } catch (err) {
+    next(err);
   }
 });
 

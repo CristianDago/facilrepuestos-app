@@ -85,18 +85,126 @@ export default function MesaCotizacionWsp() {
   const [guardarConocimientoIa, setGuardarConocimientoIa] = useState(true);
   const [verMensajesId, setVerMensajesId] = useState<string | null>(null);
 
+  // Panel de Configuración de los 6 Agentes IA (Gemini 4 Neon + Contexto en Vivo) y Prueba Directa (+56951387986)
+  const [mostrarConfigAgentes, setMostrarConfigAgentes] = useState(false);
+  const [guardandoConfigAgentes, setGuardandoConfigAgentes] = useState(false);
+  const [enviandoPruebaPersonal, setEnviandoPruebaPersonal] = useState(false);
+  const [telefonoPruebaPersonal, setTelefonoPruebaPersonal] = useState('+56951387986');
+  const [phoneNumberIdMesaInput, setPhoneNumberIdMesaInput] = useState('');
+  const [configAgentes, setConfigAgentes] = useState<{
+    modeloGlobalPreferido: string;
+    ttlHorasProductoTemporal: number;
+    topProveedoresMesaWsp: number;
+    modelosDisponibles: Array<{ id: string; nombre: string }>;
+    agentes: Record<
+      string,
+      {
+        id: string;
+        nombre: string;
+        modelo: string;
+        rol: string;
+        instrucciones: string;
+        contextoExtra: string;
+        activo: boolean;
+      }
+    >;
+  } | null>(null);
+
   const cargarMesaWsp = async () => {
     try {
       setLoading(true);
-      const res = await api.get<ApiResponse<EstadoMesaWspResponse>>('/mesa-wsp/solicitudes');
+      const [res, resAgentes] = await Promise.all([
+        api.get<ApiResponse<EstadoMesaWspResponse & { phoneNumberIdMesaB2b?: string }>>('/mesa-wsp/solicitudes'),
+        api.get<ApiResponse<typeof configAgentes>>('/mesa-wsp/agentes-config').catch(() => null),
+      ]);
       if (res.success && res.data) {
         setSolicitudes(res.data.solicitudes || []);
         setProveedoresWsp(res.data.proveedoresWsp || []);
+        if (res.data.phoneNumberIdMesaB2b) {
+          setPhoneNumberIdMesaInput(res.data.phoneNumberIdMesaB2b);
+        }
+      }
+      if (resAgentes?.success && resAgentes.data) {
+        setConfigAgentes(resAgentes.data);
       }
     } catch (err) {
       notify((err as Error).message || 'Error al cargar Mesa de Abastecimiento WhatsApp', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGuardarConfigAgentes = async () => {
+    if (!configAgentes) return;
+    try {
+      setGuardandoConfigAgentes(true);
+      const r = await api.put<ApiResponse<typeof configAgentes>>('/mesa-wsp/agentes-config', configAgentes);
+      if (r.success && r.data) {
+        setConfigAgentes(r.data);
+        notify('✓ Cerebros, modelo (Gemini 4 Neon) y contexto de los 6 agentes actualizados en vivo', 'success');
+      }
+    } catch (err) {
+      notify((err as Error).message || 'Error al guardar configuración de agentes', 'error');
+    } finally {
+      setGuardandoConfigAgentes(false);
+    }
+  };
+
+  const handleGuardarPhoneIdMesa = async () => {
+    try {
+      const r = await api.post<
+        ApiResponse<{ phoneNumberIdMesaB2b: string; numerosRegistradosEnMetaWaba: Array<{ id: string; display_phone_number: string }> }>
+      >('/mesa-wsp/config-numero-mesa', {
+        phoneNumberIdMesaB2b: phoneNumberIdMesaInput,
+        numeroMesaB2b: '56950960294',
+      });
+      if (r.success && r.data) {
+        if (r.data.phoneNumberIdMesaB2b) {
+          setPhoneNumberIdMesaInput(r.data.phoneNumberIdMesaB2b);
+          notify(`✓ Phone Number ID de +56 9 5096 0294 vinculado (${r.data.phoneNumberIdMesaB2b})`, 'success');
+        } else {
+          notify(
+            `ℹ Aún no figura +56 9 5096 0294 en el WABA de Meta. Agrégalo en developers.facebook.com -> WhatsApp o pega su Phone Number ID aquí.`,
+            'info'
+          );
+        }
+      }
+    } catch (err) {
+      notify((err as Error).message || 'Error al verificar número en Meta', 'error');
+    }
+  };
+
+  const handleEnviarPruebaAMiNumero = async () => {
+    try {
+      setEnviandoPruebaPersonal(true);
+      const r = await api.post<
+        ApiResponse<
+          SolicitudCotizacionWsp & {
+            resultadoEnvioMeta?: { enviadoReal?: boolean; modoEnvio?: string; errorMeta?: string };
+          }
+        >
+      >('/mesa-wsp/probar-envio', {
+        telefonoPrueba: telefonoPruebaPersonal,
+      });
+      if (r.success && r.data) {
+        const resMeta = r.data.resultadoEnvioMeta;
+        if (resMeta?.enviadoReal) {
+          notify(
+            `📲 Solicitud #${r.data.codigoSolicitud} enviada por WhatsApp real a ${telefonoPruebaPersonal}. ¡Respóndele desde tu celular para probar la subida temporal de 4h a WordPress!`,
+            'success'
+          );
+        } else {
+          notify(
+            `⚠️ Solicitud #${r.data.codigoSolicitud} creada (${resMeta?.errorMeta || 'Recuerda enviar primero un "Hola" desde tu celular al número de WhatsApp para abrir la ventana de 24h de Meta'}).`,
+            'info'
+          );
+        }
+        await cargarMesaWsp();
+      }
+    } catch (err) {
+      notify((err as Error).message || 'Error al enviar prueba de cotización', 'error');
+    } finally {
+      setEnviandoPruebaPersonal(false);
     }
   };
 
@@ -404,6 +512,16 @@ export default function MesaCotizacionWsp() {
         </div>
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            style={{ borderColor: '#6366f1', color: '#4f46e5', fontWeight: 700 }}
+            onClick={() => setMostrarConfigAgentes((v) => !v)}
+          >
+            {mostrarConfigAgentes
+              ? '✕ Cerrar Cerebros IA'
+              : '🧠 Configurar 6 Agentes IA (Gemini 4 Neon) & Probar +56951387986'}
+          </button>
           {solicitudes.length > 0 && (
             <button
               type="button"
@@ -425,6 +543,251 @@ export default function MesaCotizacionWsp() {
           </button>
         </div>
       </div>
+
+      {/* PANEL EN VIVO: CONFIGURAR LOS 6 AGENTES IA (GEMINI 4 NEON) + PROBAR ENVÍO A +56951387986 */}
+      {mostrarConfigAgentes && (
+        <div
+          style={{
+            background: '#ffffff',
+            border: '2px solid #6366f1',
+            borderRadius: 14,
+            padding: 20,
+            marginBottom: 18,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 18,
+          }}
+        >
+          {/* Bloque 1: Prueba rápida a +56951387986 y vinculación Meta de +56950960294 */}
+          <div
+            style={{
+              background: '#f0fdf4',
+              border: '1px solid #86efac',
+              borderRadius: 10,
+              padding: 14,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 10,
+            }}
+          >
+            <div style={{ fontWeight: 800, color: '#14532d', fontSize: '0.95rem' }}>
+              🧪 1. Probar Envío de Solicitud de Cotización a tu WhatsApp Personal y Verificar Línea +56 9 5096 0294 en Meta
+            </div>
+            <div style={{ fontSize: '0.83rem', color: '#166534' }}>
+              • Para que Meta permita enviar mensajes al nuevo número <strong>+56 9 5096 0294</strong>, recuerda que ese número debe estar agregado en tu panel de <strong>Meta Developers (WhatsApp → Configuración de la API)</strong> y que desde tu celular <strong>+56951387986</strong> le hayas enviado un <em>"Hola"</em> primero para abrir la ventana gratuita de 24h de Meta.
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                className={styles.input}
+                style={{ maxWidth: 200 }}
+                value={telefonoPruebaPersonal}
+                onChange={(e) => setTelefonoPruebaPersonal(e.target.value)}
+                placeholder="+56951387986"
+              />
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                style={{ background: '#16a34a', borderColor: '#16a34a' }}
+                disabled={enviandoPruebaPersonal}
+                onClick={handleEnviarPruebaAMiNumero}
+              >
+                {enviandoPruebaPersonal
+                  ? 'Enviando por Meta...'
+                  : `📲 Enviar Cotización de Prueba a ${telefonoPruebaPersonal}`}
+              </button>
+
+              <span style={{ color: '#64748b', fontSize: '0.82rem', marginLeft: 8 }}>
+                Phone Number ID de +56950960294 (opcional si ya está en el mismo WABA):
+              </span>
+              <input
+                className={styles.input}
+                style={{ maxWidth: 210 }}
+                value={phoneNumberIdMesaInput}
+                onChange={(e) => setPhoneNumberIdMesaInput(e.target.value)}
+                placeholder="Ej: 1492165227305531"
+              />
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                onClick={handleGuardarPhoneIdMesa}
+              >
+                🔄 Vincular / Auto-Detectar en Meta
+              </button>
+            </div>
+          </div>
+
+          {/* Bloque 2: Configuración en Caliente de los 6 Subagentes + Orquestador (sin entrar a Cloud Run) */}
+          {configAgentes && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 800, color: '#0f172a', fontSize: '1rem' }}>
+                    🧠 2. Cerebros, Modelo IA y Contexto en Vivo de los 6 Agentes (Sin tocar Cloud Run)
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: '#475569' }}>
+                    Cualquier regla, instrucción o contexto nuevo que escribas aquí se aplica al instante en WhatsApp.
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                    Modelo Global:
+                  </label>
+                  <select
+                    className={styles.select}
+                    value={configAgentes.modeloGlobalPreferido}
+                    onChange={(e) =>
+                      setConfigAgentes((prev) =>
+                        prev ? { ...prev, modeloGlobalPreferido: e.target.value } : prev
+                      )
+                    }
+                  >
+                    {(configAgentes.modelosDisponibles || []).map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.nombre}
+                      </option>
+                    ))}
+                  </select>
+
+                  <label style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                    Vigencia Producto Temporal (Horas):
+                  </label>
+                  <input
+                    type="number"
+                    className={styles.input}
+                    style={{ width: 70 }}
+                    value={configAgentes.ttlHorasProductoTemporal}
+                    onChange={(e) =>
+                      setConfigAgentes((prev) =>
+                        prev ? { ...prev, ttlHorasProductoTemporal: Number(e.target.value) || 4 } : prev
+                      )
+                    }
+                  />
+
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={guardandoConfigAgentes}
+                    onClick={handleGuardarConfigAgentes}
+                  >
+                    {guardandoConfigAgentes ? 'Guardando...' : '💾 Guardar Cambios en Vivo'}
+                  </button>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(330px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                {Object.values(configAgentes.agentes || {}).map((ag) => (
+                  <div
+                    key={ag.id}
+                    style={{
+                      background: '#f8fafc',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 10,
+                      padding: 12,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 8,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      <strong style={{ fontSize: '0.88rem', color: '#0f172a' }}>{ag.nombre}</strong>
+                      <select
+                        className={styles.select}
+                        style={{ fontSize: '0.76rem', padding: '3px 6px' }}
+                        value={ag.modelo}
+                        onChange={(e) =>
+                          setConfigAgentes((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  agentes: {
+                                    ...prev.agentes,
+                                    [ag.id]: { ...ag, modelo: e.target.value },
+                                  },
+                                }
+                              : prev
+                          )
+                        }
+                      >
+                        {(configAgentes.modelosDisponibles || []).map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.id}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#64748b' }}>{ag.rol}</div>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>
+                      Instrucciones base del agente:
+                    </label>
+                    <textarea
+                      className={styles.textarea}
+                      style={{ minHeight: 58, fontSize: '0.8rem' }}
+                      value={ag.instrucciones}
+                      onChange={(e) =>
+                        setConfigAgentes((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                agentes: {
+                                  ...prev.agentes,
+                                  [ag.id]: { ...ag, instrucciones: e.target.value },
+                                },
+                              }
+                            : prev
+                        )
+                      }
+                    />
+                    <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#334155' }}>
+                      Contexto nuevo / Reglas adicionales (editable en caliente):
+                    </label>
+                    <textarea
+                      className={styles.textarea}
+                      style={{ minHeight: 52, fontSize: '0.8rem' }}
+                      placeholder="Ej: Proveedor X cierra a las 17:30, priorizar pastillas cerámicas..."
+                      value={ag.contextoExtra}
+                      onChange={(e) =>
+                        setConfigAgentes((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                agentes: {
+                                  ...prev.agentes,
+                                  [ag.id]: { ...ag, contextoExtra: e.target.value },
+                                },
+                              }
+                            : prev
+                        )
+                      }
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* KPIs en 0 + Cuadro Proveedores WhatsApp Activos con botón Agregar Nuevos Proveedores */}
       <div className={styles.kpiGrid}>

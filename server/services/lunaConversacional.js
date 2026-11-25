@@ -27,10 +27,10 @@ import {
   NODOS_DESPACHO_DEFAULT,
 } from './logisticaTarifarioService.js';
 import { esItemStockPropioOlivares224 } from '../agents/agente2BuscadorErp.js';
-
+import { obtenerConfiguracionAgentesIA } from '../agents/configAgentesService.js';
 
 const GCP_PROJECT = process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'facilrepuestos-prod';
-const GEMINI_MODEL = process.env.GEMINI_AGENT_MODEL || 'gemini-3.8-flash';
+const GEMINI_MODEL = process.env.GEMINI_AGENT_MODEL || 'gemini-4.0-neon';
 
 const googleAuth = new google.auth.GoogleAuth({
   scopes: ['https://www.googleapis.com/auth/cloud-platform'],
@@ -902,6 +902,24 @@ export async function redactarRespuestaConGeminiLuna({
     if (!accessToken) return respuestaFallback;
 
     const horaCtx = obtenerContextoHoraChile();
+    const cfgAgentes = await obtenerConfiguracionAgentesIA().catch(() => null);
+    const modeloPreferido =
+      cfgAgentes?.agentes?.orquestador?.modelo ||
+      cfgAgentes?.modeloGlobalPreferido ||
+      GEMINI_MODEL;
+
+    const bloqueContextoEditablePortal = cfgAgentes?.agentes
+      ? Object.values(cfgAgentes.agentes)
+          .filter((a) => a.activo !== false && (a.instrucciones || a.contextoExtra))
+          .map(
+            (a) =>
+              `• [${a.nombre}]: ${a.instrucciones || ''} ${
+                a.contextoExtra ? `| Contexto adicional: ${a.contextoExtra}` : ''
+              }`
+          )
+          .join('\n')
+      : '';
+
     const instruccionSistema = `Te llamas Repuestín y eres el asistente de ventas de mostrador de facilrepuestos.cl en Chile. Atiendes directamente a clientes finales que buscan repuestos para su vehículo exclusivamente por WhatsApp.
 Hablas como un vendedor experto de mostrador en Chile: directo, breve, amable y claro (máximo 3 a 5 líneas por respuesta). Tratas al cliente de "tú". Usas "tenemos", "te puedo ofrecer", "revisemos".
 
@@ -916,7 +934,8 @@ REGLAS INQUEBRANTABLES (HEREDADAS DE LUNA SOLUPARTS):
      * Los ÚNICOS productos que pueden retirarse y pagarse presencialmente en nuestra tienda de **Enrique Olivares 224, La Florida** son los de nuestro stock local propio (\`FRP-OWN-*\` / \`DRM-*\`).
      * Todo el resto de los productos (\`FRP-SOL-*\`, \`FRP-GLB-*\`, \`FRP-WSP-*\`) son **100% con Despacho a domicilio** (con tarifa pre-calculada en Santiago por anillos y en Regiones por talla) y se compran directamente desde el link del producto en **facilrepuestos.cl**.
 6. NUNCA menciones nombres de proveedores mayoristas internos (jamás nombres a Soluparts, Global Repuestos ni bodegas externas). Todo el stock y la gestión son de facilrepuestos.cl (escrito siempre sin tilde cuando lleva .cl).
-7. Sé breve y directo (máximo 3 a 4 líneas). No divagues ni mezcles preguntas de pasos futuros.`;
+7. Sé breve y directo (máximo 3 a 4 líneas). No divagues ni mezcles preguntas de pasos futuros.
+${bloqueContextoEditablePortal ? `\nDIRECTRICES Y CONTEXTO VIVO DE SUBAGENTES (EDITADO EN PORTAL):\n${bloqueContextoEditablePortal}` : ''}`;
 
     const ultimosTurnos = (historialMensajes || []).slice(-6).map((m) => ({
       role: m.autor === 'cliente' ? 'user' : 'model',
@@ -928,39 +947,52 @@ REGLAS INQUEBRANTABLES (HEREDADAS DE LUNA SOLUPARTS):
       `[DATOS VERIFICADOS DEL SISTEMA PARA ESTE TURNO]:\n${contextoSituacion}\n\n` +
       `[MENSAJE DEL CLIENTE]:\n${textoCliente}`;
 
-    const url = `https://aiplatform.googleapis.com/v1/projects/${GCP_PROJECT}/locations/global/publishers/google/models/${GEMINI_MODEL}:generateContent`;
+    const modelosIntento = Array.from(
+      new Set([modeloPreferido, 'gemini-3.8-flash', 'gemini-2.5-flash'])
+    );
+    let resp = null;
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 9000);
-
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: instruccionSistema }],
-        },
-        contents: [
-          ...ultimosTurnos,
-          {
-            role: 'user',
-            parts: [{ text: promptTurno }],
+    for (const modId of modelosIntento) {
+      const url = `https://aiplatform.googleapis.com/v1/projects/${GCP_PROJECT}/locations/global/publishers/google/models/${modId}:generateContent`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 9000);
+      try {
+        const intento = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
           },
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 450,
-          thinkingConfig: { thinkingBudget: 0 },
-        },
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
+          body: JSON.stringify({
+            systemInstruction: {
+              parts: [{ text: instruccionSistema }],
+            },
+            contents: [
+              ...ultimosTurnos,
+              {
+                role: 'user',
+                parts: [{ text: promptTurno }],
+              },
+            ],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 450,
+              thinkingConfig: { thinkingBudget: 0 },
+            },
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (intento.ok) {
+          resp = intento;
+          break;
+        }
+      } catch {
+        clearTimeout(timeoutId);
+      }
+    }
 
-    if (!resp.ok) {
+    if (!resp || !resp.ok) {
       return respuestaFallback;
     }
 

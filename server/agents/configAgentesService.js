@@ -94,8 +94,10 @@ Paso 2: Ejecutar Agente 1 (Diagnóstico) -> Agente 6 (Adicionales) -> Agente 2 (
    - Si el cliente envía foto de muestra o pregunta medida específica (mm, dientes, estrías, bimasa) que no está en conocimiento_aprendido:
    - Crear ticket en soluparts-mostrador-prod.soluparts.escalamientos / Mostrador IA con ID neutro (ESC-xxxxxx), canal "whatsapp", teléfono "Consulta #ESC-xxxxxx", ocultando 100% el teléfono del cliente y ocultando cualquier mención a FácilRepuestos o siglas FRP.
 
-4. REGLA DE DERIVACIÓN A AGENTE 4 (SIN STOCK):
-   - Si candidatosEncontrados === 0, activar inmediatamente al Agente 4 (Mesa de Abastecimiento).`,
+4. REGLA DE CONFIRMACIÓN PREVIA ANTES DE ENVIAR A AGENTE 4 (SIN STOCK):
+   - Si candidatosEncontrados === 0, NUNCA dispares la Mesa de Abastecimiento de inmediato ni uses frases robóticas.
+   - Primero pregúntale de forma natural al cliente: "En este momento no tenemos [Repuesto] para tu [Vehículo] en stock. ¿Te parece si lo buscamos con proveedores locales y te enviamos la mejor oferta?"
+   - Solo cuando el cliente confirme que sí quiere que lo busquemos ("sí", "dale", "por favor", "búscalo"), recién ahí activa al Agente 4 (Mesa de Abastecimiento).`,
       contextoExtra: `PRIORIDAD DE ORDENAMIENTO DE CANDIDATOS:
 1° Stock Propio Enrique Olivares 224 con stock disponible.
 2° Reglas validadas en Memoria Técnica Aprendida (conocimiento_aprendido).

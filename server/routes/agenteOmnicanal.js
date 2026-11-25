@@ -1537,6 +1537,170 @@ async function ejecutarCascadaAgenteOmnicanal({
     }
   }
 
+  // ─── PASO 0.B2: CONFIRMACIÓN DEL CLIENTE PARA BUSCAR EN MESA DE ABASTECIMIENTO ──
+  // Solo enviamos la solicitud a los proveedores locales por WhatsApp (+56950960294) DESPUÉS de que el cliente
+  // confirme que desea que lo busquemos y puede esperar la oferta.
+  if (sesion.confirmacionMesaWspPendiente && modoForzado === 'auto') {
+    const pend = sesion.confirmacionMesaWspPendiente;
+    const textoLimpioConf = String(textoBruto || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+    const confirmaBusqueda =
+      /^(si|sii+|dale|bueno|ya|ok|okay|por\s*favor|porfa|buscalo|busquenlo|me\s+parece|claro|obvio|de\s+acuerdo|perfecto|espero|te\s+espero|si\s+porfa|si\s+por\s+favor|si\s+dale|dale\s+porfa)\b/i.test(
+        textoLimpioConf
+      ) ||
+      /\b(si\s+buscalo|buscalo\s+porfa|si\s+me\s+parece|puedo\s+esperar)\b/i.test(textoLimpioConf);
+
+    const rechazaBusqueda =
+      /^(no|no\s+gracias|no\s+puedo\s+esperar|paso|dejalo|mejor\s+no|no\s+por\s+ahora)\b/i.test(
+        textoLimpioConf
+      );
+
+    if (confirmaBusqueda) {
+      const nowConf = new Date().toISOString();
+      const vehiculoPend = pend.vehiculo || sesion.vehiculoContexto || null;
+      const provSnap = await db.collection(COLECCION_PROVEEDORES).get();
+      const proveedores = provSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter((p) => p.activo !== false && p.canalWspActivo !== false && p.telefono);
+
+      const seleccionados = seleccionarTop3ProveedoresMesaWsp({
+        proveedores,
+        marcaVehiculo: vehiculoPend?.marca || '',
+        categoriaRepuesto: pend.categoria || '',
+        comunaCliente: sesion.comunaCliente || '',
+      });
+
+      const codigoSolicitud = `WSP-${Math.floor(1000 + Math.random() * 9000)}`;
+      const repuestoTexto = `${pend.resumenFaltantes} ${vehiculoPend?.marca || ''} ${vehiculoPend?.modelo || ''}`.trim();
+      const proveedoresContactados = [];
+
+      for (const p of seleccionados) {
+        const mensajeEnviado = `Hola ${p.contacto || p.nombre} 👋 Consulta de abastecimiento (#${codigoSolicitud}): Buscamos **${repuestoTexto}**${
+          vehiculoPend?.anio ? ` (${vehiculoPend.anio})` : ''
+        }${vehiculoPend?.patente ? ` · Patente ${vehiculoPend.patente}` : ''}${
+          vehiculoPend?.vin ? ` · VIN ${vehiculoPend.vin}` : ''
+        }. ¿Tienes stock disponible y precio costo neto para retiro inmediato?`;
+
+        const envioReal = await enviarMensajeMesaAbastecimientoWhatsapp({
+          telefonoDestino: p.telefono,
+          texto: mensajeEnviado,
+        }).catch(() => null);
+
+        proveedoresContactados.push({
+          proveedorId: p.id,
+          proveedorNombre: p.nombre,
+          contacto: p.contacto || 'Mesón WhatsApp',
+          telefono: p.telefono,
+          especialidad: p.categoria || p.especialidad || 'Multimarca',
+          especialidadMarcas: p.marcas || p.marcasVehiculo || p.marcasEspecialidad || ['MULTIMARCA'],
+          marcasVehiculo: p.marcas || p.marcasVehiculo || [],
+          estadoContacto: 'enviado',
+          modoEnvio: envioReal?.enviado ? 'meta_cloud_api_live' : 'simulacion_meta_local',
+          metaMessageId: envioReal?.metaMessageId || `wamid.AUTO.${Date.now()}`,
+          mensajeEnviado,
+          enviadoEn: nowConf,
+          respondidoEn: null,
+        });
+      }
+
+      const nuevaSolWsp = {
+        codigoSolicitud,
+        sesionAgenteId: sesion.id,
+        clienteTelefonoReal: sesion.clienteTelefono || '',
+        comunaCliente: sesion.comunaCliente || null,
+        urgenciaCliente: sesion.urgenciaCliente || 'normal',
+        solicitante: 'FácilRepuestos SpA (Adquisiciones B2B)',
+        estado: 'esperando_respuestas',
+        canalCliente: sesion.canal === 'web_cliente' ? 'web' : 'whatsapp',
+        clienteNombre: 'FácilRepuestos SpA (Identidad de Cliente Protegida)',
+        clienteTelefono: 'CONFIDENCIAL-FRP',
+        patente: vehiculoPend?.patente || '',
+        vin: vehiculoPend?.vin || '',
+        marcaVehiculo: vehiculoPend?.marca || 'POR CONFIRMAR',
+        modeloVehiculo: vehiculoPend?.modelo || '',
+        anioVehiculo: vehiculoPend?.anio || null,
+        motorVehiculo: vehiculoPend?.motor || '',
+        categoriaRepuesto: pend.categoria || 'General',
+        repuestoBuscado: repuestoTexto,
+        codigoReferencia: '',
+        notasAdicionales: `Confirmado por cliente para búsqueda con proveedores locales`,
+        margenPct: 28,
+        escalamientoOrigenId: null,
+        proveedoresContactados,
+        ofertasRecibidas: [],
+        ofertaGanadoraId: null,
+        skuPublicoGenerado: null,
+        inventarioCreadoId: null,
+        conocimientoCreadoId: null,
+        mensajeCotizacionCliente: '',
+        createdAt: nowConf,
+        updatedAt: nowConf,
+      };
+
+      const solRef = await db.collection(COLECCION_SOLICITUDES_WSP).add(nuevaSolWsp);
+      const solCreada = {
+        id: solRef.id,
+        codigoSolicitud,
+        proveedoresContactados: proveedoresContactados.map((p) => p.proveedorNombre),
+        resumenRepuesto: pend.resumenFaltantes,
+        patente: vehiculoPend?.patente || '',
+      };
+
+      return {
+        vehiculoDetectado: vehiculoPend,
+        carritoCotizado: carritoActual,
+        comunaCliente: sesion.comunaCliente || null,
+        modalidadEntrega: sesion.modalidadEntrega || null,
+        pedidoActivo: sesion.pedidoActivo || null,
+        flujoCompra: estadoFlujoCompra,
+        repuestoPendienteContexto: null,
+        confirmacionMesaWspPendiente: null,
+        escalamientosAbiertos: sesion.escalamientosAbiertos || [],
+        solicitudesWspAbiertas: [...(sesion.solicitudesWspAbiertas || []), solCreada],
+        respuestaTexto: `¡Perfecto! 👍 Ya lo estamos buscando con nuestros proveedores locales para tu **${
+          pend.etiquetaVehiculo || 'vehículo'
+        }**. Apenas nos confirmen te enviamos la mejor oferta por este mismo WhatsApp.`,
+        trazaCascada: {
+          accionTomada: 'mesa_whatsapp_viva_confirmada',
+          vehiculoDetectado: vehiculoPend,
+          reglasConocimientoAplicadas: [],
+          candidatosInventario: carritoActual,
+          escalamientoCreado: null,
+          solicitudWspCreada: solCreada,
+        },
+      };
+    }
+
+    if (rechazaBusqueda) {
+      return {
+        vehiculoDetectado: sesion.vehiculoContexto || null,
+        carritoCotizado: carritoActual,
+        comunaCliente: sesion.comunaCliente || null,
+        modalidadEntrega: sesion.modalidadEntrega || null,
+        pedidoActivo: sesion.pedidoActivo || null,
+        flujoCompra: estadoFlujoCompra,
+        repuestoPendienteContexto: null,
+        confirmacionMesaWspPendiente: null,
+        escalamientosAbiertos: sesion.escalamientosAbiertos || [],
+        solicitudesWspAbiertas: sesion.solicitudesWspAbiertas || [],
+        respuestaTexto:
+          '¡Ningún problema! Si necesitas cotizar otro repuesto más adelante, escríbeme por aquí.',
+        trazaCascada: {
+          accionTomada: 'mesa_whatsapp_descartada_por_cliente',
+          vehiculoDetectado: sesion.vehiculoContexto || null,
+          reglasConocimientoAplicadas: [],
+          candidatosInventario: carritoActual,
+          escalamientoCreado: null,
+          solicitudWspCreada: null,
+        },
+      };
+    }
+  }
+
   // ─── PASO 0.C: ANTI-SPAM DE SEGUIMIENTO ("ESPERO", "GRACIAS", "¿AÚN NADA?") ─
   const tienePendientes =
     (Array.isArray(sesion.escalamientosAbiertos) && sesion.escalamientosAbiertos.length > 0) ||
@@ -2495,9 +2659,8 @@ async function ejecutarCascadaAgenteOmnicanal({
     }
   }
 
-  // ─── RAMA C Y D: MESA WHATSAPP VIVA (TOTAL O PARCIAL EN PEDIDOS MÚLTIPLES) ─
-  // REGLA ANTI-BYPASS: No revelamos al cliente qué proveedor tiene la pieza ni su dirección;
-  // FácilRepuestos consulta, compra y despacha o entrega en Enrique Olivares 224, La Florida.
+  // ─── RAMA C Y D: SIN STOCK DIRECTO -> PREGUNTAR AL CLIENTE SI DESEA QUE BUSQUEMOS CON PROVEEDORES LOCALES ─
+  let confirmacionMesaWspPendienteNueva = null;
   if (accionTomada === 'mesa_whatsapp_viva' || accionTomada === 'cotizacion_parcial_con_mesa_wsp') {
     const faltantes =
       accionTomada === 'cotizacion_parcial_con_mesa_wsp' && subConsultasSinStock.length > 0
@@ -2505,22 +2668,14 @@ async function ejecutarCascadaAgenteOmnicanal({
         : subConsultas;
     const resumenFaltantes = faltantes.map((f) => f.resumenRepuesto).join(' + ');
 
-    // Deduplicación anti-spam en Mesa WhatsApp
-    const wspExistente = (sesion.solicitudesWspAbiertas || []).find(
-      (w) =>
-        w.resumenRepuesto === resumenFaltantes &&
-        (w.patente || '') === (vehiculo?.patente || '')
-    );
-
-    if (wspExistente) {
-      solicitudWspCreada = wspExistente;
-    } else {
+    // Si es disparo manual forzado desde el simulador (`forzar_mesa_wsp`), enviar directo;
+    // en conversación real (`auto`), primero preguntar al cliente si puede esperar y quiere que busquemos con proveedores locales.
+    if (modoForzado === 'forzar_mesa_wsp') {
       const provSnap = await db.collection(COLECCION_PROVEEDORES).get();
       const proveedores = provSnap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
         .filter((p) => p.activo !== false && p.canalWspActivo !== false && p.telefono);
 
-      // Agente 4: Seleccionar TOP 3 proveedores compatibles según Marca, Categoría y Cercanía
       const seleccionados = seleccionarTop3ProveedoresMesaWsp({
         proveedores,
         marcaVehiculo: vehiculo?.marca || '',
@@ -2581,10 +2736,7 @@ async function ejecutarCascadaAgenteOmnicanal({
         categoriaRepuesto: categoria,
         repuestoBuscado: repuestoTexto,
         codigoReferencia: '',
-        notasAdicionales: `Solicitud B2B FácilRepuestos: "${sanitizarTextoParaProveedor(textoCombinado).slice(
-          0,
-          140
-        )}"`,
+        notasAdicionales: `Solicitud B2B FácilRepuestos`,
         margenPct: 28,
         escalamientoOrigenId: null,
         proveedoresContactados,
@@ -2599,7 +2751,6 @@ async function ejecutarCascadaAgenteOmnicanal({
       };
 
       const solRef = await db.collection(COLECCION_SOLICITUDES_WSP).add(nuevaSolWsp);
-
       solicitudWspCreada = {
         id: solRef.id,
         codigoSolicitud,
@@ -2607,28 +2758,37 @@ async function ejecutarCascadaAgenteOmnicanal({
         resumenRepuesto: resumenFaltantes,
         patente: vehiculo?.patente || '',
       };
-    }
-
-    if (accionTomada === 'cotizacion_parcial_con_mesa_wsp') {
-      const promesaParcial = calcularPromesaRetiroYDespacho({
-        itemsCarrito: candidatosEncontradosGlobal,
-      });
-      const lineasDisponibles = candidatosEncontradosGlobal.map(
-        (c) =>
-          `• ✅ **${c.nombre}** (\`${c.skuPublicoFrp}\`) — Stock: **${c.stock} un.** · **$${c.precioVentaConIva.toLocaleString(
-            'es-CL'
-          )} IVA inc.**\n  🔎 Ver producto en web: ${c.urlProductoWoo}`
-      );
-      respuestaTexto =
-        `¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** tenemos disponibles de inmediato:\n\n` +
-        `${lineasDisponibles.join('\n')}\n\n` +
-        `📍 **Retiro de lo disponible:** ${promesaParcial.textoRetiroCarrito}\n` +
-        `🚚 **Delivery Santiago:** ${promesaParcial.textoDespachoSantiago}\n\n` +
-        `🔎 **Sobre ${resumenFaltantes}:** Estamos validando con nuestros proveedores internos, apenas encontremos tu repuesto te lo confirmaremos.\n\n` +
-        `🛒 **No detenemos tu compra de lo que ya está en stock:** Puedes revisar cada producto en su link web y escribir **COMPRAR** aquí mismo para armarte **un solo carro con todos los productos disponibles**.`;
+      respuestaTexto = `¡Perfecto! 👍 Ya lo estamos buscando con nuestros proveedores locales para tu **${etiquetaVehiculo}**. Apenas nos confirmen te enviamos la mejor oferta por aquí.`;
     } else {
-      respuestaTexto =
-        `🚗 Identifiqué tu **${etiquetaVehiculo}**. Estamos validando con nuestros proveedores internos por **${resumenFaltantes}**; apenas encontremos tu repuesto te lo confirmaremos por este mismo WhatsApp.`;
+      // Guardar pendiente de confirmación del cliente antes de disparar a la Mesa de Abastecimiento
+      confirmacionMesaWspPendienteNueva = {
+        resumenFaltantes,
+        categoria,
+        vehiculo,
+        etiquetaVehiculo,
+        creadoEn: now,
+      };
+
+      if (accionTomada === 'cotizacion_parcial_con_mesa_wsp') {
+        const logisticaParcial = evaluarLogisticaYDespachoAgente3({
+          items: candidatosEncontradosGlobal,
+          comunaCliente: sesion.comunaCliente || null,
+        });
+        const lineasDisponibles = candidatosEncontradosGlobal.map(
+          (c) =>
+            `• **${c.nombre}** (\`${c.skuPublicoFrp}\`) — **$${c.precioVentaConIva.toLocaleString(
+              'es-CL'
+            )} IVA inc.**\n  🔎 Comprar en tienda: ${c.urlProductoWoo}`
+        );
+        respuestaTexto =
+          `¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** tenemos disponibles de inmediato:\n\n` +
+          `${lineasDisponibles.join('\n')}\n\n` +
+          `${logisticaParcial.resumenLogisticoParaCliente}\n\n` +
+          `Sobre **${resumenFaltantes}**, no lo tenemos en stock en este momento. ¿Te parece si lo buscamos con proveedores locales y te enviamos la mejor oferta?`;
+      } else {
+        respuestaTexto =
+          `En este momento no tenemos **${resumenFaltantes}** para tu **${etiquetaVehiculo}** en stock. ¿Te parece si lo buscamos con proveedores locales y te enviamos la mejor oferta?`;
+      }
     }
   }
 
@@ -2680,6 +2840,7 @@ async function ejecutarCascadaAgenteOmnicanal({
     pedidoActivo: sesion.pedidoActivo || null,
     flujoCompra: estadoFlujoCompra,
     repuestoPendienteContexto: null,
+    confirmacionMesaWspPendiente: confirmacionMesaWspPendienteNueva,
     escalamientosAbiertos,
     solicitudesWspAbiertas,
     respuestaTexto,
@@ -2966,6 +3127,10 @@ router.post('/sesiones/:id/mensaje', async (req, res, next) => {
         resultadoCascada.repuestoPendienteContexto !== undefined
           ? resultadoCascada.repuestoPendienteContexto
           : sesion.repuestoPendienteContexto ?? null,
+      confirmacionMesaWspPendiente:
+        resultadoCascada.confirmacionMesaWspPendiente !== undefined
+          ? resultadoCascada.confirmacionMesaWspPendiente
+          : sesion.confirmacionMesaWspPendiente ?? null,
       escalamientosAbiertos: resultadoCascada.escalamientosAbiertos ?? sesion.escalamientosAbiertos ?? [],
       solicitudesWspAbiertas: resultadoCascada.solicitudesWspAbiertas ?? sesion.solicitudesWspAbiertas ?? [],
       mensajes: mensajesActualizados,
@@ -3904,6 +4069,10 @@ export async function manejarWebhookPostMeta(req, res) {
         resultadoCascada.repuestoPendienteContexto !== undefined
           ? resultadoCascada.repuestoPendienteContexto
           : sesionFresca.repuestoPendienteContexto ?? null,
+      confirmacionMesaWspPendiente:
+        resultadoCascada.confirmacionMesaWspPendiente !== undefined
+          ? resultadoCascada.confirmacionMesaWspPendiente
+          : sesionFresca.confirmacionMesaWspPendiente ?? null,
       escalamientosAbiertos:
         resultadoCascada.escalamientosAbiertos ?? sesionFresca.escalamientosAbiertos ?? [],
       solicitudesWspAbiertas:

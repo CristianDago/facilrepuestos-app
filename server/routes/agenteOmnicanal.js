@@ -75,6 +75,7 @@ import {
 import {
   extraerOfertaDesdeMensajeWsp,
   detectarProveedorSinStock,
+  esSaludoInicialProveedor,
   construirMensajeSalidaWsp,
 } from './mesaWsp.js';
 import {
@@ -3975,6 +3976,34 @@ export async function manejarWebhookPostMeta(req, res) {
           (solicitudMatch.proveedoresContactados || []).find((p) =>
             String(p.telefono || '').replace(/\D/g, '').endsWith(remitenteTel.slice(-8))
           ) || solicitudMatch.proveedoresContactados?.[0];
+
+        // Si el proveedor solo envió "Hola" / "Buenas" para abrir la ventana de 24h en WhatsApp,
+        // NO marcarlo como sin stock: enviarle de inmediato el detalle natural del repuesto que estamos cotizando!
+        if (msg.type === 'text' && esSaludoInicialProveedor(textoEntrante)) {
+          const msgConsultaRecordatorio =
+            provMatch?.mensajeEnviado ||
+            construirMensajeSalidaWsp({
+              marcaVehiculo: solicitudMatch.marcaVehiculo,
+              modeloVehiculo: solicitudMatch.modeloVehiculo,
+              anioVehiculo: solicitudMatch.anioVehiculo,
+              motorVehiculo: solicitudMatch.motorVehiculo,
+              patente: solicitudMatch.patente,
+              vin: solicitudMatch.vin,
+              repuestoBuscado: solicitudMatch.repuestoBuscado,
+              codigoReferencia: solicitudMatch.codigoReferencia,
+            });
+
+          await enviarMensajeMesaAbastecimientoWhatsapp({
+            telefonoDestino: remitenteTel,
+            texto: msgConsultaRecordatorio,
+          }).catch(() => null);
+
+          return res.status(200).json({
+            received: true,
+            handledBy: 'agente4_saludo_apertura_ventana_proveedor',
+            solicitudId: solicitudMatch.id,
+          });
+        }
 
         // Si el proveedor envió un audio de voz o una fotografía por WhatsApp, descargarlo desde Meta Cloud API
         const cfgMetaMedia = await obtenerConfigMetaWhatsapp();

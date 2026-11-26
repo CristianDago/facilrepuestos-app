@@ -96,6 +96,25 @@ function normalizarTerminos(texto = '') {
  * - Disponibilidad de entrega (Inmediata, Hoy, 24h, Sin stock)
  */
 /**
+ * Detecta si el proveedor solo envió un saludo corto para abrir ventana ("Hola", "Buenas", "Hola estimado", "Dígame")
+ * sin haber respondido aún si tiene o no tiene el repuesto.
+ */
+export function esSaludoInicialProveedor(texto = '') {
+  const limpio = String(texto || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[.,!¡?¿;:-]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!limpio) return false;
+  return /^(hola|buenas|buen\s+dia|buenos\s+dias|buenas\s+tardes|buenas\s+noches|hola\s+estimado|hola\s+amigo|hola\s+buenas|hola\s+buen\s+dia|hola\s+que\s+tal|digame|si\s+digame|hola\s+dime|que\s+necesitas|cuentame)$/.test(
+    limpio
+  );
+}
+
+/**
  * Detector exhaustivo de falta de stock ("Sin Stock") en lenguaje natural chileno B2B de proveedores de repuestos.
  * Reconoce negativas directas ("no tengo", "agotado", "nada por acá", "no hay", "no trabajamos esa marca", "0 stock",
  * "no me llegó", "se acabó", "paso", "negativo") y respuestas cortas negativas ("No", "No estimado", "Nada").
@@ -106,7 +125,7 @@ export function detectarProveedorSinStock(texto = '') {
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
-  if (!limpio) return false;
+  if (!limpio || esSaludoInicialProveedor(limpio)) return false;
 
   const frasesSinStockRegex =
     /\b(no\s+me\s+queda[n]?|no\s+nos\s+queda[n]?|no\s+queda[n]?|sin\s+stock|agotad[oa]s?|no\s+tenemos|no\s+lo\s+tenemos|no\s+la\s+tenemos|no\s+lo\s+trabajo|no\s+la\s+trabajo|no\s+trabajamos|no\s+vemos\s+esa\s+marca|no\s+traemos|no\s+tengo|no\s+le\s+tengo|tampoco\s+tengo|no\s+hay|no\s+hay\s+mano|no\s+hay\s+disponible|sin\s+disponibilidad|no\s+disponible|nada\s+por\s+aca|nada\s+estimado|nada\s+amigo|nada\s+para\s+ese|nada\s+por\s+ahora|nada\s+por\s+el\s+momento|no\s+me\s+llego|no\s+nos\s+llego|se\s+me\s+acabo|se\s+acabo|se\s+agoto|0\s*stock|cero\s+stock|stock\s*0|negativo|paso\s+por\s+ahora|por\s+ahora\s+no|no\s+por\s+ahora|no\s+aplica|no\s+me\s+aparece|no\s+sale\s+nada|solo\s+por\s+encargo|no\s+manejamos)\b/i;
@@ -173,15 +192,24 @@ export function extraerOfertaDesdeMensajeWsp({
   const lower = fuente.toLowerCase();
   const ultimoTextoEvaluar = String(mensajeUltimoTurno || mensajeTexto || audioEfectivo || '').trim();
 
-  // 1. Detectar si el proveedor indica que NO tiene stock (priorizando el último turno o la detección de Gemini Multimodal)
-  const sinStockUltimoTurno = detectarProveedorSinStock(ultimoTextoEvaluar);
-  const sinStockAcumulado = detectarProveedorSinStock(fuente);
-  const sinStockGemini = datosMultimodalesIa?.tieneStock === false;
+  // 1. Detectar si el proveedor indica que NO tiene stock (jamás tratar un saludo como "Hola" como falta de stock)
+  const esSoloSaludo = esSaludoInicialProveedor(ultimoTextoEvaluar);
+  const sinStockUltimoTurno = !esSoloSaludo && detectarProveedorSinStock(ultimoTextoEvaluar);
+  const sinStockAcumulado = !esSoloSaludo && detectarProveedorSinStock(fuente);
+  // Solo confiar en sinStock de Gemini cuando hay audio/imagen transcrita o una negativa real en el texto, nunca en un saludo
+  const sinStockGemini =
+    !esSoloSaludo &&
+    datosMultimodalesIa?.tieneStock === false &&
+    Boolean(
+      datosMultimodalesIa?.transcripcionAudio ||
+        datosMultimodalesIa?.lecturaImagenIa ||
+        /\b(no|nada|agotad|sin\s+stock|0|cero|paso|negativo)\b/i.test(ultimoTextoEvaluar)
+    );
   const hayPrecioManual = Boolean(precioManualNeto && Number(precioManualNeto) > 0);
 
   const esSinStock =
     Boolean(sinStockExplicito) ||
-    (!hayPrecioManual && (sinStockUltimoTurno || sinStockGemini || sinStockAcumulado));
+    (!hayPrecioManual && !esSoloSaludo && (sinStockUltimoTurno || sinStockGemini || sinStockAcumulado));
 
   const tieneStock = !esSinStock;
 

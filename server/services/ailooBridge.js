@@ -86,30 +86,18 @@ export function construirMensajeFinalCliente({
   precioVentaFrp,
 }) {
   const textoTecnico = respuestaTecnica || respuestaMostrador || respuestaExperto || '';
-  const nombreItem = nombreRepuesto || candidatoNombre || '';
+  const nombreRaw = nombreRepuesto || candidatoNombre || 'Repuesto compatible';
+  const nombreLimpio = String(nombreRaw).split(/\s+para\s+/i)[0].trim() || nombreRaw;
   const vehiculoStr = [marcaVehiculo, modeloVehiculo, anioVehiculo].filter(Boolean).join(' ');
-  const partes = [
-    `¡Confirmado por nuestro equipo técnico de FácilRepuestos${vehiculoStr ? ` para tu ${vehiculoStr}` : ''}!`,
-  ];
-  if (textoTecnico) {
-    partes.push(sanitizarMensajeHaciaClienteFinal(textoTecnico));
-  }
-  if (nombreItem || skuPublicoFrp) {
-    partes.push(
-      `Repuesto validado: ${nombreItem || 'Repuesto compatible'}${skuPublicoFrp ? ` (SKU: ${skuPublicoFrp})` : ''}.`
-    );
-  }
-  if (Number(precioVentaFrp) > 0) {
-    const neto = Math.round(Number(precioVentaFrp));
-    const conIva = Math.round(neto * IVA_CHILE);
-    partes.push(
-      `Valor FácilRepuestos: $${neto.toLocaleString('es-CL')} neto ($${conIva.toLocaleString('es-CL')} IVA incluido).`
-    );
-  }
-  partes.push(
-    'Disponible con despacho a domicilio en Santiago y todo Chile, o retiro en nuestra tienda en Enrique Olivares 224, La Florida, Santiago de Chile.'
+  const conIva = Number(precioVentaFrp) > 0 ? Math.round(Number(precioVentaFrp) * IVA_CHILE) : 0;
+
+  return (
+    `✅ ¡Confirmado para tu **${vehiculoStr || 'vehículo'}**!\n` +
+    (textoTecnico ? `• ${sanitizarMensajeHaciaClienteFinal(textoTecnico)}\n` : '') +
+    `• **${nombreLimpio}**${skuPublicoFrp ? ` (\`${skuPublicoFrp}\`)` : ''}` +
+    (conIva > 0 ? ` — **$${conIva.toLocaleString('es-CL')} IVA inc.**` : '') +
+    `\n¿Lo necesitas para **retiro en nuestra sucursal de La Florida** o prefieres **despacho a domicilio / región**?`
   );
-  return partes.join(' ');
 }
 
 /**

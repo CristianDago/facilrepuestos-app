@@ -491,7 +491,10 @@ export async function conducirFlujoCompraDeterministico({
     const comunaInicial = sesion.comunaCliente || null;
 
     const linksTiendaProductos = carritoActual
-      .map((it) => `• **${it.nombre}** (\`${it.skuPublicoFrp}\`): ${it.urlProductoWoo || 'https://facilrepuestos.cl/tienda/'}`)
+      .map((it) => {
+        const nomLimpio = String(it.nombre || '').split(/\s+para\s+/i)[0].trim() || it.nombre;
+        return `• **${nomLimpio}** (\`${it.skuPublicoFrp}\`) — **$${Number(it.precioVentaConIva || 0).toLocaleString('es-CL')} IVA inc.**\n  👉 Comprar en tienda: ${it.urlProductoWoo || 'https://facilrepuestos.cl/tienda/'}`;
+      })
       .join('\n');
 
     if (!modalidadInicial) {
@@ -506,18 +509,18 @@ export async function conducirFlujoCompraDeterministico({
         actualizadoEn: new Date().toISOString(),
       };
       const textoExplicacionRetiro = todosPermitenLaFlorida
-        ? `📍 Como este producto está en nuestro stock local de **Enrique Olivares 224, La Florida**, ¿prefieres **Retiro y pago en nuestra tienda de La Florida** o **Despacho a domicilio**?`
-        : `📍 Comprando en nuestro portal **facilrepuestos.cl**, ¿prefieres **Retiro sin costo en Enrique Olivares 224, La Florida** (${
+        ? `¿Prefieres **retiro inmediato en nuestra sucursal de La Florida** o **despacho a domicilio**?`
+        : `¿Lo prefieres con **retiro en nuestra sucursal de La Florida** (${
             promesaSla.esLunesAViernes && promesaSla.antesDeLas1130
-              ? 'disponible hoy mismo desde las 15:30 hrs comprando antes de las 11:30 hrs'
-              : 'disponible desde las 15:30 hrs del día hábil siguiente'
-          }) o **Despacho a domicilio** calculado según dimensión en Santiago y Chile?`;
+              ? 'hoy desde las 15:30 hrs comprando antes de las 11:30'
+              : 'disponible desde las 15:30 hrs del siguiente día hábil'
+          }) o con **despacho a domicilio / región**?`;
       return {
         interceptado: true,
         flujoCompra: nuevoEstado,
         pedidoCreado: null,
         respuestaTexto:
-          `¡Perfecto! 🛒 Aquí tienes el link directo de tu repuesto en nuestra tienda **facilrepuestos.cl**:\n${linksTiendaProductos}\n• **Subtotal repuestos:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**` +
+          `🛒 Puedes comprar directamente en nuestra tienda web **facilrepuestos.cl** aquí:\n${linksTiendaProductos}` +
           `${notaFaltanteEnBusqueda}\n\n` +
           textoExplicacionRetiro,
         accionTomada: 'flujo_compra_paso_modalidad',
@@ -696,10 +699,6 @@ export async function conducirFlujoCompraDeterministico({
 
     const costoEnvio = Number(cotizacionDespacho.costoDespachoConIva || 0);
     const totalConDespacho = totalIva + costoEnvio;
-    const dim = cotizacionDespacho.volumetria?.dimensionesReferencialesCm || { largo: 32, ancho: 25, alto: 18 };
-    const tallaCod = cotizacionDespacho.volumetria?.tallaConsolidada || 'S';
-    const pesoVol = cotizacionDespacho.volumetria?.pesoTarifableConsolidadoKg || 3.6;
-    const origenDireccion = cotizacionDespacho.nodoOrigen?.direccion || 'Enrique Olivares 224, La Florida, Santiago';
 
     estado = {
       ...estado,
@@ -709,28 +708,14 @@ export async function conducirFlujoCompraDeterministico({
       paso: 'ESPERA_DOCUMENTO',
     };
 
-    const detalleRuta = cotizacionDespacho.esRegionMetropolitana
-      ? `🚐 **Despacho directo en Furgón (${cotizacionDespacho.medioTransporte || 'Peugeot Partner'})**\n` +
-        `- **Salida desde taller:** ${origenDireccion}\n` +
-        `- **Destino:** ${texto} (${cotizacionDespacho.comunaDetectada} — Anillo ${cotizacionDespacho.anillo} RM)\n` +
-        `- **Caja estimada:** Talla ${tallaCod} (${dim.largo}×${dim.ancho}×${dim.alto} cm, ~${pesoVol} kg)\n` +
-        `- **Tiempo estimado:** ${cotizacionDespacho.tiempoEstimado}`
-      : `📦 **Envío Pre-Pagado a Regiones (${cotizacionDespacho.medioTransporte || 'Starken / Courier'})**\n` +
-        `- **Salida desde taller:** ${origenDireccion}\n` +
-        `- **Destino:** ${texto} (${cotizacionDespacho.nombreZona})\n` +
-        `- **Volumetría referencial:** Caja Talla ${tallaCod} (${dim.largo}×${dim.ancho}×${dim.alto} cm, ~${pesoVol} kg)\n` +
-        `- **Tiempo estimado:** ${cotizacionDespacho.tiempoEstimado}`;
-
     return {
       interceptado: true,
       flujoCompra: estado,
       respuestaTexto:
-        `¡Perfecto! Anotada tu dirección y calculado tu despacho **pre-pagado** (sin cobros sorpresa al recibir):\n\n` +
-        `${detalleRuta}\n\n` +
-        `- **Subtotal repuestos:** $${totalIva.toLocaleString('es-CL')} IVA inc.\n` +
-        `- **Despacho pre-pagado:** **$${costoEnvio.toLocaleString('es-CL')} IVA inc.**\n` +
-        `- **Total final con despacho:** **$${totalConDespacho.toLocaleString('es-CL')} IVA inc.**\n\n` +
-        `¿Necesitas **boleta** o **factura**?`,
+        `🚚 **Despacho a ${cotizacionDespacho.comunaDetectada || texto}:** **$${costoEnvio.toLocaleString('es-CL')} IVA inc.** (${cotizacionDespacho.tiempoEstimado || '24 a 48 hrs'}).\n` +
+        `• **Subtotal repuestos:** $${totalIva.toLocaleString('es-CL')} IVA inc.\n` +
+        `• **Total final con envío:** **$${totalConDespacho.toLocaleString('es-CL')} IVA inc.**\n\n` +
+        `¿Necesitas **boleta** o **factura** para dejar creada tu orden?`,
       accionTomada: 'flujo_compra_paso_documento',
     };
   }

@@ -2596,18 +2596,15 @@ async function ejecutarCascadaAgenteOmnicanal({
     } else if (reglasAplicadasGlobal.length > 0) {
       const r = reglasAplicadasGlobal[0];
       const conIva = Math.round(r.precioVentaFrp || 0);
-      const logisticaRegla = evaluarLogisticaYDespachoAgente3({
-        items: [r],
-        comunaCliente: sesion.comunaCliente || null,
-      });
+      const nombreLimpioRegla = formatearNombreProductoParaVehiculoCliente(r.nombreRepuesto);
       respuestaTexto =
-        `${notaRespuestasPrevias}¡Hola! 🚗 Según nuestra base técnica en **facilrepuestos.cl** para **${etiquetaVehiculo}**:\n\n` +
-        `• **${r.nombreRepuesto}** (\`${r.skuPublicoFrp}\`)${
+        `${notaRespuestasPrevias}¡Lo encontré! 🚗 Compatible con tu **${etiquetaVehiculo}**:\n\n` +
+        `• **${nombreLimpioRegla}** (\`${r.skuPublicoFrp}\`)${
           r.precioVentaFrp > 0
             ? ` — **$${conIva.toLocaleString('es-CL')} IVA inc.**`
             : ''
-        }.\n🧠 **Detalle técnico:** ${sanitizarMensajeHaciaClienteFinal(r.explicacionExperta)}\n\n` +
-        `${logisticaRegla.resumenLogisticoParaCliente}`;
+        }\n🧠 **Detalle:** ${sanitizarMensajeHaciaClienteFinal(r.explicacionExperta)}\n\n` +
+        `¿Lo necesitas para **retiro en nuestra sucursal de La Florida** o prefieres **despacho a domicilio / región**?`;
     }
   }
 
@@ -2913,20 +2910,15 @@ async function ejecutarCascadaAgenteOmnicanal({
       };
 
       if (accionTomada === 'cotizacion_parcial_con_mesa_wsp') {
-        const logisticaParcial = evaluarLogisticaYDespachoAgente3({
-          items: candidatosEncontradosGlobal,
-          comunaCliente: sesion.comunaCliente || null,
+        const lineasDisponibles = candidatosEncontradosGlobal.map((c) => {
+          const nomLimpio = formatearNombreProductoParaVehiculoCliente(c.nombre);
+          return `• **${nomLimpio}** (\`${c.skuPublicoFrp}\`) — **$${c.precioVentaConIva.toLocaleString(
+            'es-CL'
+          )} IVA inc.**\n  👉 Ver y comprar en tienda: ${c.urlProductoWoo}`;
         });
-        const lineasDisponibles = candidatosEncontradosGlobal.map(
-          (c) =>
-            `• **${c.nombre}** (\`${c.skuPublicoFrp}\`) — **$${c.precioVentaConIva.toLocaleString(
-              'es-CL'
-            )} IVA inc.**\n  🔎 Comprar en tienda: ${c.urlProductoWoo}`
-        );
         respuestaTexto =
-          `¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** tenemos disponibles de inmediato:\n\n` +
+          `¡Lo encontré! 🚗 Para tu **${etiquetaVehiculo}** tenemos disponible de inmediato:\n\n` +
           `${lineasDisponibles.join('\n')}\n\n` +
-          `${logisticaParcial.resumenLogisticoParaCliente}\n\n` +
           `Sobre **${resumenFaltantes}**, no lo tenemos en stock en este momento. ¿Te parece si lo buscamos con proveedores locales y te enviamos la mejor oferta?`;
       } else {
         respuestaTexto =

@@ -38,11 +38,30 @@ export function fusionarPedidoAdicionalEnCarrito({
     };
   }
 
-  // Verificar si los nuevos candidatos son de una pieza distinta a los que ya estaban en el carrito
-  const skusPrevios = new Set(prev.map((p) => p.skuPublicoFrp));
-  const sonPiezasDistintas = nuevos.some((n) => !skusPrevios.has(n.skuPublicoFrp));
+  // Extraer la palabra clave principal de la pieza para distinguir si pide OTRA pieza distinta
+  // vs si está corrigiendo el modelo/año para la MISMA pieza (ej. otra Tapa de Termostato)
+  const extraerFamiliaPieza = (item = {}) => {
+    const base = String(item.subConsultaResumen || item.nombre || '')
+      .toUpperCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .split(/\s+PARA\s+/i)[0]
+      .trim();
+    return base.split(/\s+/).slice(0, 2).join(' ');
+  };
 
-  if (!mencionaAdicionalExplicito && !sonPiezasDistintas) {
+  const skusPrevios = new Set(prev.map((p) => p.skuPublicoFrp));
+  const familiasPrevias = new Set(prev.map((p) => extraerFamiliaPieza(p)).filter(Boolean));
+  const sonSkusDistintos = nuevos.some((n) => !skusPrevios.has(n.skuPublicoFrp));
+  const sonFamiliasPiezaDistintas = nuevos.some((n) => {
+    const fam = extraerFamiliaPieza(n);
+    return fam && !familiasPrevias.has(fam);
+  });
+
+  // Solo fusionar como pedido adicional si el cliente usó conectores de adición ("además", "también", "agrégale")
+  // o si efectivamente está pidiendo una familia de pieza distinta a la que ya tenía en el carrito.
+  // Si volvió a buscar la misma pieza (ej. corrigiendo que su auto es Changan S100 1.0), reemplaza la pieza anterior.
+  if (!mencionaAdicionalExplicito && (!sonSkusDistintos || !sonFamiliasPiezaDistintas)) {
     return {
       esPedidoAdicional: false,
       carritoConsolidado: nuevos.map((c) => ({ ...c, cantidad: c.cantidad || 1 })),

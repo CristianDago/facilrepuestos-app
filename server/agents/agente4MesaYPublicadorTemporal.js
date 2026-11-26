@@ -249,12 +249,12 @@ export async function crearYPublicarProductoTemporalMesaWsp({
   const baseUrl = obtenerUrlBaseTiendaWoo();
   const linkTiendaProducto = pubWoo.urlProductoTienda || `${baseUrl}/?s=${encodeURIComponent(skuPublicoFrp)}&post_type=product`;
 
+  const nombrePiezaLimpio = String(itemPayload.nombre || '').split(/\s+PARA\s+/i)[0].trim() || itemPayload.nombre;
   const mensajeClienteWsp =
-    `✅ ¡Encontramos tu repuesto para tu **${vehiculoTxt}**!\n\n` +
-    `• **${itemPayload.nombre}** (\`${skuPublicoFrp}\`) — **$${precioIva.toLocaleString('es-CL')} IVA inc.**\n` +
-    `🔎 **Ver foto referencial y comprar en nuestra tienda web:**\n👉 ${linkTiendaProducto}\n\n` +
-    `${logistica.resumenLogisticoParaCliente}\n\n` +
-    `⏱️ *Importante: Subimos este producto especialmente para ti y estará disponible en la página por **${ttlHoras} horas** (ya que el stock y precio en bodega externa pueden variar pasado ese tiempo).*`;
+    `✅ ¡Encontramos tu repuesto compatible con tu **${vehiculoTxt}**!\n\n` +
+    `• **${nombrePiezaLimpio}** (\`${skuPublicoFrp}\`) — **$${precioIva.toLocaleString('es-CL')} IVA inc.**\n` +
+    `👉 Ver producto y comprar en tienda: ${linkTiendaProducto}\n\n` +
+    `⏱️ *Lo habilitamos especialmente para ti en la web por **${ttlHoras} horas**. ¿A qué comuna o ciudad necesitas el despacho para darte el valor exacto de envío?*`;
 
   return {
     inventarioId: docInvId,

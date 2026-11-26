@@ -42,17 +42,17 @@ export {
 
 /**
  * Redacta la respuesta comercial concisa del Orquestador cuando el Agente 2 encuentra productos en el ERP:
- *  - Limpia el título del repuesto para no escupir la lista de 10 autos ajenos.
- *  - Muestra Precio IVA inc. + Link directo del producto en `facilrepuestos.cl`.
- *  - NO vomita el reglamento logístico de 3 párrafos: hace una pregunta corta de 1 línea para entender
- *    si el cliente prefiere retiro en tienda o despacho a domicilio/región.
+ *  - Limpia el título del repuesto para mostrar solo la pieza compatible con el auto del cliente.
+ *  - Entrega automáticamente el link directo en `facilrepuestos.cl` (donde WordPress calcula despacho, retiro y pago).
+ *  - Si hay más de 1 producto en el carrito, incluye también el link del carro consolidado.
+ *  - Cierra preguntando de forma natural si tiene alguna duda del repuesto o si quiere consultar valor referencial de envío/retiro.
  */
 export function redactarCotizacionOrquestada({
   etiquetaVehiculo,
   candidatosNuevos = [],
   carritoConsolidado = [],
   esPedidoAdicional = false,
-  comunaCliente = null,
+  urlCarroUnificado = null,
   notaRespuestasPrevias = '',
   notaAprendida = '',
 }) {
@@ -65,22 +65,25 @@ export function redactarCotizacionOrquestada({
       `• **${nombreLimpio}** (\`${c.skuPublicoFrp}\`) — **$${Number(
         c.precioVentaConIva || 0
       ).toLocaleString('es-CL')} IVA inc.**\n` +
-      `  👉 Ver producto y comprar: ${c.urlProductoWoo}`
+      `  👉 Comprar en tienda: ${c.urlProductoWoo}`
     );
   });
+
+  const bloqueCarroMultiple =
+    itemsMostrar.length > 1 && urlCarroUnificado
+      ? `\n\n🛒 **Comprar todos juntos en un solo carro:**\n👉 ${urlCarroUnificado}`
+      : '';
 
   const encabezado = esPedidoAdicional
     ? `➕ ¡Sumado a tu cotización! Compatible con tu **${etiquetaVehiculo}**:`
     : `¡Lo encontré! 🚗 Sí tenemos disponible compatible con tu **${etiquetaVehiculo}**:`;
 
-  const preguntaSiguientePaso =
-    comunaCliente && !/^(santiago|rm|region metropolitana)$/i.test(String(comunaCliente).trim())
-      ? `¿Lo prefieres con **despacho a ${comunaCliente}** o para **retiro en nuestra sucursal de La Florida**?`
-      : `¿Lo necesitas para **retiro en nuestra sucursal de La Florida** o prefieres **despacho a domicilio / región**?`;
+  const preguntaFinal =
+    `En el link puedes comprar directo (la página calcula tu despacho o retiro en tienda y me avisa automáticamente para confirmarte por aquí). ¿Tienes alguna duda sobre el repuesto?`;
 
   return (
     `${notaRespuestasPrevias}${encabezado}\n\n` +
-    `${lineasProductos.join('\n')}${notaAprendida}\n\n` +
-    `${preguntaSiguientePaso}`
+    `${lineasProductos.join('\n')}${bloqueCarroMultiple}${notaAprendida}\n\n` +
+    `${preguntaFinal}`
   );
 }

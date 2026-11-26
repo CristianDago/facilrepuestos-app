@@ -1548,65 +1548,72 @@ async function ejecutarCascadaAgenteOmnicanal({
     }
   }
 
-  // ─── PASO 0.B: MÁQUINA DE ESTADOS DE COMPRA DETERMINÍSTICA (LUNA FLUJO_COMPRA) ─
-  let compraFuePausada = false;
-  let estadoFlujoCompra = sesion.flujoCompra || null;
+  // ─── PASO 0.B: INTENCIÓN DE COMPRA DIRECTA EN TIENDA WORDPRESS (AGENTE 5) ─────
+  // Ya NO existe el antiguo flujo de pedir RUT/Boleta/Dirección por WhatsApp con el comando COMPRAR:
+  // el cliente compra directamente en el link de facilrepuestos.cl que le enviamos automáticamente,
+  // donde WordPress calcula su despacho y fecha de entrega, y el Webhook de WordPress confirma la venta por WhatsApp.
+  const estadoFlujoCompra = null;
+  const compraFuePausada = false;
   const pidioComprarAhora = esIntencionComprar(textoBruto);
   const nodosDespachoActivos = await obtenerNodosDespachoActivos(db);
-  if (
-    modoForzado === 'auto' &&
-    (Boolean(estadoFlujoCompra?.paso) || pidioComprarAhora)
-  ) {
-    const resFlujo = await conducirFlujoCompraDeterministico({
-      sesion: { ...sesion, carritoCotizado: carritoActual },
-      textoCliente: textoBruto,
-      carritoActual,
-      esComandoComprar: pidioComprarAhora,
-      crearPedidoRealFn: crearPedidoSimuladoAgente,
-      nodosDespachoActivos,
-    });
-
-
-    if (resFlujo.interceptado) {
+  if (modoForzado === 'auto' && pidioComprarAhora) {
+    if (carritoActual.length === 0) {
       return {
         vehiculoDetectado: sesion.vehiculoContexto || null,
-        carritoCotizado: carritoActual,
-        comunaCliente:
-          resFlujo.comunaCliente ||
-          resFlujo.flujoCompra?.datosDespacho ||
-          resFlujo.flujoCompra?.comuna ||
-          sesion.comunaCliente ||
-          null,
-        modalidadEntrega:
-          resFlujo.modalidadEntrega ||
-          (resFlujo.flujoCompra?.modalidad === 'DESPACHO'
-            ? 'despacho_domicilio'
-            : resFlujo.flujoCompra?.modalidad === 'RETIRO'
-              ? 'retiro_bodega'
-              : sesion.modalidadEntrega) ||
-          null,
-        pedidoActivo: resFlujo.pedidoCreado || sesion.pedidoActivo || null,
-        flujoCompra: resFlujo.flujoCompra ?? null,
+        carritoCotizado: [],
+        comunaCliente: sesion.comunaCliente || null,
+        modalidadEntrega: sesion.modalidadEntrega || null,
+        pedidoActivo: sesion.pedidoActivo || null,
+        flujoCompra: null,
         repuestoPendienteContexto: null,
         escalamientosAbiertos: sesion.escalamientosAbiertos || [],
         solicitudesWspAbiertas: sesion.solicitudesWspAbiertas || [],
-        respuestaTexto: resFlujo.respuestaTexto,
+        respuestaTexto:
+          'Aún no tenemos un repuesto cotizado en pantalla. Cuéntame **qué repuesto necesitas** y la **patente** de tu vehículo (o marca, modelo y año) para enviarte el link directo de compra en **facilrepuestos.cl**.',
         trazaCascada: {
-          accionTomada: resFlujo.accionTomada || 'flujo_compra_deterministico',
+          accionTomada: 'flujo_compra_sin_items',
           vehiculoDetectado: sesion.vehiculoContexto || null,
           reglasConocimientoAplicadas: [],
-          candidatosInventario: carritoActual,
+          candidatosInventario: [],
           escalamientoCreado: null,
           solicitudWspCreada: null,
-          pedidoSimulado: resFlujo.pedidoCreado || null,
         },
       };
     }
 
-    if (resFlujo.compraPausada) {
-      compraFuePausada = true;
-      estadoFlujoCompra = null;
-    }
+    const linksCarro = construirLinksCarroWooCommerce(carritoActual);
+    const lineasLinks = carritoActual.map((it) => {
+      const nomLimpio = formatearNombreProductoParaVehiculoCliente(it.nombre);
+      return `• **${nomLimpio}** (\`${it.skuPublicoFrp}\`) — **$${Number(it.precioVentaConIva || 0).toLocaleString('es-CL')} IVA inc.**\n  👉 ${it.urlProductoWoo}`;
+    });
+    const linkCarroMulti =
+      carritoActual.length > 1 && linksCarro?.urlCarroUnificado
+        ? `\n\n🛒 **Link de tu carro con todos los productos:**\n👉 ${linksCarro.urlCarroUnificado}`
+        : '';
+
+    return {
+      vehiculoDetectado: sesion.vehiculoContexto || null,
+      carritoCotizado: carritoActual,
+      comunaCliente: sesion.comunaCliente || null,
+      modalidadEntrega: sesion.modalidadEntrega || null,
+      pedidoActivo: sesion.pedidoActivo || null,
+      flujoCompra: null,
+      repuestoPendienteContexto: null,
+      escalamientosAbiertos: sesion.escalamientosAbiertos || [],
+      solicitudesWspAbiertas: sesion.solicitudesWspAbiertas || [],
+      respuestaTexto:
+        `¡Excelente! 🛒 Para realizar tu compra de inmediato (ahí mismo en la página podrás elegir **despacho a tu dirección o retiro en tienda**, ver tu fecha de entrega y pagar con Webpay o transferencia), ingresa directo aquí:\n\n` +
+        `${lineasLinks.join('\n')}${linkCarroMulti}\n\n` +
+        `Apenas completes tu compra en **facilrepuestos.cl**, el sistema me avisa automáticamente para enviarte la confirmación por este mismo WhatsApp.`,
+      trazaCascada: {
+        accionTomada: 'cotizacion_directa',
+        vehiculoDetectado: sesion.vehiculoContexto || null,
+        reglasConocimientoAplicadas: [],
+        candidatosInventario: carritoActual,
+        escalamientoCreado: null,
+        solicitudWspCreada: null,
+      },
+    };
   }
 
   // ─── PASO 0.B2: CONFIRMACIÓN DEL CLIENTE PARA BUSCAR EN MESA DE ABASTECIMIENTO ──
@@ -1909,15 +1916,15 @@ async function ejecutarCascadaAgenteOmnicanal({
     let respuestaTexto = '';
     if (modalidad === 'retiro_bodega') {
       respuestaTexto =
-        `📍 **Retiro en Enrique Olivares 224, La Florida ($0 costo de envío):**\n` +
-        `${promesaEntrega.textoRetiroCarrito}\n` +
-        `👉 Compra directo tu **${nombreLimpioUlt}** (\`${ultItem?.skuPublicoFrp}\` — **$${totalIva.toLocaleString('es-CL')} IVA inc.**) aquí: ${ultItem?.urlProductoWoo}`;
+        `📍 **Retiro en nuestra sucursal (Enrique Olivares 224, La Florida — $0 costo de envío):**\n` +
+        `${promesaEntrega.textoRetiroCarrito}.\n` +
+        `Al ingresar al link de tu **${nombreLimpioUlt}** (\`${ultItem?.skuPublicoFrp}\` — **$${totalIva.toLocaleString('es-CL')} IVA inc.**) podrás seleccionar retiro en tienda y finalizar tu compra directo en la web:\n` +
+        `👉 ${ultItem?.urlProductoWoo}`;
     } else {
       respuestaTexto =
-        `🚚 **Envío a ${nombreComuna}:** **$${costoEnvioRef.toLocaleString('es-CL')} IVA inc.** (${cotizacionRef.tiempoEstimado || '24 a 48 hrs'}).\n` +
-        `• **Repuesto (${nombreLimpioUlt}):** $${totalIva.toLocaleString('es-CL')} IVA inc.\n` +
-        `• **Total con envío incluido:** **$${(totalIva + costoEnvioRef).toLocaleString('es-CL')} IVA inc.**\n` +
-        `👉 Puedes comprarlo directo aquí: ${ultItem?.urlProductoWoo}`;
+        `🚚 **Valor referencial de envío a ${nombreComuna}:** **$${costoEnvioRef.toLocaleString('es-CL')} IVA inc.** (${cotizacionRef.tiempoEstimado || '24 a 48 hrs'}).\n` +
+        `• **Repuesto (${nombreLimpioUlt}):** $${totalIva.toLocaleString('es-CL')} IVA inc. → **Total estimado con envío:** **$${(totalIva + costoEnvioRef).toLocaleString('es-CL')} IVA inc.**\n` +
+        `👉 Al comprar directamente en el link de la página se calculará tu despacho y fecha de entrega: ${ultItem?.urlProductoWoo}`;
     }
 
     return {
@@ -2589,7 +2596,7 @@ async function ejecutarCascadaAgenteOmnicanal({
         candidatosNuevos: candidatosEncontradosGlobal,
         carritoConsolidado: carritoActual,
         esPedidoAdicional: fusionAgente6.esPedidoAdicional,
-        comunaCliente: sesion.comunaCliente || null,
+        urlCarroUnificado: linksCarroCotizacion?.urlCarroUnificado || null,
         notaRespuestasPrevias,
         notaAprendida,
       });

@@ -136,24 +136,22 @@ export function construirRespuestaPreguntaSobreProductoCotizado({
     if (esPorPar) {
       return (
         `Sí 👍 El valor de **$${precioIva} IVA inc.** (\`${item.skuPublicoFrp}\`) corresponde al **par / conjunto indicado en la publicación** (${nombreCorto}).\n` +
-        `👉 Puedes verlo aquí: ${item.urlProductoWoo}\n` +
-        `¿Lo prefieres para **retiro en nuestra sucursal de La Florida** o con **despacho a domicilio**?`
+        `👉 Puedes comprarlo directo aquí (en la página eliges tu despacho o retiro en tienda): ${item.urlProductoWoo}`
       );
     }
 
     return (
       `Este código (\`${item.skuPublicoFrp}\` — **${nombreCorto}** a **$${precioIva} IVA inc.**) se vende **por unidad individual**.\n` +
-      `👉 Puedes revisarlo en tienda aquí: ${item.urlProductoWoo}\n` +
-      `¿Necesitas 1 unidad o el par (2 unidades)? ¿Y lo prefieres con retiro en La Florida o despacho?`
+      `👉 Puedes revisarlo y elegir la cantidad directo en tienda aquí: ${item.urlProductoWoo}`
     );
   }
 
   // 2. ¿Pide más fotos o imágenes del producto?
   if (/\b(foto|fotos|imagen|imagenes|verlo|mostrar|muestra)\b/.test(limpio)) {
     return (
-      `📸 La fotografía que tenemos publicada en el catálogo para **${nombreCorto}** (\`${item.skuPublicoFrp}\`) la puedes ver directamente en la ficha del producto aquí:\n` +
+      `📸 La fotografía oficial de **${nombreCorto}** (\`${item.skuPublicoFrp}\`) la puedes ver directamente en la ficha del producto aquí:\n` +
       `👉 ${item.urlProductoWoo}\n` +
-      `Si necesitas confirmar algún ángulo o medida específica de la pieza física en bodega antes de comprar, dime qué detalle quieres verificar y lo consultamos de inmediato.`
+      `Si necesitas verificar algún detalle o medida específica de la pieza física en bodega antes de comprar, dime cuál y lo consultamos al tiro.`
     );
   }
 
@@ -162,9 +160,8 @@ export function construirRespuestaPreguntaSobreProductoCotizado({
     return (
       `El **${nombreCorto}** (\`${item.skuPublicoFrp}\` — **$${precioIva} IVA inc.**) es marca **${
         item.fabricante || 'OEM / Alternativo certificado'
-      }** con calce verificado para tu **${vehStr || 'vehículo'}** y cuenta con 3 meses de garantía.\n` +
-      `👉 Link en tienda: ${item.urlProductoWoo}\n` +
-      `¿Te acomoda más **retiro en La Florida** o **despacho a domicilio / región**?`
+      }** compatible con tu **${vehStr || 'vehículo'}** y cuenta con 3 meses de garantía.\n` +
+      `👉 Comprar directo en tienda: ${item.urlProductoWoo}`
     );
   }
 
@@ -173,8 +170,7 @@ export function construirRespuestaPreguntaSobreProductoCotizado({
     `¡Sí, confirmado! ✅ El **${nombreCorto}** (\`${item.skuPublicoFrp}\` — **$${precioIva} IVA inc.**) es compatible con tu **${
       vehStr || 'vehículo'
     }**.\n` +
-    `👉 Puedes comprarlo directo aquí: ${item.urlProductoWoo}\n` +
-    `¿Lo necesitas para **retiro en nuestra tienda de La Florida** o para **envío a domicilio / región**?`
+    `👉 Puedes comprarlo directo aquí (en la web eliges despacho o retiro y el sistema me avisa automáticamente al pagar): ${item.urlProductoWoo}`
   );
 }
 

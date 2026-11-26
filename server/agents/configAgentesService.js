@@ -11,7 +11,7 @@ import { db } from '../config/firebase.js';
 
 const COLECCION_CONFIG = 'configuracion_sistema';
 const DOC_AGENTES_IA = 'cerebros_agentes_ia';
-const VERSION_ESQUEMA_CONOCIMIENTO = 6;
+const VERSION_ESQUEMA_CONOCIMIENTO = 7;
 
 export const MODELOS_GEMINI_DISPONIBLES = [
   { id: 'gemini-4.0-neon', nombre: 'Gemini 4 Neon (Ultra Rápido · Recomendado Agentes)' },
@@ -203,24 +203,22 @@ Necesito [repuesto] para [Marca Modelo Año Motor] patente [PATENTE], compártem
 
     agente5_cajero_wordpress: {
       id: 'agente5_cajero_wordpress',
-      nombre: 'Agente 5 · Cajero Tienda y Validador de Pagos en WordPress',
+      nombre: 'Agente 5 · Enlace Directo a Tienda y Confirmador por Webhook de WordPress',
       modelo: 'gemini-4.0-neon',
-      rol: 'Guía el cierre de compra enviando únicamente links de la tienda facilrepuestos.cl y confirma automáticamente por WhatsApp cuando el cliente paga en WordPress.',
-      instrucciones: `REGLAS DE CIERRE Y COBRO:
-1. PROHIBIDO ENVIAR LINKS DE PAGO SUELTOS:
-   - Siempre se envía el link del producto o de la tienda en facilrepuestos.cl (https://facilrepuestos.cl/?p=...).
-2. VALIDACIÓN DE MODALIDAD SEGÚN ORIGEN:
-   - Si TODOS los productos del carrito son de Stock Local Propio en Enrique Olivares 224 (FRP-OWN-* / DRM-*): ofrece elegir entre Retiro y Pago en Tienda La Florida o Despacho a domicilio.
-   - Si el producto es de Soluparts (FRP-SOL-*): el pago es en nuestro portal facilrepuestos.cl; si compra antes de las 11:30 hrs puede retirar hoy mismo desde las 15:30 hrs en Enrique Olivares 224, si compra después de las 11:30 hrs puede retirar desde las 15:30 hrs del día siguiente en Enrique Olivares 224, o bien elegir Despacho a domicilio calculado según dimensión en Santiago y Chile.
-   - Si algún producto es de otro proveedor ERP o Producto Temporal de Mesa WSP: se compra en facilrepuestos.cl con Despacho a domicilio calculado según dimensión en Santiago y Chile.
-3. VALIDACIÓN DE RUT CHILENO (MÓDULO 11):
-   - Cuando el cliente pide dejar creada su orden por chat (Boleta o Factura), valida el dígito verificador del RUT con algoritmo Módulo 11 antes de emitir el pedido.
-4. ESCUCHA ACTIVA DEL WEBHOOK DE WORDPRESS (POST /api/woocommerce/webhook/pedido):
-   - Apenas un pedido pasa a estado "processing" o "completed" en WordPress:
+      rol: 'Elimina el antiguo comando COMPRAR: envía siempre de forma automática el link del producto en facilrepuestos.cl (donde WordPress calcula el despacho y fecha) y confirma por WhatsApp vía Webhook apenas el cliente paga en la web.',
+      instrucciones: `REGLAS DE COMPRA AUTOMÁTICA EN WORDPRESS Y CONFIRMACIÓN POR WEBHOOK:
+1. SIN COMANDO "COMPRAR" NI INTERROGATORIOS DE CHECKOUT EN WHATSAPP:
+   - NUNCA le pidas al cliente que escriba "COMPRAR" para recién mandarle el link ni le pidas RUT, boleta/factura o dirección por chat para armar un pedido manual.
+   - El link directo del producto en facilrepuestos.cl (https://facilrepuestos.cl/?p=...) se entrega automáticamente desde la primera cotización (y si lleva 2 o más productos, se incluye también el link del carro unificado).
+   - Cuando el cliente ingresa al link en WordPress, la propia página web le muestra los valores exactos de despacho, las fechas/horarios de retiro o entrega y procesa su pago.
+2. INFORMACIÓN DE DESPACHO O RETIRO A SOLICITUD DEL CLIENTE:
+   - Si el cliente pregunta en el chat "¿Cuánto me saldría el envío a tal comuna/región?" o "¿Cuándo puedo retirar si compro ahora?", se le entrega el valor referencial y horario (con el Agente 3) y se le recuerda que puede finalizar la compra directamente en el link de facilrepuestos.cl.
+3. ESCUCHA ACTIVA DEL WEBHOOK DE WORDPRESS (POST /api/woocommerce/webhook/pedido):
+   - Apenas el cliente compra en WordPress y el pedido pasa a estado "processing" o "completed":
      * Marca cualquier producto temporal incluido en la orden como compradoEnTienda = true para que no se borre a las 4 horas.
      * Descuenta el stock en Firebase inventario.
      * Busca la sesión de WhatsApp del cliente (por teléfono o correo) y le envía automáticamente un mensaje de WhatsApp confirmando su pago, número de orden web y coordinación de entrega/despacho.`,
-      contextoExtra: `MENSAJE DE CONFIRMACIÓN AUTOMÁTICA AL PAGAR EN WORDPRESS:
+      contextoExtra: `MENSAJE DE CONFIRMACIÓN AUTOMÁTICA AL RECIBIR EL WEBHOOK DE WORDPRESS:
 "✅ ¡Pago confirmado en facilrepuestos.cl! (Orden #<numero>)
 Hola <Nombre>, recibimos correctamente tu compra por $<total> IVA inc.
 🚚 Coordinación de entrega (<Comuna>): Nuestro equipo ya está preparando tu pedido y te avisaremos por este mismo WhatsApp apenas esté listo."`,

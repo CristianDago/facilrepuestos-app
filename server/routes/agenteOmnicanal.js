@@ -3923,9 +3923,13 @@ export async function manejarWebhookPostMeta(req, res) {
     const perfilNombre =
       change?.contacts?.[0]?.profile?.name || `Cliente WhatsApp (+${remitenteTel})`;
 
-    // Si el mensaje entró al número exclusivo de la Mesa de Abastecimiento (+56950960294),
-    // guardar automáticamente su phoneNumberIdMesaB2b en Firestore
-    const esLineaMesaB2b = displayReceptor.endsWith('50960294');
+    // Identificar con 100% de exactitud a cuál de los 2 números de WhatsApp entró el mensaje:
+    //  • +56 9 5096 0294 (Phone ID 1438078979396084) -> Línea Exclusiva Mesa de Abastecimiento (Proveedores B2B)
+    //  • +56 9 2110 9851 (Phone ID 1492165227305531) -> Línea Exclusiva Repuestín Clientes (Ventas B2C)
+    const esLineaMesaB2b =
+      displayReceptor.endsWith('50960294') ||
+      phoneNumberIdReceptor === '1438078979396084';
+
     if (esLineaMesaB2b && phoneNumberIdReceptor) {
       await db
         .collection(COLECCION_CONFIG_SISTEMA)
@@ -3957,8 +3961,11 @@ export async function manejarWebhookPostMeta(req, res) {
       return res.status(200).json({ received: true, unsupportedType: msg.type });
     }
 
-    // ─── INTERCEPTOR AGENTE 4: SI ES UN PROVEEDOR RESPONDIENDO A LA MESA DE ABASTECIMIENTO (+56950960294) ───
-    if (esLineaMesaB2b || remitenteTel.length >= 8) {
+    // ─── INTERCEPTOR AGENTE 4: EXCLUSIVO CUANDO EL MENSAJE ENTRA AL NÚMERO DE LA MESA DE ABASTECIMIENTO (+56950960294) ───
+    // Así, aunque uses tu mismo celular (+56951387986) para probar ambos chats:
+    // - Si escribes a FácilRepuestos Clientes (+56 9 2110 9851) -> te atiende Repuestín como Cliente.
+    // - Si escribes a Mesa de Abastecimiento (+56 9 5096 0294) -> te atiende el Agente 4 como Proveedor.
+    if (esLineaMesaB2b) {
       const solSnap = await db.collection(COLECCION_SOLICITUDES_WSP).get().catch(() => null);
       const abiertas = (solSnap?.docs || [])
         .map((d) => ({ id: d.id, ...d.data() }))

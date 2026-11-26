@@ -68,6 +68,11 @@ import {
   construirResumenEjecutivoSolicitudIa,
 } from '../agents/agente4MesaYPublicadorTemporal.js';
 import {
+  construirDashboardCxBandeja,
+  auditarSesionProfundaConGeminiCx,
+  aplicarMejoraCxAAgente,
+} from '../agents/auditorCxService.js';
+import {
   extraerOfertaDesdeMensajeWsp,
   detectarProveedorSinStock,
   construirMensajeSalidaWsp,
@@ -940,6 +945,17 @@ async function resolverVehiculoOmnicanal({ patenteInput = '', textoMensaje = '',
 
   // 2) Inferir marca, modelo y año desde el texto libre normalizado
   const upper = textoNorm.toUpperCase();
+  const esNegacionDeVehiculo =
+    /\b(NO\s+ES\s+(?:UN|UNA|MI)|ESTAS?\s+TOMANDO\s+MAL|TE\s+EQUIVOCASTE\s+DE\s+AUTO|NO\s+TENGO\s+UN)\b/i.test(
+      upper
+    );
+
+  // Si el cliente está corrigiendo al bot ("no es una toyota", "estás tomando mal las cosas"),
+  // NO extraer la marca negada como si fuera su auto y limpiar el vehículo erróneo.
+  if (esNegacionDeVehiculo && !patenteDetectada) {
+    return null;
+  }
+
   let marca = '';
   let modelo = '';
   let anio = null;
@@ -4720,6 +4736,79 @@ router.post('/cotizar-despacho', async (req, res, next) => {
 router.post('/sincronizar-zonas-woo', async (_req, res, next) => {
   try {
     const resultado = await sincronizarZonasDespachoWooCommerce();
+    res.json({
+      success: true,
+      data: resultado,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GOOGLE CLOUD CX · QUALITY AI & CONVERSATIONAL INSIGHTS
+// Evalúa automáticamente las conversaciones de WhatsApp, detecta fricción y permite
+// inyectar mejoras en 1 clic al cerebro de cualquiera de los 6 agentes.
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/cx-insights', async (_req, res, next) => {
+  try {
+    const snap = await db.collection(COLECCION_SESIONES_AGENTE).get();
+    const ahoraMs = Date.now();
+    const sesionesActivas = [];
+
+    for (const d of snap.docs) {
+      const data = d.data() || {};
+      if (data.canal === 'web_cliente' || d.id.startsWith('ses-omni-demo')) continue;
+      if (data.archivadaEnBandeja === true || data.estado === 'cerrada') continue;
+      const tsRef = Date.parse(data.updatedAt || data.createdAt || '') || 0;
+      if (tsRef < CORTE_LIMPIEZA_HISTORICOS_MS || ahoraMs - tsRef > VENTANA_ACTIVA_24H_MS) continue;
+      sesionesActivas.push({ id: d.id, ...data });
+    }
+
+    const dashboardCx = construirDashboardCxBandeja(sesionesActivas);
+    res.json({
+      success: true,
+      data: dashboardCx,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/cx-insights/auditar-ia/:sesionId', async (req, res, next) => {
+  try {
+    const docRef = db.collection(COLECCION_SESIONES_AGENTE).doc(req.params.sesionId);
+    const snap = await docRef.get();
+    if (!snap.exists) {
+      return res.status(404).json({ success: false, error: 'Sesión no encontrada para auditar' });
+    }
+    const sesion = { id: snap.id, ...snap.data() };
+    const auditoriaIa = await auditarSesionProfundaConGeminiCx(sesion);
+    res.json({
+      success: true,
+      data: auditoriaIa,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/cx-insights/aplicar-mejora', async (req, res, next) => {
+  try {
+    const {
+      sesionId = '',
+      agenteDestinoId = 'agente1_recepcion',
+      reglaNuevaParaInyectar = '',
+      tituloMejora = '',
+    } = req.body || {};
+
+    const resultado = await aplicarMejoraCxAAgente({
+      sesionId,
+      agenteDestinoId,
+      reglaNuevaParaInyectar,
+      tituloMejora,
+    });
+
     res.json({
       success: true,
       data: resultado,

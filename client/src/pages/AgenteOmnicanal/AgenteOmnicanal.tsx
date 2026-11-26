@@ -215,6 +215,60 @@ export default function AgenteOmnicanal() {
   const [enviandoPruebaPersonal, setEnviandoPruebaPersonal] = useState(false);
   const [telefonoPruebaPersonal, setTelefonoPruebaPersonal] = useState('+56951387986');
   const [phoneNumberIdMesaInput, setPhoneNumberIdMesaInput] = useState('');
+
+  // Panel Google Cloud CX · Quality AI & Conversational Insights
+  const [mostrarPanelCx, setMostrarPanelCx] = useState(false);
+  const [cargandoCx, setCargandoCx] = useState(false);
+  const [auditandoSesionIaId, setAuditandoSesionIaId] = useState<string | null>(null);
+  const [aplicandoMejoraId, setAplicandoMejoraId] = useState<string | null>(null);
+  const [reglasEditablesCx, setReglasEditablesCx] = useState<Record<string, string>>({});
+  const [dashboardCx, setDashboardCx] = useState<{
+    resumenKpis: {
+      totalSesionesAuditadas: number;
+      scorePromedioCx: number;
+      totalOptimas: number;
+      totalConAtencion: number;
+      totalCriticasConFriccion: number;
+      tasaEntregaLinkTiendaPct: number;
+    };
+    saludPorAgente: Array<{
+      agenteId: string;
+      nombre: string;
+      alertasActivas: number;
+      estadoSalud: 'optimo' | 'atencion' | 'critico';
+    }>;
+    auditorias: Array<{
+      sesionId: string;
+      clienteNombre: string;
+      clienteTelefono: string;
+      vehiculoResumen: string;
+      totalTurnosCliente: number;
+      totalTurnosAgente: number;
+      ultimoMensajeCliente: string;
+      tieneLinkEntregado: boolean;
+      itemsEnCarrito: number;
+      scoreCx: number;
+      semaforoCx: 'optimo' | 'atencion' | 'critico';
+      sentimientoCliente: string;
+      etapaEmbudo: string;
+      problemasDetectados: Array<{
+        codigo: string;
+        severidad: string;
+        descripcion: string;
+      }>;
+      agenteResponsableId: string;
+      agenteResponsableNombre: string;
+      diagnosticoEjecutivo: string;
+      auditadoConGemini?: boolean;
+      mejoraSugerida: {
+        titulo: string;
+        agenteDestinoId: string;
+        agenteDestinoNombre: string;
+        reglaNuevaParaInyectar: string;
+      } | null;
+      updatedAt: string;
+    }>;
+  } | null>(null);
   const [configAgentes, setConfigAgentes] = useState<{
     modeloGlobalPreferido: string;
     ttlHorasProductoTemporal: number;
@@ -233,6 +287,96 @@ export default function AgenteOmnicanal() {
       }
     >;
   } | null>(null);
+
+  const cargarDashboardCx = async () => {
+    try {
+      setCargandoCx(true);
+      const r = await api.get<ApiResponse<typeof dashboardCx>>('/agente-omnicanal/cx-insights');
+      if (r.success && r.data) {
+        setDashboardCx(r.data);
+        const mapReglas: Record<string, string> = {};
+        for (const aud of r.data.auditorias || []) {
+          if (aud.mejoraSugerida?.reglaNuevaParaInyectar) {
+            mapReglas[aud.sesionId] = aud.mejoraSugerida.reglaNuevaParaInyectar;
+          }
+        }
+        setReglasEditablesCx((prev) => ({ ...mapReglas, ...prev }));
+      }
+    } catch {
+      // silencioso
+    } finally {
+      setCargandoCx(false);
+    }
+  };
+
+  const handleAuditarSesionConGeminiCx = async (sesionId: string) => {
+    try {
+      setAuditandoSesionIaId(sesionId);
+      const r = await api.post<
+        ApiResponse<NonNullable<typeof dashboardCx>['auditorias'][number]>
+      >(`/agente-omnicanal/cx-insights/auditar-ia/${sesionId}`, {});
+      if (r.success && r.data) {
+        const nuevaAud = r.data;
+        setDashboardCx((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            auditorias: prev.auditorias.map((a) => (a.sesionId === sesionId ? nuevaAud : a)),
+          };
+        });
+        if (nuevaAud.mejoraSugerida?.reglaNuevaParaInyectar) {
+          setReglasEditablesCx((prev) => ({
+            ...prev,
+            [sesionId]: nuevaAud.mejoraSugerida!.reglaNuevaParaInyectar,
+          }));
+        }
+        notify(`🔬 Auditoría profunda Gemini Quality AI completada (${nuevaAud.scoreCx}% CX)`, 'success');
+      }
+    } catch (err) {
+      notify((err as Error).message || 'Error al auditar sesión con Gemini CX', 'error');
+    } finally {
+      setAuditandoSesionIaId(null);
+    }
+  };
+
+  const handleAplicarMejoraCxAAgente = async (
+    sesionId: string,
+    agenteDestinoId: string,
+    tituloMejora: string
+  ) => {
+    const regla = (reglasEditablesCx[sesionId] || '').trim();
+    if (!regla) {
+      notify('Escribe o revisa la regla correctiva antes de inyectarla al agente', 'error');
+      return;
+    }
+    try {
+      setAplicandoMejoraId(sesionId);
+      const r = await api.post<
+        ApiResponse<{
+          agenteActualizado: { nombre: string };
+          configuracionCompleta: typeof configAgentes;
+        }>
+      >('/agente-omnicanal/cx-insights/aplicar-mejora', {
+        sesionId,
+        agenteDestinoId,
+        reglaNuevaParaInyectar: regla,
+        tituloMejora,
+      });
+      if (r.success && r.data) {
+        if (r.data.configuracionCompleta) {
+          setConfigAgentes(r.data.configuracionCompleta);
+        }
+        notify(
+          `✨ Mejora inyectada en caliente en "${r.data.agenteActualizado?.nombre || agenteDestinoId}"`,
+          'success'
+        );
+      }
+    } catch (err) {
+      notify((err as Error).message || 'Error al aplicar mejora al agente', 'error');
+    } finally {
+      setAplicandoMejoraId(null);
+    }
+  };
 
   const cargarConfigAgentes = async () => {
     try {
@@ -362,6 +506,7 @@ export default function AgenteOmnicanal() {
   useEffect(() => {
     void cargarSesiones();
     void cargarConfigAgentes();
+    void cargarDashboardCx();
     // Auto-refresco silencioso cada 8 segundos para ver en vivo los mensajes entrantes de WhatsApp
     // (usa actualización funcional de sesionActivaId para no resetear jamás el chat que estás leyendo)
     const interval = setInterval(() => {
@@ -654,6 +799,28 @@ export default function AgenteOmnicanal() {
             type="button"
             className="btn btn-outline btn-sm"
             style={{
+              background: mostrarPanelCx ? '#0284c7' : 'rgba(14, 165, 233, 0.25)',
+              color: '#fff',
+              borderColor: '#38bdf8',
+              fontWeight: 800,
+            }}
+            onClick={() => {
+              setMostrarPanelCx((v) => !v);
+              void cargarDashboardCx();
+            }}
+          >
+            {mostrarPanelCx
+              ? '✕ Cerrar Google Cloud CX'
+              : `📊 Google Cloud CX · Quality AI${
+                  dashboardCx?.resumenKpis
+                    ? ` (${dashboardCx.resumenKpis.scorePromedioCx}%)`
+                    : ''
+                }`}
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            style={{
               background: mostrarConfigAgentes ? '#4f46e5' : 'rgba(99, 102, 241, 0.28)',
               color: '#fff',
               borderColor: '#818cf8',
@@ -722,6 +889,372 @@ export default function AgenteOmnicanal() {
           </button>
         </div>
       </div>
+
+      {/* ── PANEL GOOGLE CLOUD CX · QUALITY AI & CONVERSATIONAL INSIGHTS ── */}
+      {mostrarPanelCx && (
+        <div
+          style={{
+            background: '#ffffff',
+            border: '2px solid #0284c7',
+            borderRadius: 14,
+            padding: 18,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 16,
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 12,
+            }}
+          >
+            <div>
+              <div style={{ fontWeight: 800, fontSize: '1.02rem', color: '#0f172a' }}>
+                📊 Google Cloud CX · Quality AI & Conversational Insights (facilrepuestos-prod)
+              </div>
+              <div style={{ fontSize: '0.81rem', color: '#475569' }}>
+                Audita automáticamente la experiencia del cliente en cada conversación, detecta en qué subagente ocurrió fricción y permite inyectar mejoras en 1 clic.
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-outline btn-sm"
+              disabled={cargandoCx}
+              onClick={cargarDashboardCx}
+            >
+              {cargandoCx ? 'Auditando conversaciones...' : '↻ Re-Auditar Bandeja Activa'}
+            </button>
+          </div>
+
+          {dashboardCx && (
+            <>
+              {/* KPIs de Calidad CX */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                <div
+                  style={{
+                    background: '#f8fafc',
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 10,
+                    padding: 12,
+                  }}
+                >
+                  <div style={{ fontSize: '0.73rem', fontWeight: 700, color: '#64748b' }}>
+                    SCORE PROMEDIO CX
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '1.5rem',
+                      fontWeight: 800,
+                      color:
+                        dashboardCx.resumenKpis.scorePromedioCx >= 80
+                          ? '#16a34a'
+                          : dashboardCx.resumenKpis.scorePromedioCx >= 60
+                          ? '#d97706'
+                          : '#dc2626',
+                    }}
+                  >
+                    {dashboardCx.resumenKpis.scorePromedioCx}%
+                  </div>
+                  <div style={{ fontSize: '0.73rem', color: '#475569' }}>
+                    Sobre {dashboardCx.resumenKpis.totalSesionesAuditadas} conversación(es)
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    background: '#f0fdf4',
+                    border: '1px solid #bbf7d0',
+                    borderRadius: 10,
+                    padding: 12,
+                  }}
+                >
+                  <div style={{ fontSize: '0.73rem', fontWeight: 700, color: '#166534' }}>
+                    🟢 CONVERSACIONES FLUIDAS
+                  </div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#15803d' }}>
+                    {dashboardCx.resumenKpis.totalOptimas}
+                  </div>
+                  <div style={{ fontSize: '0.73rem', color: '#166534' }}>
+                    Intención entendida a la primera
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    background: '#fffbeb',
+                    border: '1px solid #fde68a',
+                    borderRadius: 10,
+                    padding: 12,
+                  }}
+                >
+                  <div style={{ fontSize: '0.73rem', fontWeight: 700, color: '#92400e' }}>
+                    🟡 CON OBSERVACIÓN / DUDA
+                  </div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#d97706' }}>
+                    {dashboardCx.resumenKpis.totalConAtencion}
+                  </div>
+                  <div style={{ fontSize: '0.73rem', color: '#92400e' }}>
+                    Respuestas extensas o en espera
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    background: '#fef2f2',
+                    border: '1px solid #fecaca',
+                    borderRadius: 10,
+                    padding: 12,
+                  }}
+                >
+                  <div style={{ fontSize: '0.73rem', fontWeight: 700, color: '#991b1b' }}>
+                    🔴 CON FRICCIÓN DETECTADA
+                  </div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#dc2626' }}>
+                    {dashboardCx.resumenKpis.totalCriticasConFriccion}
+                  </div>
+                  <div style={{ fontSize: '0.73rem', color: '#991b1b' }}>
+                    Con regla correctiva lista para aplicar
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    background: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: 10,
+                    padding: 12,
+                  }}
+                >
+                  <div style={{ fontSize: '0.73rem', fontWeight: 700, color: '#1e40af' }}>
+                    🛒 ENTREGA DE LINK WEB
+                  </div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: '#2563eb' }}>
+                    {dashboardCx.resumenKpis.tasaEntregaLinkTiendaPct}%
+                  </div>
+                  <div style={{ fontSize: '0.73rem', color: '#1e40af' }}>
+                    Conversaciones con link facilrepuestos.cl
+                  </div>
+                </div>
+              </div>
+
+              {/* Semáforo de Salud por Subagente */}
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  flexWrap: 'wrap',
+                  background: '#f8fafc',
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: '1px solid #e2e8f0',
+                }}
+              >
+                <span style={{ fontSize: '0.76rem', fontWeight: 800, color: '#334155', marginRight: 4 }}>
+                  Salud por Agente:
+                </span>
+                {dashboardCx.saludPorAgente.map((ag) => (
+                  <span
+                    key={ag.agenteId}
+                    style={{
+                      fontSize: '0.73rem',
+                      fontWeight: 700,
+                      padding: '3px 9px',
+                      borderRadius: 999,
+                      background:
+                        ag.alertasActivas === 0
+                          ? '#dcfce7'
+                          : ag.alertasActivas <= 2
+                          ? '#fef3c7'
+                          : '#fee2e2',
+                      color:
+                        ag.alertasActivas === 0
+                          ? '#166534'
+                          : ag.alertasActivas <= 2
+                          ? '#92400e'
+                          : '#991b1b',
+                    }}
+                  >
+                    {ag.alertasActivas === 0 ? '🟢' : ag.alertasActivas <= 2 ? '🟡' : '🔴'}{' '}
+                    {ag.nombre.split('·')[0].trim()} ({ag.alertasActivas} alerta{ag.alertasActivas === 1 ? '' : 's'})
+                  </span>
+                ))}
+              </div>
+
+              {/* Lista de Conversaciones Auditadas y Recomendaciones de Mejora en 1 Clic */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 460, overflowY: 'auto' }}>
+                {dashboardCx.auditorias.map((aud) => {
+                  const esCritico = aud.semaforoCx === 'critico';
+                  const esAtencion = aud.semaforoCx === 'atencion';
+                  return (
+                    <div
+                      key={aud.sesionId}
+                      style={{
+                        background: esCritico ? '#fff1f2' : esAtencion ? '#fffbeb' : '#f8fafc',
+                        border: `1px solid ${
+                          esCritico ? '#fda4af' : esAtencion ? '#fde68a' : '#cbd5e1'
+                        }`,
+                        borderRadius: 10,
+                        padding: 14,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: 8,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span
+                            style={{
+                              fontSize: '0.76rem',
+                              fontWeight: 800,
+                              padding: '3px 9px',
+                              borderRadius: 999,
+                              background: esCritico
+                                ? '#dc2626'
+                                : esAtencion
+                                ? '#d97706'
+                                : '#16a34a',
+                              color: '#fff',
+                            }}
+                          >
+                            {esCritico ? '🔴' : esAtencion ? '🟡' : '🟢'} {aud.scoreCx}% CX
+                          </span>
+                          <strong style={{ fontSize: '0.9rem', color: '#0f172a' }}>
+                            {aud.clienteNombre} ({aud.clienteTelefono})
+                          </strong>
+                          <span style={{ fontSize: '0.78rem', color: '#475569' }}>
+                            🚗 {aud.vehiculoResumen} · {aud.etapaEmbudo}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: '0.73rem',
+                              background: '#e2e8f0',
+                              color: '#1e293b',
+                              padding: '2px 8px',
+                              borderRadius: 6,
+                              fontWeight: 700,
+                            }}
+                          >
+                            Sentimiento: {aud.sentimientoCliente}
+                          </span>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-sm"
+                            style={{ fontSize: '0.74rem' }}
+                            onClick={() => {
+                              setSesionActivaId(aud.sesionId);
+                              setMostrarPanelCx(false);
+                            }}
+                          >
+                            👁️ Ver Chat
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-sm"
+                            style={{ fontSize: '0.74rem', borderColor: '#0284c7', color: '#0369a1' }}
+                            disabled={auditandoSesionIaId === aud.sesionId}
+                            onClick={() => handleAuditarSesionConGeminiCx(aud.sesionId)}
+                          >
+                            {auditandoSesionIaId === aud.sesionId
+                              ? 'Auditando con Gemini...'
+                              : '🔬 Evaluar con Gemini Quality AI'}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: '0.8rem', color: '#1e293b', lineHeight: 1.45 }}>
+                        <strong>Diagnóstico Quality AI ({aud.agenteResponsableNombre}):</strong>{' '}
+                        {aud.diagnosticoEjecutivo}
+                      </div>
+
+                      {aud.mejoraSugerida && (
+                        <div
+                          style={{
+                            background: '#ffffff',
+                            border: '1px solid #cbd5e1',
+                            borderRadius: 8,
+                            padding: 10,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 8,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              flexWrap: 'wrap',
+                              gap: 8,
+                            }}
+                          >
+                            <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0369a1' }}>
+                              💡 Mejora Sugerida para {aud.mejoraSugerida.agenteDestinoNombre}:{' '}
+                              {aud.mejoraSugerida.titulo}
+                            </span>
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              style={{ background: '#0284c7', borderColor: '#0284c7', fontSize: '0.75rem' }}
+                              disabled={aplicandoMejoraId === aud.sesionId}
+                              onClick={() =>
+                                handleAplicarMejoraCxAAgente(
+                                  aud.sesionId,
+                                  aud.mejoraSugerida!.agenteDestinoId,
+                                  aud.mejoraSugerida!.titulo
+                                )
+                              }
+                            >
+                              {aplicandoMejoraId === aud.sesionId
+                                ? 'Inyectando en Agente...'
+                                : '✨ Aplicar Mejora al Agente en 1 Clic'}
+                            </button>
+                          </div>
+                          <textarea
+                            className={styles.textarea}
+                            rows={2}
+                            style={{ fontSize: '0.77rem' }}
+                            value={
+                              reglasEditablesCx[aud.sesionId] ??
+                              aud.mejoraSugerida.reglaNuevaParaInyectar
+                            }
+                            onChange={(e) =>
+                              setReglasEditablesCx((prev) => ({
+                                ...prev,
+                                [aud.sesionId]: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* ── PANEL EN VIVO: CONFIGURAR LOS 6 AGENTES IA (GEMINI 4 NEON) + PROBAR COTIZACIÓN ── */}
       {mostrarConfigAgentes && (

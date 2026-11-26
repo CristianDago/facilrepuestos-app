@@ -229,8 +229,15 @@ export function contieneRepuestoRealOCodigo(textoBruto = '', tokensRepuesto = []
 }
 
 /**
- * Clasifica la intención conversacional del mensaje ANTES de ejecutar búsquedas o abrir tickets.
- * Garantiza que un saludo ("Hola") o una consulta incompleta jamás dispare la Mesa WhatsApp a ciegas.
+ * Clasifica la intención conversacional del mensaje en el contexto real de la sesión (Agente 1 NLU).
+ * Distingue entre:
+ *  - Búsqueda de un repuesto nuevo (`BUSQUEDA_CATALOGO`)
+ *  - Pregunta sobre el producto YA cotizado en el carrito (`PREGUNTA_SOBRE_PRODUCTO_COTIZADO`, ej. "¿Es el par completo?", "¿Tienes más fotos?")
+ *  - Elección de envío sin indicar comuna aún (`PIDIO_ENVIO_SIN_COMUNA`, ej. "Quiero para envío a región")
+ *  - Modificación de dirección de despacho (`MODIFICAR_DIRECCION_ENVIO`, ej. "Cómo lo hago para modificar la dirección")
+ *  - Postventa / seguimiento de compra (`ESTADO_PEDIDO`, ej. "Ya compré necesito el número de envío")
+ *  - Solicitud de asistente/ejecutivo humano (`ATENCION_HUMANA`, ej. "Habrá algún asistente para hablar")
+ *  - Pregunta puntual de tienda/sucursal/horario/garantía (`CONSULTA_SUCURSAL`, `CONSULTA_HORARIO`, `CONSULTA_GARANTIAS`)
  */
 export function clasificarIntencionConversacional({
   textoBruto = '',
@@ -247,6 +254,8 @@ export function clasificarIntencionConversacional({
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 
+  const carritoCotizado = Array.isArray(sesion.carritoCotizado) ? sesion.carritoCotizado : [];
+  const tieneCarritoActivo = carritoCotizado.length > 0;
   const tienePiezaEnMensaje = contieneRepuestoRealOCodigo(textoBruto, tokensRepuesto);
   const repuestoPendiente = sesion.repuestoPendienteContexto || null;
   const vehiculoEfectivo = vehiculoMensajeActual || vehiculoContextoSesion || null;
@@ -256,6 +265,12 @@ export function clasificarIntencionConversacional({
         vehiculoEfectivo.modelo ||
         vehiculoEfectivo.patente)
   );
+  const dioVehiculoNuevoEnEsteMensaje = Boolean(
+    vehiculoMensajeActual &&
+      ((vehiculoMensajeActual.marca && vehiculoMensajeActual.marca !== 'MULTIMARCA') ||
+        vehiculoMensajeActual.modelo ||
+        vehiculoMensajeActual.patente)
+  );
   const esCodigoOemDirecto = /\b([A-Z0-9]{5}[-][A-Z0-9]{4,7}|FRP-[A-Z]{3}-[A-Z0-9-]+|\d{12,13})\b/i.test(textoBruto);
 
   // 1. Cancelar pedido pendiente
@@ -263,35 +278,73 @@ export function clasificarIntencionConversacional({
     return { tipo: 'CANCELAR_PEDIDO' };
   }
 
-  // 2. Consulta específica sobre reglas/tiempos de retiro o despacho en Santiago
+  // 2. Solicitud de atención humana / asistente / ejecutivo (máxima prioridad ante frustración o consulta directa)
   if (
-    !tienePiezaEnMensaje &&
-    /\b(CUANDO\s+PUEDO\s+RETIRAR|A\s+QUE\s+HORA\s+PUEDO\s+RETIRAR|PUEDO\s+RETIRAR\s+HOY|CUANTO\s+DEMORA\s+EL\s+RETIRO|CUANTO\s+TARDA\s+EL\s+RETIRO|COMO\s+FUNCIONA\s+EL\s+RETIRO|TIENEN\s+RETIRO|DONDE\s+RETIRO|PUEDO\s+IR\s+A\s+RETIRAR|CUANTO\s+DEMORA\s+EL\s+DESPACHO|CUANTO\s+TARDA\s+EL\s+DESPACHO|DESPACHAN\s+HOY|TIENEN\s+DELIVERY)\b/.test(
-      limpio
-    )
-  ) {
-    return { tipo: 'CONSULTA_RETIRO_DESPACHO' };
-  }
-
-  // 2.B Consulta por estado de pedido o pago
-  if (
-    /\b(MI\s+PEDIDO|ESTADO\s+DE\s+MI\s+PEDIDO|COMO\s+VA\s+MI\s+PEDIDO|YA\s+PAGUE|TRANSFERI|MANDE\s+EL\s+COMPROBANTE|VALIDARON\s+MI\s+PAGO|FRP-PED-\d+)\b/.test(
-      limpio
-    )
-  ) {
-    return { tipo: 'ESTADO_PEDIDO' };
-  }
-
-  // 3. Solicitud de atención humana / ejecutivo
-  if (
-    /\b(HABLAR\s+CON\s+(?:UNA?\s+)?(?:PERSONA|EJECUTIVO|HUMANO|VENDEDOR)|ATENCION\s+HUMANA|PASAME\s+CON\s+ALGUIEN)\b/.test(
+    /\b(HABLAR\s+CON\s+(?:UNA?\s+)?(?:PERSONA|EJECUTIVO|HUMANO|VENDEDOR|ASISTENTE|ALGUIEN)|ALGUN\s+ASISTENTE|ASISTENTE\s+PARA\s+HABLAR|ALGUIEN\s+PARA\s+HABLAR|ATENCION\s+HUMANA|PASAME\s+CON\s+ALGUIEN|NECESITO\s+UN\s+VENDEDOR|EJECUTIVO\s+HUMANO|OPERADOR)\b/.test(
       limpio
     )
   ) {
     return { tipo: 'ATENCION_HUMANA' };
   }
 
-  // 4. Preguntas de horario, dirección/sucursal, garantías o devoluciones (sin pedir repuesto)
+  // 3. Modificación o cambio de dirección de envío / despacho
+  if (
+    /\b(MODIFICAR\s+(?:LA\s+|MI\s+)?DIRECCION|CAMBIAR\s+(?:LA\s+|MI\s+)?DIRECCION|CORREGIR\s+(?:LA\s+|MI\s+)?DIRECCION|ME\s+EQUIVOQUE\s+DE\s+DIRECCION|DIRECCION\s+DE\s+(?:ENVIO|DESPACHO))\b/.test(
+      limpio
+    )
+  ) {
+    return { tipo: 'MODIFICAR_DIRECCION_ENVIO' };
+  }
+
+  // 4. Postventa: Estado de pedido, "Ya compré", "Número de envío / seguimiento", comprobante
+  if (
+    /\b(MI\s+PEDIDO|ESTADO\s+DE\s+MI\s+PEDIDO|COMO\s+VA\s+MI\s+PEDIDO|YA\s+PAGUE|YA\s+COMPRE|COMPRE\s+EN\s+LA\s+PAGINA|COMPRE\s+EN\s+LA\s+WEB|NUMERO\s+DE\s+ENVIO|NUMERO\s+DE\s+SEGUIMIENTO|CODIGO\s+DE\s+ENVIO|CODIGO\s+DE\s+SEGUIMIENTO|ORDEN\s+DE\s+TRANSPORTE|TRANSFERI|MANDE\s+EL\s+COMPROBANTE|VALIDARON\s+MI\s+PAGO|QUE\s+HAGO\s+AQUI|FRP-PED-\d+)\b/.test(
+      limpio
+    )
+  ) {
+    return { tipo: 'ESTADO_PEDIDO' };
+  }
+
+  // 5. Si YA tiene un producto cotizado en el carrito y pide más fotos o hace una pregunta sobre ESE mismo repuesto
+  //    (incluso si repite el nombre del repuesto como "Tienes más fotos de la tapa termostato") -> NO re-buscar ni cambiarle el ítem!
+  const pideMasFotosDelCotizado =
+    tieneCarritoActivo &&
+    /\b(MAS\s+FOTOS?|OTRA\s+FOTO|TIENES?\s+FOTO|VER\s+FOTO|MANDAME\s+FOTO|FOTO\s+REAL|IMAGEN)\b/.test(limpio);
+
+  const esPreguntaSobreItemCotizado =
+    tieneCarritoActivo &&
+    !tienePiezaEnMensaje &&
+    (/\b(ES\s+EL\s+PAR|VIENE\s+EL\s+PAR|POR\s+PAR|COMPLETO|COMPLETA|VIENE\s+CON|TRAE|INCLUYE|QUE\s+MARCA|DE\s+QUE\s+ORIGEN|ES\s+ORIGINAL|ES\s+ALTERNATIVO|SIRVE\s+PARA|LE\s+HACE|CALZA|CUANTAS?\s+UNIDADES|PRECIO\s+POR\s+UNIDAD|PRECIO\s+POR\s+PAR)\b/.test(
+      limpio
+    ) ||
+      (limpio.includes('?') &&
+        !/\b(SUCURSAL|DIRECCION|UBICADOS|HORARIO|ABREN|CIERRAN|GARANTIA|DESPACHO|ENVIO|RETIRO)\b/.test(limpio)));
+
+  if (pideMasFotosDelCotizado || esPreguntaSobreItemCotizado) {
+    return { tipo: 'PREGUNTA_SOBRE_PRODUCTO_COTIZADO' };
+  }
+
+  // 6. Si el cliente dice "Quiero para envío a región" / "Con despacho a domicilio" pero aún no nombra la ciudad/comuna
+  if (
+    !tienePiezaEnMensaje &&
+    /\b(ENVIO\s+A\s+REGION|DESPACHO\s+A\s+REGION|ENVIAN\s+A\s+REGION|PARA\s+REGION|QUIERO\s+(?:PARA\s+)?(?:ENVIO|DESPACHO)|CON\s+(?:ENVIO|DESPACHO)\s+A\s+DOMICILIO|LO\s+QUIERO\s+CON\s+(?:ENVIO|DESPACHO))\b/.test(
+      limpio
+    )
+  ) {
+    return { tipo: 'PIDIO_ENVIO_SIN_COMUNA' };
+  }
+
+  // 7. Consulta específica sobre reglas/tiempos de retiro o despacho
+  if (
+    !tienePiezaEnMensaje &&
+    /\b(CUANDO\s+PUEDO\s+RETIRAR|A\s+QUE\s+HORA\s+PUEDO\s+RETIRAR|PUEDO\s+RETIRAR\s+HOY|CUANTO\s+DEMORA\s+EL\s+RETIRO|CUANTO\s+TARDA\s+EL\s+RETIRO|COMO\s+FUNCIONA\s+EL\s+RETIRO|TIENEN\s+RETIRO|DONDE\s+RETIRO|PUEDO\s+IR\s+A\s+RETIRAR|CUANTO\s+DEMORA\s+EL\s+DESPACHO|CUANTO\s+TARDA\s+EL\s+DESPACHO|DESPACHAN\s+HOY|TIENEN\s+DELIVERY|PARA\s+RETIRO|QUIERO\s+RETIRAR)\b/.test(
+      limpio
+    )
+  ) {
+    return { tipo: 'CONSULTA_RETIRO_DESPACHO' };
+  }
+
+  // 8. Preguntas de horario, sucursal o garantías (sin pedir repuesto nuevo)
   if (!tienePiezaEnMensaje && !tieneFoto) {
     if (/\b(GARANTIA|GARANTIAS|DEVOLUCION|DEVOLUCIONES|CAMBIO|CAMBIOS)\b/.test(limpio)) {
       return { tipo: 'CONSULTA_GARANTIAS' };
@@ -304,7 +357,7 @@ export function clasificarIntencionConversacional({
       return { tipo: 'CONSULTA_HORARIO' };
     }
     if (
-      /\b(DONDE\s+ESTAN|DONDE\s+QUEDA|DIRECCION|UBICACION|UBICADOS|SUCURSAL|SUCURSALES|TIENDA\s+FISICA|COMO\s+LLEGO|LA\s+FLORIDA|ENRIQUE\s+OLIVARES)\b/.test(
+      /\b(DONDE\s+ESTAN|DONDE\s+QUEDA|UBICACION|UBICADOS|SUCURSAL|SUCURSALES|UNICA\s+SUCURSAL|OTRA\s+SUCURSAL|TIENDA\s+FISICA|COMO\s+LLEGO|LA\s+FLORIDA|ENRIQUE\s+OLIVARES)\b/.test(
         limpio
       )
     ) {
@@ -312,7 +365,7 @@ export function clasificarIntencionConversacional({
     }
   }
 
-  // 5. Si el cliente envía un vehículo/patente ahora y TENÍA un repuesto pendiente del turno anterior -> ¡Combinar!
+  // 9. Si el cliente envía un vehículo/patente ahora y TENÍA un repuesto pendiente del turno anterior -> ¡Combinar!
   if (!tienePiezaEnMensaje && tieneVehiculoReal && repuestoPendiente?.resumenRepuesto) {
     return {
       tipo: 'BUSQUEDA_CATALOGO',
@@ -321,12 +374,18 @@ export function clasificarIntencionConversacional({
     };
   }
 
-  // 6. Si el cliente solo dio su vehículo o patente, pero aún no dice qué repuesto busca
-  if (!tienePiezaEnMensaje && tieneVehiculoReal && !tieneFoto) {
+  // 10. Si YA tiene un carrito cotizado y envía datos adicionales de su vehículo (ej. "Es para mi changan s100 año 2012 1.0" o "S100")
+  //     sin nombrar otra pieza distinta -> confirmar compatibilidad sobre el producto ya cotizado!
+  if (!tienePiezaEnMensaje && tieneCarritoActivo && dioVehiculoNuevoEnEsteMensaje) {
+    return { tipo: 'PREGUNTA_SOBRE_PRODUCTO_COTIZADO' };
+  }
+
+  // 11. Si el cliente SOLO dio su vehículo o patente en ESTE mensaje, y AÚN NO tiene carrito cotizado
+  if (!tienePiezaEnMensaje && dioVehiculoNuevoEnEsteMensaje && !tieneCarritoActivo && !tieneFoto) {
     return { tipo: 'SOLO_VEHICULO_SIN_REPUESTO' };
   }
 
-  // 7. Si el cliente pide un repuesto real (ej. "Pastillas de freno"), pero NO sabemos qué vehículo tiene (y no es un OEM único)
+  // 12. Si el cliente pide un repuesto real (ej. "Pastillas de freno"), pero NO sabemos qué vehículo tiene (y no es un OEM único)
   if (tienePiezaEnMensaje && !tieneVehiculoReal && !esCodigoOemDirecto && !tieneFoto) {
     return {
       tipo: 'SOLO_REPUESTO_SIN_VEHICULO',
@@ -338,12 +397,15 @@ export function clasificarIntencionConversacional({
     };
   }
 
-  // 8. Si no nombró ni vehículo ni repuesto (ej. "Hola", "Buenas tardes", "Quiero cotizar", "¿Hay alguien?")
-  if (!tienePiezaEnMensaje && !tieneVehiculoReal && !tieneFoto) {
+  // 13. Si no nombró ni vehículo nuevo ni repuesto (ej. "Hola", "?", comentario suelto)
+  if (!tienePiezaEnMensaje && !tieneFoto) {
+    if (tieneCarritoActivo) {
+      return { tipo: 'PREGUNTA_SOBRE_PRODUCTO_COTIZADO' };
+    }
     return { tipo: 'SALUDO_O_CONVERSACION_INICIAL' };
   }
 
-  // 9. Tenemos Vehículo + Repuesto (o Código OEM / Foto de muestra) -> Búsqueda real en catálogo
+  // 14. Tenemos Vehículo + Repuesto (o Código OEM / Foto de muestra) -> Búsqueda real en catálogo
   return {
     tipo: 'BUSQUEDA_CATALOGO',
     usarRepuestoPendiente: false,
@@ -840,8 +902,8 @@ export function verificarSkusEnRespuesta(textoRespuesta = '', skusPermitidos = [
 }
 
 /**
- * Determina si vale la pena invocar Gemini Flash o si la respuesta determinística ya resuelve el turno con $0 tokens.
- * Solo llamamos a Gemini Flash cuando el cliente hace preguntas abiertas complejas, comparaciones técnicas o manda un mensaje largo con dudas.
+ * Determina si vale la pena invocar Gemini 4 Neon o si la respuesta determinística ya resuelve el turno.
+ * Invocamos a Gemini cuando el cliente hace una pregunta sobre el producto cotizado o una pregunta abierta con '?'.
  */
 export function requiereRedaccionConGemini({
   textoCliente = '',
@@ -850,28 +912,25 @@ export function requiereRedaccionConGemini({
   tieneNotaTecnica = false,
 }) {
   if (forzarGemini || tieneNotaTecnica) return true;
+  if (intencion === 'PREGUNTA_SOBRE_PRODUCTO_COTIZADO') return true;
+
   const intencionesCeroTokens = new Set([
     'CANCELAR_PEDIDO',
-    'ESTADO_PEDIDO',
-    'CONSULTA_RETIRO_DESPACHO',
-    'ATENCION_HUMANA',
-    'CONSULTA_GARANTIAS',
-    'CONSULTA_HORARIO',
-    'CONSULTA_SUCURSAL',
     'SOLO_VEHICULO_SIN_REPUESTO',
     'SOLO_REPUESTO_SIN_VEHICULO',
+    'PIDIO_ENVIO_SIN_COMUNA',
+    'MODIFICAR_DIRECCION_ENVIO',
   ]);
   if (intencionesCeroTokens.has(intencion)) return false;
 
   const limpio = String(textoCliente || '').trim();
   const palabras = limpio.split(/\s+/).filter(Boolean);
 
-  // Saludos cortos o consultas directas estándar ("hola", "pastillas changan cs15 PDSS87") -> 0 tokens
   if (intencion === 'SALUDO_O_CONVERSACION_INICIAL' && palabras.length <= 8 && !limpio.includes('?')) {
     return false;
   }
 
-  // Si es una búsqueda de catálogo directa y el cliente no hizo una pregunta abierta compleja (ej. "¿cuál es la diferencia?", "¿me sirve para...?") -> 0 tokens
+  // En una búsqueda de catálogo inicial directa, la plantilla concisa de 4 líneas del Orquestador es óptima y exacta
   if (
     intencion === 'BUSQUEDA_CATALOGO' &&
     !/\b(DIFERENCIA|CUAL\s+ME\s+CONVIENE|ORIGINAL\s+O\s+ALTERNATIVO|GARANTIA|COMO\s+SE\s+SI|POR\s+QUE|EXPLICA|RECOMIENDAS)\b/i.test(
@@ -936,23 +995,20 @@ export async function redactarRespuestaConGeminiLuna({
           .join('\n')
       : '';
 
-    const instruccionSistema = `Te llamas Repuestín y eres el asistente de ventas de mostrador de facilrepuestos.cl en Chile. Atiendes directamente a clientes finales que buscan repuestos para su vehículo exclusivamente por WhatsApp.
-Hablas como un vendedor experto de mostrador en Chile: directo, breve, amable y claro (máximo 3 a 5 líneas por respuesta). Tratas al cliente de "tú". Usas "tenemos", "te puedo ofrecer", "revisemos".
+    const instruccionSistema = `Te llamas Repuestín y eres el vendedor experto de mostrador de facilrepuestos.cl en Chile. Atiendes a clientes por WhatsApp bajo la arquitectura de 6 Agentes Especializados de FácilRepuestos.
+Hablas como un vendedor experto chileno: directo, breve, empático y al grano (MÁXIMO 3 a 4 líneas por respuesta). Tratas al cliente de "tú".
 
-REGLAS INQUEBRANTABLES (HEREDADAS DE LUNA SOLUPARTS):
-1. NUNCA inventes un SKU, producto, stock ni precio que no esté explícitamente en los [DATOS VERIFICADOS DEL SISTEMA] de este turno.
-2. Si el cliente solo saluda ("Hola", "Buenas tardes") o no ha dicho qué repuesto busca, salúdalo con naturalidad en 2 líneas y pregúntale qué repuesto necesita y la patente de su vehículo (o marca, modelo y año).
-3. Si el cliente pide un repuesto pero falta saber para qué vehículo es, NO inventes opciones: pregúntale para qué vehículo lo necesita y ofrécele darte la patente ("si tienes la patente a mano me la das y lo veo al tiro").
-4. Si el cliente dio la patente o el vehículo pero aún no dice qué repuesto necesita, confírmale el vehículo identificado y pregúntale qué pieza anda buscando.
-5. Cuando ofrezcas productos con stock confirmado en [DATOS VERIFICADOS DEL SISTEMA]:
-   - Muestra siempre el nombre del producto, su código SKU exacto entre backticks (ej. \`FRP-...\`), su precio final CON IVA incluido y el link directo del producto en nuestra tienda (\`https://facilrepuestos.cl/?p=...\`). NUNCA envíes links de pago sueltos: siempre envía el link del producto en la tienda facilrepuestos.cl (sin tilde).
-   - REGLA ESTRICTA DE PAGO, RETIRO Y DESPACHO:
-     * Los ÚNICOS productos que pueden pagarse presencialmente en nuestra tienda de **Enrique Olivares 224, La Florida** (con retiro inmediato) son los de nuestro stock local propio (\`FRP-OWN-*\` / \`DRM-*\`).
-     * Para los productos de línea bodega central (\`FRP-SOL-*\`), siempre se compran desde el link en **facilrepuestos.cl**: si el cliente compra **antes de las 11:30 hrs del día** en nuestro portal, se le puede ofrecer **Retiro en Enrique Olivares 224 a partir de las 15:30 hrs (3:30 PM) del mismo día**; si compra **después de las 11:30 hrs**, pasa para las compras de antes de las 12:00 del día siguiente y puede retirar **desde las 15:30 hrs (3:30 PM) del día siguiente** en Enrique Olivares 224; o bien se calcula y entrega cotización de **Despacho según dimensión en Santiago y Chile**.
-     * Los productos de otros proveedores ERP (\`FRP-LOC-*\`, \`FRP-TND-*\`) y productos temporales de Mesa WSP (\`FRP-WSP-*\`) van con **Despacho calculado según dimensión en Santiago y Chile** comprando desde el link en **facilrepuestos.cl**.
-6. NUNCA menciones nombres de proveedores mayoristas internos (jamás nombres a Soluparts ni bodegas externas). Todo el stock y la gestión son de facilrepuestos.cl (escrito siempre sin tilde cuando lleva .cl).
-7. Sé breve y directo (máximo 3 a 4 líneas). No divagues ni mezcles preguntas de pasos futuros.
-${bloqueContextoEditablePortal ? `\nDIRECTRICES Y CONTEXTO VIVO DE SUBAGENTES (EDITADO EN PORTAL):\n${bloqueContextoEditablePortal}` : ''}`;
+REGLAS ESTRICTAS DE RESPUESTA CONVERSACIONAL:
+1. PROHIBIDO VOMITAR PÁRRAFOS LARGOS O LISTAS DE OTROS AUTOS:
+   - Si el cliente tiene un vehículo identificado (ej. Chery Arrizo 3 o Changan S100), habla SOLO de su vehículo. Jamás listes otros 10 modelos de autos compatibles que vienen en el título del catálogo.
+2. RESPONDE PRIMERO LO QUE EL CLIENTE PREGUNTÓ (SÍ / NO DIRECTO):
+   - Si el cliente hace una pregunta puntual (ej. "¿Es el par completo?", "¿Es la única sucursal?", "¿Tienes más fotos?"), respóndele primero con un "Sí" o "No" claro en 1 o 2 líneas usando los [DATOS VERIFICADOS DEL SISTEMA].
+   - Si ya tiene un producto cotizado en pantalla, NUNCA le vuelvas a preguntar "¿Qué repuesto estás buscando y para qué vehículo?".
+3. NO VOMITES REGLAS LOGÍSTICAS SI EL CLIENTE NO LAS HA PEDIDO:
+   - Cuando recién entregas una cotización, muestra solo el producto compatible, su SKU entre backticks (\`FRP-...\`), su precio con IVA incluido, el link del producto en facilrepuestos.cl (sin tilde) y pregúntale en 1 línea: "¿Lo necesitas para retiro en nuestra sucursal de La Florida o prefieres despacho a domicilio / región?".
+   - Recién cuando el cliente elija retiro o indique su comuna/ciudad de envío, dale el horario de retiro o el valor exacto de despacho.
+4. NUNCA inventes un SKU, stock ni precio que no esté en [DATOS VERIFICADOS DEL SISTEMA]. NUNCA menciones nombres de proveedores internos (todo es de facilrepuestos.cl).
+${bloqueContextoEditablePortal ? `\nDIRECTRICES DE SUBAGENTES ACTIVOS:\n${bloqueContextoEditablePortal}` : ''}`;
 
     const ultimosTurnos = (historialMensajes || []).slice(-6).map((m) => ({
       role: m.autor === 'cliente' ? 'user' : 'model',

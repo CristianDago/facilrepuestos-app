@@ -12,7 +12,12 @@
  *   - Agente 6: Fusión de Pedidos Adicionales en el mismo carrito.
  */
 
-import { perfilarNecesidadYComunaCliente, construirRespuestaAgente1Recepcion } from './agente1Recepcion.js';
+import {
+  perfilarNecesidadYComunaCliente,
+  construirRespuestaAgente1Recepcion,
+  construirRespuestaPreguntaSobreProductoCotizado,
+  formatearNombreProductoParaVehiculoCliente,
+} from './agente1Recepcion.js';
 import {
   clasificarCandidatosErpPorReglaOrigen,
   resolverRutaEscalamientoAgente2,
@@ -25,6 +30,8 @@ import { fusionarPedidoAdicionalEnCarrito } from './agente6PedidosAdicionales.js
 export {
   perfilarNecesidadYComunaCliente,
   construirRespuestaAgente1Recepcion,
+  construirRespuestaPreguntaSobreProductoCotizado,
+  formatearNombreProductoParaVehiculoCliente,
   clasificarCandidatosErpPorReglaOrigen,
   resolverRutaEscalamientoAgente2,
   esItemSoluparts,
@@ -34,9 +41,11 @@ export {
 };
 
 /**
- * Redacta la respuesta comercial concisa del Orquestador cuando el Agente 2 encuentra productos en el ERP,
- * aplicando las reglas del Agente 3 (Stock Propio Olivares 224 = único con pago/retiro en La Florida;
- * todo lo demás = Despacho a domicilio + link de producto en tienda `facilrepuestos.cl`) y del Agente 6 (pedido adicional).
+ * Redacta la respuesta comercial concisa del Orquestador cuando el Agente 2 encuentra productos en el ERP:
+ *  - Limpia el título del repuesto para no escupir la lista de 10 autos ajenos.
+ *  - Muestra Precio IVA inc. + Link directo del producto en `facilrepuestos.cl`.
+ *  - NO vomita el reglamento logístico de 3 párrafos: hace una pregunta corta de 1 línea para entender
+ *    si el cliente prefiere retiro en tienda o despacho a domicilio/región.
  */
 export function redactarCotizacionOrquestada({
   etiquetaVehiculo,
@@ -48,24 +57,30 @@ export function redactarCotizacionOrquestada({
   notaAprendida = '',
 }) {
   const clasificacion = clasificarCandidatosErpPorReglaOrigen(carritoConsolidado);
-  const logistica = evaluarLogisticaYDespachoAgente3({
-    items: clasificacion.candidatos,
-    comunaCliente,
+  const itemsMostrar = esPedidoAdicional ? clasificacion.candidatos : candidatosNuevos;
+
+  const lineasProductos = itemsMostrar.map((c) => {
+    const nombreLimpio = formatearNombreProductoParaVehiculoCliente(c.nombre);
+    return (
+      `• **${nombreLimpio}** (\`${c.skuPublicoFrp}\`) — **$${Number(
+        c.precioVentaConIva || 0
+      ).toLocaleString('es-CL')} IVA inc.**\n` +
+      `  👉 Ver producto y comprar: ${c.urlProductoWoo}`
+    );
   });
 
-  const itemsMostrar = esPedidoAdicional ? clasificacion.candidatos : candidatosNuevos;
-  const lineasProductos = itemsMostrar.map(
-    (c) =>
-      `• **${c.nombre}** (\`${c.skuPublicoFrp}\`) — **$${Number(c.precioVentaConIva || 0).toLocaleString('es-CL')} IVA inc.**\n  🔎 Comprar en tienda: ${c.urlProductoWoo}`
-  );
-
   const encabezado = esPedidoAdicional
-    ? `➕ ¡Sumado a tu cotización para **${etiquetaVehiculo}**! Así queda tu lista actualizada en **facilrepuestos.cl**:`
-    : `¡Perfecto! 🚗 Para tu **${etiquetaVehiculo}** tenemos disponible en **facilrepuestos.cl**:`;
+    ? `➕ ¡Sumado a tu cotización! Compatible con tu **${etiquetaVehiculo}**:`
+    : `¡Lo encontré! 🚗 Sí tenemos disponible compatible con tu **${etiquetaVehiculo}**:`;
+
+  const preguntaSiguientePaso =
+    comunaCliente && !/^(santiago|rm|region metropolitana)$/i.test(String(comunaCliente).trim())
+      ? `¿Lo prefieres con **despacho a ${comunaCliente}** o para **retiro en nuestra sucursal de La Florida**?`
+      : `¿Lo necesitas para **retiro en nuestra sucursal de La Florida** o prefieres **despacho a domicilio / región**?`;
 
   return (
     `${notaRespuestasPrevias}${encabezado}\n\n` +
     `${lineasProductos.join('\n')}${notaAprendida}\n\n` +
-    `${logistica.resumenLogisticoParaCliente}`
+    `${preguntaSiguientePaso}`
   );
 }

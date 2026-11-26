@@ -12,6 +12,9 @@ import {
   seleccionarTop3ProveedoresMesaWsp,
   elegirMejorOfertaMesaWsp,
   crearYPublicarProductoTemporalMesaWsp,
+  analizarRespuestaMultimodalProveedorAgente4,
+  construirResumenFormalProveedorIa,
+  construirResumenEjecutivoSolicitudIa,
 } from '../agents/agente4MesaYPublicadorTemporal.js';
 import {
   obtenerConfiguracionAgentesIA,
@@ -92,24 +95,101 @@ function normalizarTerminos(texto = '') {
  * - Origen (Corea, Japón, Alemania, Original OEM, Alternativo)
  * - Disponibilidad de entrega (Inmediata, Hoy, 24h, Sin stock)
  */
+/**
+ * Detector exhaustivo de falta de stock ("Sin Stock") en lenguaje natural chileno B2B de proveedores de repuestos.
+ * Reconoce negativas directas ("no tengo", "agotado", "nada por acá", "no hay", "no trabajamos esa marca", "0 stock",
+ * "no me llegó", "se acabó", "paso", "negativo") y respuestas cortas negativas ("No", "No estimado", "Nada").
+ */
+export function detectarProveedorSinStock(texto = '') {
+  const limpio = String(texto || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (!limpio) return false;
+
+  const frasesSinStockRegex =
+    /\b(no\s+me\s+queda[n]?|no\s+nos\s+queda[n]?|no\s+queda[n]?|sin\s+stock|agotad[oa]s?|no\s+tenemos|no\s+lo\s+tenemos|no\s+la\s+tenemos|no\s+lo\s+trabajo|no\s+la\s+trabajo|no\s+trabajamos|no\s+vemos\s+esa\s+marca|no\s+traemos|no\s+tengo|no\s+le\s+tengo|tampoco\s+tengo|no\s+hay|no\s+hay\s+mano|no\s+hay\s+disponible|sin\s+disponibilidad|no\s+disponible|nada\s+por\s+aca|nada\s+estimado|nada\s+amigo|nada\s+para\s+ese|nada\s+por\s+ahora|nada\s+por\s+el\s+momento|no\s+me\s+llego|no\s+nos\s+llego|se\s+me\s+acabo|se\s+acabo|se\s+agoto|0\s*stock|cero\s+stock|stock\s*0|negativo|paso\s+por\s+ahora|por\s+ahora\s+no|no\s+por\s+ahora|no\s+aplica|no\s+me\s+aparece|no\s+sale\s+nada|solo\s+por\s+encargo|no\s+manejamos)\b/i;
+
+  if (frasesSinStockRegex.test(limpio)) {
+    return true;
+  }
+
+  // Respuestas breves de negativa directa sin monto económico (ej. "No", "No estimado", "Hola, no", "Nada", "Paso")
+  const sinSignos = limpio.replace(/[.,!¡?¿;:-]/g, ' ').replace(/\s+/g, ' ').trim();
+  const tieneAlgunPrecio = /\b(\d{2,3}\s*(?:mil|lucas|k)|\d{1,3}\.\d{3}|\d{5,7})\b/i.test(limpio);
+  if (
+    !tieneAlgunPrecio &&
+    /^(hola\s+|buenas\s+|buen\s+dia\s+|buenas\s+tardes\s+)?(no|nop|no\s+estimado|no\s+amigo|no\s+compadre|no\s+jefe|no\s+maestro|no\s+colega|nada|nada\s+estimado|nada\s+amigo|paso|negativo|nop\s+nada|no\s+nada)(\s+estimado|\s+amigo|\s+gracias|\s+disculpa|\s+por\s+aca|\s+por\s+ahora)?$/i.test(
+      sinSignos
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Analiza un mensaje libre de WhatsApp (texto + transcripción de audio + lectura de imagen IA opcional) enviado
+ * por un proveedor humano y extrae estructuradamente:
+ * - Si tiene stock o no (reconociendo todas las variantes chilenas de "sin stock" sin repreguntar IVA ni marca)
+ * - Precio costo neto (convirtiendo "95 mil", "$95.000", "+ iva" vs "con iva")
+ * - Marca / Fabricante del repuesto (Valeo, LuK, Bosch, Mobis, Koyorad, etc.)
+ * - Origen (Corea, Japón, Alemania, Original OEM, Alternativo)
+ * - Disponibilidad de entrega (Inmediata, Hoy, 24h, Sin stock)
+ * - Resumen Formal Ejecutivo (`resumenFormalIa`) de lo enviado por el proveedor
+ */
 export function extraerOfertaDesdeMensajeWsp({
   mensajeTexto = '',
+  mensajeUltimoTurno = '',
   transcripcionAudio = '',
+  lecturaImagenIa = '',
+  codigoOemDetectado = '',
   precioManualNeto = null,
   fabricanteManual = '',
   origenManual = '',
   disponibilidadManual = '',
+  sinStockExplicito = false,
+  datosMultimodalesIa = null,
+  proveedorNombre = 'Proveedor',
+  repuestoBuscado = 'Repuesto',
+  vehiculoStr = '',
+  margenPct = 30,
 }) {
-  const fuente = `${mensajeTexto || ''} ${transcripcionAudio || ''}`.trim();
+  const audioEfectivo = String(
+    transcripcionAudio || datosMultimodalesIa?.transcripcionAudio || ''
+  ).trim();
+  const lecturaImgEfectiva = String(
+    lecturaImagenIa || datosMultimodalesIa?.lecturaImagenIa || ''
+  ).trim();
+  const oemEfectivo = String(
+    codigoOemDetectado || datosMultimodalesIa?.codigoOemDetectado || ''
+  )
+    .trim()
+    .toUpperCase();
+
+  const fuente = [mensajeTexto, audioEfectivo, lecturaImgEfectiva].filter(Boolean).join(' . ').trim();
   const lower = fuente.toLowerCase();
+  const ultimoTextoEvaluar = String(mensajeUltimoTurno || mensajeTexto || audioEfectivo || '').trim();
 
-  // 1. Detectar si el proveedor indica que NO tiene stock
-  const sinStockRegex = /\b(no\s+me\s+queda|sin\s+stock|agotado|no\s+tenemos|no\s+lo\s+trabajo|no\s+tengo)\b/i;
-  const tieneStock = !sinStockRegex.test(lower) || Boolean(precioManualNeto && Number(precioManualNeto) > 0);
+  // 1. Detectar si el proveedor indica que NO tiene stock (priorizando el último turno o la detección de Gemini Multimodal)
+  const sinStockUltimoTurno = detectarProveedorSinStock(ultimoTextoEvaluar);
+  const sinStockAcumulado = detectarProveedorSinStock(fuente);
+  const sinStockGemini = datosMultimodalesIa?.tieneStock === false;
+  const hayPrecioManual = Boolean(precioManualNeto && Number(precioManualNeto) > 0);
 
-  // 2. Extraer precio en CLP desde lenguaje natural chileno ("$95.000", "95000", "95 mil", "95k", "95 lucas")
-  let precioDetectado = Number(precioManualNeto) || 0;
-  if (!precioDetectado && fuente) {
+  const esSinStock =
+    Boolean(sinStockExplicito) ||
+    (!hayPrecioManual && (sinStockUltimoTurno || sinStockGemini || sinStockAcumulado));
+
+  const tieneStock = !esSinStock;
+
+  // 2. Extraer precio en CLP desde lenguaje natural chileno ("$95.000", "95000", "95 mil", "95k", "95 lucas") o desde Gemini Multimodal
+  let precioDetectado = tieneStock
+    ? Number(precioManualNeto) || Number(datosMultimodalesIa?.precioCostoNeto) || 0
+    : 0;
+  if (tieneStock && !precioDetectado && fuente) {
     const matchMil = fuente.match(/\$?\s*(\d{2,3}(?:[.,]\d)?)\s*(?:mil|lucas|k)\b/i);
     if (matchMil) {
       const base = parseFloat(matchMil[1].replace(',', '.'));
@@ -131,18 +211,28 @@ export function extraerOfertaDesdeMensajeWsp({
   }
 
   // 3. Determinar si el proveedor aclaró explícitamente si es + IVA (neto) o con IVA incluido
-  const mencionaMasIva = /\b(mas\s+iva|m[aá]s\s+iva|\+\s*iva|neto)\b/i.test(lower);
-  const mencionaConIvaExplicito = /\b(con\s+iva|iva\s+incluido|iva\s+inc|bruto)\b/i.test(lower);
-  const tieneIvaExplicito = mencionaMasIva || mencionaConIvaExplicito || Boolean(precioManualNeto);
+  const mencionaMasIva = /\b(mas\s+iva|m[aá]s\s+iva|\+\s*iva|neto|mas\s+impuesto)\b/i.test(lower);
+  const mencionaConIvaExplicito =
+    /\b(con\s+iva|iva\s+incluido|iva\s+inc|bruto)\b/i.test(lower) ||
+    Boolean(datosMultimodalesIa?.mencionaConIva);
+  const tieneIvaExplicito =
+    mencionaMasIva ||
+    mencionaConIvaExplicito ||
+    Boolean(precioManualNeto) ||
+    Boolean(datosMultimodalesIa?.tieneIvaExplicito);
   const mencionaConIva = mencionaConIvaExplicito && !mencionaMasIva;
 
-  const precioCostoNeto = mencionaConIva
+  const precioCostoNeto = !tieneStock
+    ? 0
+    : mencionaConIva
     ? Math.round(precioDetectado / 1.19)
     : Math.round(precioDetectado);
 
-  // 4. Detectar fabricante / marca de la pieza
-  let fabricante = String(fabricanteManual || '').trim().toUpperCase();
-  let tieneMarcaExplicita = Boolean(fabricante);
+  // 4. Detectar fabricante / marca de la pieza (en texto, audio o leída por Visión IA en la caja)
+  let fabricante = String(fabricanteManual || datosMultimodalesIa?.fabricante || '')
+    .trim()
+    .toUpperCase();
+  let tieneMarcaExplicita = Boolean(fabricante && fabricante !== 'ALTERNATIVO');
   if (!fabricante) {
     const upperFuente = fuente.toUpperCase();
     const encontrado = FABRICANTES_CONOCIDOS.find((fab) => {
@@ -159,32 +249,34 @@ export function extraerOfertaDesdeMensajeWsp({
       fabricante = 'ALTERNATIVO';
       tieneMarcaExplicita = true;
     } else {
-      fabricante = 'ALTERNATIVO';
+      fabricante = tieneStock ? 'ALTERNATIVO' : 'SIN STOCK';
     }
   }
 
   // 5. Detectar origen del repuesto
-  let origen = String(origenManual || '').trim().toUpperCase();
-  let tieneOrigenExplicito = Boolean(origen);
+  let origen = String(origenManual || datosMultimodalesIa?.origen || '')
+    .trim()
+    .toUpperCase();
+  let tieneOrigenExplicito = Boolean(origen && origen !== 'IMPORTACIÓN');
   if (!origen) {
     const matchOrigen = ORIGENES_MAP.find((o) => o.regex.test(fuente));
     if (matchOrigen) {
       origen = matchOrigen.valor;
       tieneOrigenExplicito = true;
     } else {
-      origen = 'IMPORTACIÓN';
+      origen = tieneStock ? 'IMPORTACIÓN' : 'NO DISPONIBLE';
     }
   }
 
   // 6. Detectar disponibilidad / cuándo lo tiene listo para retiro si lo pagamos
-  let disponibilidad = String(disponibilidadManual || '').trim();
-  let tieneTiempoRetiroExplicito = Boolean(disponibilidad);
+  let disponibilidad = String(disponibilidadManual || datosMultimodalesIa?.disponibilidad || '').trim();
+  let tieneTiempoRetiroExplicito = Boolean(disponibilidad && disponibilidad !== 'Por confirmar retiro');
   if (!disponibilidad) {
     if (!tieneStock) {
-      disponibilidad = 'Sin stock';
+      disponibilidad = 'Sin stock disponible';
       tieneTiempoRetiroExplicito = true;
     } else if (
-      /\b(inmediat[ao]|en\s+meson|en\s+mesón|retiro\s+inmediato|ahora\s+mismo|disponible\s+aca|lo\s+tengo\s+aca|para\s+retirar\s+ahora|llegar\s+y\s+llevar)\b/i.test(
+      /\b(inmediat[ao]|en\s+meson|en\s+mesón|retiro\s+inmediato|ahora\s+mismo|disponible\s+aca|lo\s+tengo\s+aca|para\s+retirar\s+ahora|llegar\s+y\s+llevar|en\s+local|en\s+tienda)\b/i.test(
         lower
       )
     ) {
@@ -204,6 +296,7 @@ export function extraerOfertaDesdeMensajeWsp({
     }
   }
 
+  // Si NO tiene stock, jamás pedir precio, IVA ni marca
   const faltantesCotizacion = [];
   if (tieneStock) {
     if (precioCostoNeto <= 0) {
@@ -236,24 +329,59 @@ export function extraerOfertaDesdeMensajeWsp({
     preguntaSeguimientoProveedor = `Gracias estimado, ${preguntas.join(' ¿Y ').replace(/\?\s*¿Y\s+/g, ', ')}`;
   }
 
-  // 7. Nivel de confianza del parser
-  let confianzaIa = 0.72;
-  if (precioCostoNeto > 0 && faltantesCotizacion.length === 0) confianzaIa = 0.98;
-  else if (precioCostoNeto > 0) confianzaIa = 0.85;
+  const ofertaCompleta = tieneStock && precioCostoNeto > 0 && faltantesCotizacion.length === 0;
+  const precioVentaFrpNeto =
+    tieneStock && precioCostoNeto > 0 ? Math.round(precioCostoNeto * (1 + (Number(margenPct) || 30) / 100)) : 0;
+  const precioVentaFrpConIva = precioVentaFrpNeto > 0 ? Math.round(precioVentaFrpNeto * 1.19) : 0;
+
+  // 7. Construir Resumen Formal Ejecutivo (`resumenFormalIa`) de lo enviado por el proveedor
+  const resumenFormalIa = construirResumenFormalProveedorIa({
+    proveedorNombre,
+    repuestoBuscado,
+    vehiculoStr,
+    tieneStock,
+    ofertaCompleta,
+    precioCostoNeto,
+    precioVentaFrpNeto,
+    precioVentaFrpConIva,
+    margenPct: Number(margenPct) || 30,
+    fabricante,
+    origen,
+    disponibilidad,
+    codigoOemDetectado: oemEfectivo,
+    mensajeOriginal: ultimoTextoEvaluar || mensajeTexto,
+    transcripcionAudio: audioEfectivo,
+    lecturaImagenIa: lecturaImgEfectiva,
+    faltantesCotizacion,
+    resumenGemini: datosMultimodalesIa?.resumenFormalIa || '',
+  });
+
+  // 8. Nivel de confianza del parser
+  let confianzaIa = !tieneStock ? 0.99 : 0.72;
+  if (tieneStock && precioCostoNeto > 0 && faltantesCotizacion.length === 0) confianzaIa = 0.98;
+  else if (tieneStock && precioCostoNeto > 0) confianzaIa = 0.85;
 
   return {
     tieneStock,
+    esSinStock,
     precioCostoNeto,
     mencionaConIva,
     tieneIvaExplicito,
     tieneMarcaUOrigenExplicito: tieneMarcaExplicita || tieneOrigenExplicito,
     tieneTiempoRetiroExplicito,
     faltantesCotizacion,
-    ofertaCompleta: tieneStock && precioCostoNeto > 0 && faltantesCotizacion.length === 0,
+    ofertaCompleta,
     preguntaSeguimientoProveedor,
+    mensajeCierreSinStockProveedor: !tieneStock
+      ? 'Muchas gracias por avisar estimado, quedamos atentos para la próxima.'
+      : null,
     fabricante,
     origen,
     disponibilidad,
+    transcripcionAudio: audioEfectivo,
+    lecturaImagenIa: lecturaImgEfectiva,
+    codigoOemDetectado: oemEfectivo,
+    resumenFormalIa,
     confianzaIa,
   };
 }
@@ -934,18 +1062,29 @@ router.post('/solicitudes/:id/respuesta', requireAuth, async (req, res, next) =>
       proveedorId = '',
       mensajeOriginalWsp = '',
       transcripcionAudio = '',
+      audioDataUrl = '',
       fotoUrl = '',
+      imagenDataUrl = '',
       precioManualNeto = null,
       fabricanteManual = '',
       origenManual = '',
       disponibilidadManual = '',
+      sinStockExplicito = false,
       garantia = '6 meses',
     } = req.body || {};
 
-    if (!mensajeOriginalWsp.trim() && !transcripcionAudio.trim() && !precioManualNeto) {
+    if (
+      !mensajeOriginalWsp.trim() &&
+      !transcripcionAudio.trim() &&
+      !audioDataUrl &&
+      !fotoUrl.trim() &&
+      !imagenDataUrl &&
+      !precioManualNeto &&
+      !sinStockExplicito
+    ) {
       return res.status(400).json({
         success: false,
-        error: 'Ingresa el mensaje de WhatsApp del proveedor, transcripción de audio o precio neto',
+        error: 'Ingresa el mensaje de WhatsApp del proveedor, audio, imagen o estado de stock',
       });
     }
 
@@ -977,24 +1116,61 @@ router.post('/solicitudes/:id/respuesta', requireAuth, async (req, res, next) =>
       .reverse()
       .find((o) => o.proveedorId === provInfo.proveedorId);
 
-    const textoAcumuladoProv = prevOfertaProv?.mensajeOriginalWsp
-      ? `${prevOfertaProv.mensajeOriginalWsp} . ${mensajeOriginalWsp}`
-      : mensajeOriginalWsp;
+    const esNegativaDirecta =
+      Boolean(sinStockExplicito) || detectarProveedorSinStock(mensajeOriginalWsp || transcripcionAudio);
+
+    const textoAcumuladoProv =
+      !esNegativaDirecta && prevOfertaProv?.mensajeOriginalWsp && mensajeOriginalWsp
+        ? `${prevOfertaProv.mensajeOriginalWsp} . ${mensajeOriginalWsp}`
+        : mensajeOriginalWsp || (sinStockExplicito ? 'Sin stock disponible en bodega' : '');
     const turnosReconsultaPrevios = Number(prevOfertaProv?.turnosReconsulta || 0);
 
+    const vehiculoStr = [
+      solicitud.marcaVehiculo,
+      solicitud.modeloVehiculo,
+      solicitud.anioVehiculo,
+      solicitud.motorVehiculo,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    const imagenEfectivaUrl = String(imagenDataUrl || fotoUrl || prevOfertaProv?.fotoUrl || '').trim();
+
+    // Analizar imagen, audio y texto con Gemini Multimodal (Agente 4)
+    const datosMultimodalesIa = await analizarRespuestaMultimodalProveedorAgente4({
+      mensajeTexto: textoAcumuladoProv,
+      transcripcionAudioManual: transcripcionAudio || prevOfertaProv?.transcripcionAudio || '',
+      audioDataUrl,
+      imagenUrl: imagenEfectivaUrl,
+      repuestoBuscado: solicitud.repuestoBuscado,
+      vehiculoStr,
+      proveedorNombre: provInfo.proveedorNombre,
+    });
+
+    const margenPct = Number(solicitud.margenPct) || 30;
     const extraido = extraerOfertaDesdeMensajeWsp({
       mensajeTexto: textoAcumuladoProv,
-      transcripcionAudio,
+      mensajeUltimoTurno: mensajeOriginalWsp,
+      transcripcionAudio: datosMultimodalesIa?.transcripcionAudio || transcripcionAudio || prevOfertaProv?.transcripcionAudio || '',
+      lecturaImagenIa: datosMultimodalesIa?.lecturaImagenIa || prevOfertaProv?.lecturaImagenIa || '',
+      codigoOemDetectado: datosMultimodalesIa?.codigoOemDetectado || prevOfertaProv?.codigoOemDetectado || '',
       precioManualNeto,
       fabricanteManual,
       origenManual,
       disponibilidadManual,
+      sinStockExplicito,
+      datosMultimodalesIa,
+      proveedorNombre: provInfo.proveedorNombre,
+      repuestoBuscado: solicitud.repuestoBuscado,
+      vehiculoStr,
+      margenPct,
     });
 
-    const margenPct = Number(solicitud.margenPct) || 30;
     const precioCostoNeto = extraido.precioCostoNeto;
     const precioVentaFrpNeto =
-      precioCostoNeto > 0 ? Math.round(precioCostoNeto * (1 + margenPct / 100)) : 0;
+      extraido.tieneStock && precioCostoNeto > 0
+        ? Math.round(precioCostoNeto * (1 + margenPct / 100))
+        : 0;
     const precioVentaFrpConIva =
       precioVentaFrpNeto > 0 ? Math.round(precioVentaFrpNeto * 1.19) : 0;
 
@@ -1004,9 +1180,14 @@ router.post('/solicitudes/:id/respuesta', requireAuth, async (req, res, next) =>
       proveedorId: provInfo.proveedorId,
       proveedorNombre: provInfo.proveedorNombre,
       telefonoProveedor: provInfo.telefono || '',
-      mensajeOriginalWsp: String(textoAcumuladoProv || '').trim(),
-      transcripcionAudio: String(transcripcionAudio || '').trim(),
-      fotoUrl: String(fotoUrl || '').trim(),
+      mensajeOriginalWsp: String(
+        textoAcumuladoProv || extraido.transcripcionAudio || (extraido.tieneStock ? 'Adjunto multimedia recibido' : 'Sin stock disponible')
+      ).trim(),
+      transcripcionAudio: extraido.transcripcionAudio || '',
+      lecturaImagenIa: extraido.lecturaImagenIa || '',
+      codigoOemDetectado: extraido.codigoOemDetectado || '',
+      resumenFormalIa: extraido.resumenFormalIa || '',
+      fotoUrl: imagenEfectivaUrl,
       tieneStock: extraido.tieneStock,
       fabricante: extraido.fabricante,
       origen: extraido.origen,
@@ -1020,13 +1201,21 @@ router.post('/solicitudes/:id/respuesta', requireAuth, async (req, res, next) =>
       ofertaCompleta: extraido.ofertaCompleta,
       faltantesCotizacion: extraido.faltantesCotizacion || [],
       preguntaSeguimientoProveedor: extraido.preguntaSeguimientoProveedor || null,
-      turnosReconsulta: turnosReconsultaPrevios + (extraido.ofertaCompleta ? 0 : 1),
+      turnosReconsulta: extraido.tieneStock ? turnosReconsultaPrevios + (extraido.ofertaCompleta ? 0 : 1) : 0,
       ganadora: false,
       recibidoEn: now,
     };
 
     const ofertasSinPrev = (solicitud.ofertasRecibidas || []).filter((o) => o.id !== nuevaOferta.id);
     const ofertasActualizadas = [...ofertasSinPrev, nuevaOferta];
+
+    const resumenFormalMesaIa = construirResumenEjecutivoSolicitudIa({
+      codigoSolicitud: solicitud.codigoSolicitud,
+      repuestoBuscado: solicitud.repuestoBuscado,
+      vehiculoStr,
+      proveedoresContactados: solicitud.proveedoresContactados,
+      ofertasRecibidas: ofertasActualizadas,
+    });
 
     // Si faltan datos clave (¿es más IVA?, marca/origen o cuándo está listo para retiro) y aún no superamos 2 repreguntas,
     // el Agente Cotizador le repregunta al proveedor por WhatsApp antes de publicar en WordPress.
@@ -1045,6 +1234,7 @@ router.post('/solicitudes/:id/respuesta', requireAuth, async (req, res, next) =>
 
       await solRef.update({
         ofertasRecibidas: ofertasActualizadas,
+        resumenFormalMesaIa,
         updatedAt: now,
       });
 
@@ -1057,11 +1247,22 @@ router.post('/solicitudes/:id/respuesta', requireAuth, async (req, res, next) =>
           solicitud: {
             ...solicitud,
             ofertasRecibidas: ofertasActualizadas,
+            resumenFormalMesaIa,
             updatedAt: now,
           },
         },
       });
     }
+
+    // Si el proveedor informó que NO tiene stock, agradecerle con cortesía sin hacerle más preguntas
+    if (!extraido.tieneStock && extraido.mensajeCierreSinStockProveedor && provInfo.telefono) {
+      await enviarMensajeMetaWhatsApp({
+        telefono: provInfo.telefono,
+        textoMensaje: extraido.mensajeCierreSinStockProveedor,
+        codigoSolicitud: solicitud.codigoSolicitud,
+      }).catch(() => null);
+    }
+
     const contactosActualizados = (solicitud.proveedoresContactados || []).map((c) =>
       c.proveedorId === provInfo.proveedorId
         ? {
@@ -1071,6 +1272,10 @@ router.post('/solicitudes/:id/respuesta', requireAuth, async (req, res, next) =>
           }
         : c
     );
+
+    const todosSinStock =
+      contactosActualizados.length > 0 &&
+      contactosActualizados.every((c) => c.estadoContacto === 'sin_stock');
 
     const nuevoEstado =
       solicitud.estado === 'adjudicada'
@@ -1088,9 +1293,43 @@ router.post('/solicitudes/:id/respuesta', requireAuth, async (req, res, next) =>
     const updatePayload = {
       ofertasRecibidas: ofertasActualizadas,
       proveedoresContactados: contactosActualizados,
+      resumenFormalMesaIa,
       estado: nuevoEstado,
       updatedAt: now,
     };
+
+    // Si TODOS los proveedores contactados confirmaron NO tener stock, avisar amablemente al cliente en espera
+    if (todosSinStock && !mejorOferta && solicitud.estado !== 'adjudicada') {
+      const msgClienteSinStock = `Hola 👋 Te comentamos que consultamos con nuestros proveedores locales por el **${solicitud.repuestoBuscado}** para tu **${vehiculoStr}** y en este momento ninguno cuenta con stock disponible. Si necesitas cotizar otro repuesto para tu vehículo me avisas por aquí.`;
+      updatePayload.mensajeCotizacionCliente = msgClienteSinStock;
+      let telCliente = String(solicitud.clienteTelefonoReal || solicitud.clienteTelefono || '').trim();
+      if (solicitud.sesionAgenteId) {
+        const sesRef = db.collection('sesiones_agente_omnicanal').doc(solicitud.sesionAgenteId);
+        const sesSnap = await sesRef.get().catch(() => null);
+        if (sesSnap?.exists) {
+          const sesData = sesSnap.data() || {};
+          if ((!telCliente || telCliente === 'CONFIDENCIAL-FRP') && sesData.clienteTelefono) {
+            telCliente = String(sesData.clienteTelefono).trim();
+          }
+          const mensajes = Array.isArray(sesData.mensajes) ? [...sesData.mensajes] : [];
+          mensajes.push({
+            id: `msg-wsp-sinstock-${Date.now()}`,
+            rol: 'agente',
+            autor: 'Repuestín · facilrepuestos.cl',
+            texto: msgClienteSinStock,
+            creadoEn: now,
+            origen: 'mesa_wsp_sin_stock_confirmado',
+          });
+          await sesRef.update({ mensajes, updatedAt: now });
+        }
+      }
+      if (telCliente && /\d{8,15}/.test(telCliente.replace(/\D/g, ''))) {
+        await enviarRespuestaClienteMetaWhatsapp({
+          telefonoDestino: telCliente,
+          texto: msgClienteSinStock,
+        }).catch(() => null);
+      }
+    }
 
     if (mejorOferta && solicitud.estado !== 'adjudicada') {
       publicacionTemporal = await crearYPublicarProductoTemporalMesaWsp({

@@ -68,14 +68,19 @@ export default function MesaCotizacionWsp() {
   });
   const [proveedoresSeleccionados, setProveedoresSeleccionados] = useState<string[]>([]);
 
-  // Registro manual opcional de oferta recibida de proveedor real
+  // Registro manual opcional de oferta recibida de proveedor real (soporta texto, audio, imagen y sin stock)
   const [respondiendoSolId, setRespondiendoSolId] = useState<string | null>(null);
   const [enviandoRespuesta, setEnviandoRespuesta] = useState(false);
   const [formRespuestaWsp, setFormRespuestaWsp] = useState({
     proveedorId: '',
     mensajeOriginalWsp: '',
     transcripcionAudio: '',
+    audioDataUrl: '',
+    nombreArchivoAudio: '',
     fotoUrl: '',
+    imagenDataUrl: '',
+    nombreArchivoImagen: '',
+    sinStockExplicito: false,
     garantia: '6 meses',
   });
 
@@ -311,27 +316,74 @@ export default function MesaCotizacionWsp() {
       proveedorId: primerProv,
       mensajeOriginalWsp: '',
       transcripcionAudio: '',
+      audioDataUrl: '',
+      nombreArchivoAudio: '',
       fotoUrl: '',
+      imagenDataUrl: '',
+      nombreArchivoImagen: '',
+      sinStockExplicito: false,
       garantia: '6 meses',
     });
+  };
+
+  const handleSeleccionarImagenProveedor = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      setFormRespuestaWsp((prev) => ({
+        ...prev,
+        imagenDataUrl: dataUrl,
+        nombreArchivoImagen: file.name,
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleSeleccionarAudioProveedor = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || '');
+      setFormRespuestaWsp((prev) => ({
+        ...prev,
+        audioDataUrl: dataUrl,
+        nombreArchivoAudio: file.name,
+      }));
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleRecibirRespuestaWsp = async (solId: string) => {
     try {
       setEnviandoRespuesta(true);
       const res = await api.post<
-        ApiResponse<{ oferta: OfertaRecibidaWsp; solicitud: SolicitudCotizacionWsp }>
+        ApiResponse<{
+          oferta: OfertaRecibidaWsp;
+          reconsultaEnviadaAProveedor?: string;
+          solicitud: SolicitudCotizacionWsp;
+        }>
       >(`/mesa-wsp/solicitudes/${solId}/respuesta`, formRespuestaWsp);
 
       if (res.success && res.data) {
         const of = res.data.oferta;
-        if (of.tieneStock && of.precioCostoNeto > 0) {
+        if (!of.tieneStock) {
           notify(
-            `✓ Oferta registrada de ${of.proveedorNombre}: ${of.fabricante} (${of.origen}) · Costo ${fmtCLP(of.precioCostoNeto)} → Venta FRP ${fmtCLP(of.precioVentaFrpNeto)} neto`,
+            `ℹ Sin stock detectado (${of.proveedorNombre}) · Resumen formal generado sin repreguntar`,
+            'info'
+          );
+        } else if (res.data.reconsultaEnviadaAProveedor) {
+          notify(
+            `💬 Faltan datos de ${of.proveedorNombre} -> Agente repreguntó: "${res.data.reconsultaEnviadaAProveedor}"`,
+            'info'
+          );
+        } else if (of.tieneStock && of.precioCostoNeto > 0) {
+          notify(
+            `✓ Oferta completa de ${of.proveedorNombre}: ${of.fabricante} (${of.origen}) · Costo ${fmtCLP(of.precioCostoNeto)} → Venta FRP ${fmtCLP(of.precioVentaFrpNeto)} neto`,
             'success'
           );
-        } else {
-          notify(`ℹ Respuesta registrada (${of.proveedorNombre}: Sin stock disponible)`, 'info');
         }
         setRespondiendoSolId(null);
         await cargarMesaWsp();
@@ -1030,9 +1082,42 @@ export default function MesaCotizacionWsp() {
                       </span>
                       <strong>{c.proveedorNombre}</strong>
                       <span style={{ color: '#64748b' }}>({c.telefono})</span>
+                      {c.estadoContacto === 'sin_stock' && (
+                        <span
+                          style={{
+                            fontSize: '0.68rem',
+                            background: '#fee2e2',
+                            color: '#991b1b',
+                            padding: '1px 6px',
+                            borderRadius: 999,
+                            fontWeight: 700,
+                          }}
+                        >
+                          Sin Stock
+                        </span>
+                      )}
                     </span>
                   ))}
                 </div>
+
+                {/* Resumen Ejecutivo Formal de la Solicitud generado por el Agente Cotizador */}
+                {sol.resumenFormalMesaIa && (
+                  <div
+                    style={{
+                      background: '#f8fafc',
+                      border: '1px solid #cbd5e1',
+                      borderLeft: '4px solid #0284c7',
+                      borderRadius: 10,
+                      padding: '10px 14px',
+                      fontSize: '0.82rem',
+                      color: '#0f172a',
+                      lineHeight: 1.45,
+                      fontWeight: 600,
+                    }}
+                  >
+                    {sol.resumenFormalMesaIa}
+                  </div>
+                )}
 
                 {/* Desplegable con el texto exacto enviado por Meta WhatsApp API */}
                 {verMensajesId === sol.id && (
@@ -1070,7 +1155,7 @@ export default function MesaCotizacionWsp() {
                   </div>
                 )}
 
-                {/* Registro manual de Oferta Recibida de Proveedor */}
+                {/* Registro / Prueba Multimodal de Respuesta de Proveedor (Texto, Audio, Imagen o Sin Stock) */}
                 {respondiendoSolId === sol.id && (
                   <div
                     style={{
@@ -1080,12 +1165,54 @@ export default function MesaCotizacionWsp() {
                       padding: 14,
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: 10,
+                      gap: 12,
                     }}
                   >
-                    <strong style={{ fontSize: '0.88rem', color: '#0369a1' }}>
-                      💬 Registrar Oferta de Proveedor WhatsApp
-                    </strong>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: 8,
+                      }}
+                    >
+                      <strong style={{ fontSize: '0.9rem', color: '#0369a1' }}>
+                        💬 Procesar Respuesta de Proveedor (Texto, Audio de Voz, Foto de Caja/Pieza o Sin Stock)
+                      </strong>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline"
+                          style={{ fontSize: '0.72rem', borderColor: '#dc2626', color: '#b91c1c', background: '#fef2f2' }}
+                          onClick={() =>
+                            setFormRespuestaWsp((p) => ({
+                              ...p,
+                              sinStockExplicito: true,
+                              mensajeOriginalWsp: 'No estimado, no me queda stock para ese modelo por ahora.',
+                            }))
+                          }
+                        >
+                          ❌ Probar: "No tengo stock"
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline"
+                          style={{ fontSize: '0.72rem', borderColor: '#0284c7', color: '#0369a1', background: '#ffffff' }}
+                          onClick={() =>
+                            setFormRespuestaWsp((p) => ({
+                              ...p,
+                              sinStockExplicito: false,
+                              transcripcionAudio:
+                                'Hola estimado, sí mira lo tengo acá en el mesón para entrega inmediata en marca Valeo coreano a 55 mil más IVA.',
+                              mensajeOriginalWsp: '',
+                            }))
+                          }
+                        >
+                          🎙️ Probar Audio Voz Proveedor
+                        </button>
+                      </div>
+                    </div>
 
                     <div className={styles.formGrid}>
                       <div className={styles.fieldGroup}>
@@ -1105,36 +1232,83 @@ export default function MesaCotizacionWsp() {
                         </select>
                       </div>
 
-                      <div className={styles.fieldGroup} style={{ gridColumn: 'span 2' }}>
+                      <div className={styles.fieldGroup}>
                         <label className={styles.fieldLabel}>
-                          Foto del Repuesto (URL opcional)
+                          📷 Subir Foto de Caja / Etiqueta OEM / Captura (Visión IA)
                         </label>
                         <input
+                          type="file"
+                          accept="image/*"
                           className={styles.input}
-                          value={formRespuestaWsp.fotoUrl}
-                          onChange={(e) =>
-                            setFormRespuestaWsp((p) => ({ ...p, fotoUrl: e.target.value }))
-                          }
-                          placeholder="https://..."
+                          onChange={handleSeleccionarImagenProveedor}
                         />
+                        {formRespuestaWsp.nombreArchivoImagen && (
+                          <span style={{ fontSize: '0.72rem', color: '#0369a1', fontWeight: 600 }}>
+                            ✓ Imagen lista para análisis IA: {formRespuestaWsp.nombreArchivoImagen}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className={styles.fieldGroup}>
+                        <label className={styles.fieldLabel}>
+                          🎙️ Subir Audio de Voz del Proveedor (Escucha IA)
+                        </label>
+                        <input
+                          type="file"
+                          accept="audio/*"
+                          className={styles.input}
+                          onChange={handleSeleccionarAudioProveedor}
+                        />
+                        {formRespuestaWsp.nombreArchivoAudio && (
+                          <span style={{ fontSize: '0.72rem', color: '#0369a1', fontWeight: 600 }}>
+                            ✓ Audio listo para transcripción IA: {formRespuestaWsp.nombreArchivoAudio}
+                          </span>
+                        )}
                       </div>
                     </div>
 
                     <div className={styles.formGrid}>
-                      <div className={styles.fieldGroup} style={{ gridColumn: 'span 2' }}>
+                      <div className={styles.fieldGroup}>
                         <label className={styles.fieldLabel}>
-                          Mensaje / Oferta del Proveedor (indica precio neto, marca y origen)
+                          Mensaje de Texto del Proveedor (ej: "No me queda" o "Sí a 55 mil + IVA...")
                         </label>
                         <textarea
                           className={styles.textarea}
-                          placeholder="Ej: Disponible marca Valeo coreano en $145.000 neto entrega inmediata"
+                          placeholder='Ej: "No estimado, agotado" o "Sí lo tengo a $55.000 + IVA marca Valeo coreano retiro inmediato"'
                           value={formRespuestaWsp.mensajeOriginalWsp}
                           onChange={(e) =>
                             setFormRespuestaWsp((p) => ({
                               ...p,
+                              sinStockExplicito: false,
                               mensajeOriginalWsp: e.target.value,
                             }))
                           }
+                        />
+                      </div>
+
+                      <div className={styles.fieldGroup}>
+                        <label className={styles.fieldLabel}>
+                          🎙️ Transcripción de Audio / Nota de Voz (o URL Foto opcional)
+                        </label>
+                        <textarea
+                          className={styles.textarea}
+                          placeholder="Si el proveedor envió nota de voz o quieres simular lo que dijo en el audio..."
+                          value={formRespuestaWsp.transcripcionAudio}
+                          onChange={(e) =>
+                            setFormRespuestaWsp((p) => ({
+                              ...p,
+                              transcripcionAudio: e.target.value,
+                            }))
+                          }
+                        />
+                        <input
+                          className={styles.input}
+                          style={{ marginTop: 6 }}
+                          value={formRespuestaWsp.fotoUrl}
+                          onChange={(e) =>
+                            setFormRespuestaWsp((p) => ({ ...p, fotoUrl: e.target.value }))
+                          }
+                          placeholder="URL de foto externa (https://...) opcional"
                         />
                       </div>
                     </div>
@@ -1154,118 +1328,236 @@ export default function MesaCotizacionWsp() {
                         onClick={() => handleRecibirRespuestaWsp(sol.id)}
                       >
                         {enviandoRespuesta
-                          ? 'Procesando...'
-                          : '✓ Guardar Oferta y Calcular Precio FRP'}
+                          ? 'Analizando con IA Multimodal...'
+                          : '🧠 Analizar Respuesta Proveedor y Generar Resumen Formal'}
                       </button>
                     </div>
                   </div>
                 )}
 
-                {/* Tarjetas Comparativas de Ofertas Recibidas en Vivo */}
+                {/* Tarjetas Comparativas de Ofertas y Respuestas Recibidas en Vivo */}
                 {sol.ofertasRecibidas.length > 0 && (
                   <div className={styles.ofertasGrid}>
-                    {sol.ofertasRecibidas.map((of) => (
-                      <div
-                        key={of.id}
-                        className={`${styles.ofertaCard} ${
-                          of.ganadora ? styles.ofertaCardGanadora : ''
-                        }`}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                          <div>
-                            <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a' }}>
-                              🏪 {of.proveedorNombre}
+                    {sol.ofertasRecibidas.map((of) => {
+                      const esSinStockCard = !of.tieneStock;
+                      const esEnReconsultaCard =
+                        of.tieneStock && (!of.ofertaCompleta || of.precioCostoNeto <= 0);
+
+                      return (
+                        <div
+                          key={of.id}
+                          className={`${styles.ofertaCard} ${
+                            of.ganadora ? styles.ofertaCardGanadora : ''
+                          }`}
+                          style={
+                            esSinStockCard
+                              ? {
+                                  background: '#fef2f2',
+                                  borderColor: '#fecaca',
+                                }
+                              : esEnReconsultaCard
+                              ? {
+                                  background: '#fffbeb',
+                                  borderColor: '#fde68a',
+                                }
+                              : undefined
+                          }
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a' }}>
+                                🏪 {of.proveedorNombre}
+                              </div>
+                              <div style={{ fontSize: '0.73rem', color: '#64748b' }}>
+                                📞 {of.telefonoProveedor}
+                              </div>
                             </div>
-                            <div style={{ fontSize: '0.73rem', color: '#64748b' }}>
-                              📞 {of.telefonoProveedor}
-                            </div>
+
+                            {of.ganadora ? (
+                              <span className={styles.badgeStatusWon}>🏆 Oferta Ganadora</span>
+                            ) : esSinStockCard ? (
+                              <span
+                                style={{
+                                  fontSize: '0.72rem',
+                                  fontWeight: 800,
+                                  background: '#fee2e2',
+                                  color: '#991b1b',
+                                  padding: '4px 10px',
+                                  borderRadius: 999,
+                                  border: '1px solid #fca5a5',
+                                }}
+                              >
+                                ❌ Sin Stock Disponible
+                              </span>
+                            ) : esEnReconsultaCard ? (
+                              <span
+                                style={{
+                                  fontSize: '0.72rem',
+                                  fontWeight: 800,
+                                  background: '#fef3c7',
+                                  color: '#92400e',
+                                  padding: '4px 10px',
+                                  borderRadius: 999,
+                                  border: '1px solid #fcd34d',
+                                }}
+                              >
+                                ⏳ Validando Datos
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  fontSize: '0.72rem',
+                                  fontWeight: 800,
+                                  background: '#dcfce7',
+                                  color: '#166534',
+                                  padding: '4px 10px',
+                                  borderRadius: 999,
+                                }}
+                              >
+                                ✅ Con Stock
+                              </span>
+                            )}
                           </div>
 
-                          {of.ganadora && (
-                            <span className={styles.badgeStatusWon}>🏆 Oferta Ganadora</span>
+                          {of.mensajeOriginalWsp && (
+                            <div className={styles.wspBubble}>“{of.mensajeOriginalWsp}”</div>
+                          )}
+
+                          {of.transcripcionAudio && (
+                            <div
+                              style={{
+                                background: '#eff6ff',
+                                border: '1px solid #bfdbfe',
+                                borderRadius: 8,
+                                padding: '7px 10px',
+                                fontSize: '0.76rem',
+                                color: '#1e3a8a',
+                              }}
+                            >
+                              <strong>🎙️ Audio Escuchado por IA:</strong> “{of.transcripcionAudio}”
+                            </div>
+                          )}
+
+                          {(of.fotoUrl || of.lecturaImagenIa) && (
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: 10,
+                                background: '#f8fafc',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: 8,
+                                padding: 8,
+                              }}
+                            >
+                              {of.fotoUrl && (
+                                <img
+                                  src={of.fotoUrl}
+                                  alt={of.fabricante}
+                                  style={{
+                                    width: 68,
+                                    height: 54,
+                                    objectFit: 'cover',
+                                    borderRadius: 6,
+                                    border: '1px solid #cbd5e1',
+                                    flexShrink: 0,
+                                  }}
+                                />
+                              )}
+                              <div style={{ fontSize: '0.74rem', color: '#0f172a', lineHeight: 1.35 }}>
+                                <div style={{ fontWeight: 800, color: '#0369a1' }}>
+                                  📷 Lectura de Imagen por Visión IA
+                                  {of.codigoOemDetectado ? ` · OEM: ${of.codigoOemDetectado}` : ''}
+                                </div>
+                                <div>
+                                  {of.lecturaImagenIa || 'Fotografía del repuesto / caja adjunta por el proveedor.'}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Resumen Formal Ejecutivo generado por el Agente Cotizador */}
+                          {of.resumenFormalIa && (
+                            <div
+                              style={{
+                                background: esSinStockCard ? '#fff1f2' : '#f8fafc',
+                                border: `1px solid ${esSinStockCard ? '#fda4af' : '#cbd5e1'}`,
+                                borderRadius: 8,
+                                padding: '8px 10px',
+                                fontSize: '0.76rem',
+                                color: '#1e293b',
+                                lineHeight: 1.4,
+                                whiteSpace: 'pre-wrap',
+                              }}
+                            >
+                              {of.resumenFormalIa}
+                            </div>
+                          )}
+
+                          {!esSinStockCard && (
+                            <>
+                              <div className={styles.extractedGrid}>
+                                <div>
+                                  <div style={{ fontSize: '0.68rem', color: '#64748b' }}>FABRICANTE / ORIGEN</div>
+                                  <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#0f172a' }}>
+                                    {of.fabricante} · {of.origen}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div style={{ fontSize: '0.68rem', color: '#64748b' }}>DISPONIBILIDAD</div>
+                                  <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#059669' }}>
+                                    ⚡ {of.disponibilidad}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className={styles.priceBox}>
+                                <div>
+                                  <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
+                                    Costo Proveedor (Neto)
+                                  </div>
+                                  <div style={{ fontSize: '0.92rem', fontWeight: 700 }}>
+                                    {of.precioCostoNeto > 0 ? fmtCLP(of.precioCostoNeto) : 'Por confirmar'}
+                                  </div>
+                                </div>
+
+                                <div style={{ textAlign: 'right' }}>
+                                  <div style={{ fontSize: '0.68rem', color: '#86efac' }}>
+                                    Venta FRP (+{of.margenAplicadoPct}%)
+                                  </div>
+                                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#4ade80' }}>
+                                    {of.precioVentaFrpNeto > 0 ? `${fmtCLP(of.precioVentaFrpNeto)} neto` : '—'}
+                                  </div>
+                                  <div style={{ fontSize: '0.7rem', color: '#cbd5e1' }}>
+                                    {of.precioVentaFrpConIva > 0 ? `c/IVA: ${fmtCLP(of.precioVentaFrpConIva)}` : ''}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {of.precioCostoNeto > 0 && (
+                                <button
+                                  type="button"
+                                  className={`btn btn-sm ${of.ganadora ? 'btn-outline' : 'btn-primary'}`}
+                                  style={
+                                    !of.ganadora
+                                      ? { background: '#16a34a', borderColor: '#16a34a', width: '100%' }
+                                      : { width: '100%' }
+                                  }
+                                  disabled={adjudicandoOfertaId === of.id}
+                                  onClick={() => handleAdjudicarOferta(sol, of)}
+                                >
+                                  {adjudicandoOfertaId === of.id
+                                    ? 'Adjudicando...'
+                                    : of.ganadora
+                                    ? '↻ Volver a Adjudicar'
+                                    : '🏆 Adjudicar Oferta + Publicar en Catálogo'}
+                                </button>
+                              )}
+                            </>
                           )}
                         </div>
-
-                        {of.mensajeOriginalWsp && (
-                          <div className={styles.wspBubble}>“{of.mensajeOriginalWsp}”</div>
-                        )}
-
-                        {of.fotoUrl && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <img
-                              src={of.fotoUrl}
-                              alt={of.fabricante}
-                              style={{
-                                width: 68,
-                                height: 52,
-                                objectFit: 'cover',
-                                borderRadius: 8,
-                                border: '1px solid #cbd5e1',
-                              }}
-                            />
-                            <span style={{ fontSize: '0.75rem', color: '#0369a1', fontWeight: 600 }}>
-                              📸 Foto verificada
-                            </span>
-                          </div>
-                        )}
-
-                        <div className={styles.extractedGrid}>
-                          <div>
-                            <div style={{ fontSize: '0.68rem', color: '#64748b' }}>FABRICANTE / ORIGEN</div>
-                            <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#0f172a' }}>
-                              {of.fabricante} · {of.origen}
-                            </div>
-                          </div>
-                          <div>
-                            <div style={{ fontSize: '0.68rem', color: '#64748b' }}>DISPONIBILIDAD</div>
-                            <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#059669' }}>
-                              ⚡ {of.disponibilidad}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className={styles.priceBox}>
-                          <div>
-                            <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>
-                              Costo Proveedor (Neto)
-                            </div>
-                            <div style={{ fontSize: '0.92rem', fontWeight: 700 }}>
-                              {fmtCLP(of.precioCostoNeto)}
-                            </div>
-                          </div>
-
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ fontSize: '0.68rem', color: '#86efac' }}>
-                              Venta FRP (+{of.margenAplicadoPct}%)
-                            </div>
-                            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#4ade80' }}>
-                              {fmtCLP(of.precioVentaFrpNeto)} neto
-                            </div>
-                            <div style={{ fontSize: '0.7rem', color: '#cbd5e1' }}>
-                              c/IVA: {fmtCLP(of.precioVentaFrpConIva)}
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          className={`btn btn-sm ${of.ganadora ? 'btn-outline' : 'btn-primary'}`}
-                          style={
-                            !of.ganadora
-                              ? { background: '#16a34a', borderColor: '#16a34a', width: '100%' }
-                              : { width: '100%' }
-                          }
-                          disabled={adjudicandoOfertaId === of.id}
-                          onClick={() => handleAdjudicarOferta(sol, of)}
-                        >
-                          {adjudicandoOfertaId === of.id
-                            ? 'Adjudicando...'
-                            : of.ganadora
-                            ? '↻ Volver a Adjudicar'
-                            : '🏆 Adjudicar Oferta + Publicar en Catálogo'}
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
 

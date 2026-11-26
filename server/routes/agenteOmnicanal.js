@@ -52,6 +52,8 @@ import {
 import {
   perfilarNecesidadYComunaCliente,
   construirRespuestaAgente1Recepcion,
+  construirRespuestaPreguntaSobreProductoCotizado,
+  formatearNombreProductoParaVehiculoCliente,
   redactarCotizacionOrquestada,
   seleccionarTop3ProveedoresMesaWsp,
   fusionarPedidoAdicionalEnCarrito,
@@ -61,8 +63,15 @@ import {
 import {
   elegirMejorOfertaMesaWsp,
   crearYPublicarProductoTemporalMesaWsp,
+  descargarMediaMetaWhatsapp,
+  analizarRespuestaMultimodalProveedorAgente4,
+  construirResumenEjecutivoSolicitudIa,
 } from '../agents/agente4MesaYPublicadorTemporal.js';
-import { extraerOfertaDesdeMensajeWsp, construirMensajeSalidaWsp } from './mesaWsp.js';
+import {
+  extraerOfertaDesdeMensajeWsp,
+  detectarProveedorSinStock,
+  construirMensajeSalidaWsp,
+} from './mesaWsp.js';
 import {
   construirLinksCarroWooCommerce,
   crearPedidoPendienteWooCommerce,
@@ -585,19 +594,40 @@ const MODELOS_A_MARCA = {
   T60: 'MAXUS',
   G10: 'MAXUS',
   V80: 'MAXUS',
-  // Modelos marcas chinas (Luna Soluparts)
+  // Modelos marcas chinas y comerciales frecuentes en Chile
+  S100: 'CHANGAN',
+  S200: 'CHANGAN',
+  S300: 'CHANGAN',
+  S400: 'CHANGAN',
   A500: 'CHANGAN',
   MD201: 'CHANGAN',
+  M201: 'CHANGAN',
+  MS201: 'CHANGAN',
   ALSVIN: 'CHANGAN',
   CS15: 'CHANGAN',
   CS35: 'CHANGAN',
   CS55: 'CHANGAN',
+  EADO: 'CHANGAN',
   HUNTER: 'CHANGAN',
+  'ARRIZO 3': 'CHERY',
+  'ARRIZO 5': 'CHERY',
+  'TIGGO 2': 'CHERY',
+  'TIGGO 3': 'CHERY',
+  'TIGGO 4': 'CHERY',
+  'TIGGO 7': 'CHERY',
+  'TIGGO 8': 'CHERY',
   TIGGO: 'CHERY',
   ARRIZO: 'CHERY',
   IQ: 'CHERY',
+  FULWIN: 'CHERY',
   S2: 'JAC',
+  JS2: 'JAC',
   S3: 'JAC',
+  JS3: 'JAC',
+  S4: 'JAC',
+  JS4: 'JAC',
+  J2: 'JAC',
+  J3: 'JAC',
   J4: 'JAC',
   T6: 'JAC',
   T8: 'JAC',
@@ -606,6 +636,7 @@ const MODELOS_A_MARCA = {
   SUNRAY: 'JAC',
   REFINE: 'JAC',
   JOYEAR: 'DFM',
+  A30: 'DFM',
   AX3: 'DFM',
   AX4: 'DFM',
   AX7: 'DFM',
@@ -613,16 +644,30 @@ const MODELOS_A_MARCA = {
   SX6: 'DFM',
   S50: 'DFM',
   VOLEEX: 'GREAT WALL',
+  C10: 'GREAT WALL',
+  C20: 'GREAT WALL',
   C30: 'GREAT WALL',
   WINGLE: 'GREAT WALL',
   POER: 'GREAT WALL',
   H3: 'GREAT WALL',
+  H5: 'GREAT WALL',
   H6: 'HAVAL',
   JOLION: 'HAVAL',
   VIGUS: 'JMC',
   X35: 'BAIC',
   X25: 'BAIC',
   '580': 'DFSK',
+  K07: 'DFSK',
+  K17: 'DFSK',
+  C31: 'DFSK',
+  C32: 'DFSK',
+  C35: 'DFSK',
+  C37: 'DFSK',
+  H220: 'BRILLIANCE',
+  H230: 'BRILLIANCE',
+  V3: 'BRILLIANCE',
+  V5: 'BRILLIANCE',
+  F0: 'BYD',
 };
 
 const COMUNAS_Y_CIUDADES_CHILE = [
@@ -632,22 +677,27 @@ const COMUNAS_Y_CIUDADES_CHILE = [
   { patron: /\b(PUENTE\s+ALTO)\b/i, nombre: 'Puente Alto (RM)', esRM: true },
   { patron: /\b(MAIP[UÚ])\b/i, nombre: 'Maipú (RM)', esRM: true },
   { patron: /\b(RENCA)\b/i, nombre: 'Renca (RM)', esRM: true },
-  { patron: /\b(LAMPA)\b/i, nombre: 'Lampa (RM)', esRM: true },
-  { patron: /\b(QUILICURA)\b/i, nombre: 'Quilicura (RM)', esRM: true },
+  { patron: /\b(LAMPA|COLINA|CHICUREO)\b/i, nombre: 'Zona Norte RM', esRM: true },
+  { patron: /\b(QUILICURA|HUECHURABA|CONCHAL[IÍ]|RECOLETA|INDEPENDENCIA)\b/i, nombre: 'Quilicura / Norte RM', esRM: true },
+  { patron: /\b([ÑN]U[ÑN]OA|PROVIDENCIA|LAS\s+CONDES|LA\s+REINA|VITACURA|MACUL|PE[ÑN]ALOL[EÉ]N)\b/i, nombre: 'Sector Oriente (RM)', esRM: true },
+  { patron: /\b(PUDAHUEL|ESTACI[OÓ]N\s+CENTRAL|CERRILLOS|QUINTA\s+NORMAL|LO\s+PRADO|CERRO\s+NAVIA)\b/i, nombre: 'Sector Poniente (RM)', esRM: true },
   { patron: /\b(SANTIAGO|CENTRO|DIEZ\s+DE\s+JULIO|10\s+DE\s+JULIO)\b/i, nombre: 'Santiago Centro (RM)', esRM: true },
-  { patron: /\b(SAN\s+MIGUEL)\b/i, nombre: 'San Miguel (RM)', esRM: true },
-  { patron: /\b(EL\s+BOSQUE)\b/i, nombre: 'El Bosque (RM)', esRM: true },
+  { patron: /\b(SAN\s+MIGUEL|SAN\s+JOAQU[IÍ]N|LA\s+GRANJA|LA\s+PINTANA|SAN\s+RAM[OÓ]N)\b/i, nombre: 'San Miguel / Sur RM', esRM: true },
+  { patron: /\b(EL\s+BOSQUE|LO\s+ESPEJO)\b/i, nombre: 'El Bosque (RM)', esRM: true },
   { patron: /\b(LA\s+FLORIDA)\b/i, nombre: 'La Florida (RM)', esRM: true },
-  { patron: /\b(ISLA\s+DE\s+MAIPO|TALAGANTE|BUIN|PAINE|MELIPILLA)\b/i, nombre: 'Zona Sur-Poniente RM', esRM: true },
-  { patron: /\b(RANCAGUA|MACHAL[IÍ]|SAN\s+FERNANDO)\b/i, nombre: 'Rancagua (VI Región)', esRM: false },
-  { patron: /\b(LA\s+SERENA|COQUIMBO|OVALLE)\b/i, nombre: 'La Serena / Coquimbo / Ovalle (IV Región)', esRM: false },
-  { patron: /\b(ANTOFAGASTA|CALAMA)\b/i, nombre: 'Antofagasta (II Región)', esRM: false },
-  { patron: /\b(CONCEPCI[OÓ]N|TALCAHUANO|CORONEL|CHIGUAYANTE|LOS\s+[AÁ]NGELES)\b/i, nombre: 'Concepción / Coronel (VIII Región)', esRM: false },
-  { patron: /\b(PUERTO\s+MONTT|OSORNO|VALDIVIA|CASTRO)\b/i, nombre: 'Puerto Montt / Sur (X Región)', esRM: false },
-  { patron: /\b(TEMUCO|VILLARRICA)\b/i, nombre: 'Temuco (IX Región)', esRM: false },
-  { patron: /\b(VALPARA[IÍ]SO|VI[NÑ]A\s+DEL\s+MAR|QUILPU[EÉ]|SAN\s+ANTONIO|QUILLOTA)\b/i, nombre: 'Región de Valparaíso (V Región)', esRM: false },
-  { patron: /\b(CURIC[OÓ]|TALCA|LINARES|CHILL[AÁ]N)\b/i, nombre: 'Curicó / Talca (VII Región)', esRM: false },
-  { patron: /\b(IQUIQUE|ARICA|COPIAP[OÓ])\b/i, nombre: 'Zona Norte Grande', esRM: false },
+  { patron: /\b(ISLA\s+DE\s+MAIPO|TALAGANTE|BUIN|PAINE|MELIPILLA|PE[ÑN]AFLOR|PADRE\s+HURTADO)\b/i, nombre: 'Periferia Sur-Poniente RM', esRM: true },
+  { patron: /\b(RANCAGUA|MACHAL[IÍ]|SAN\s+FERNANDO|RENGO|SANTA\s+CRUZ)\b/i, nombre: 'Rancagua / O’Higgins (VI Región)', esRM: false },
+  { patron: /\b(LA\s+SERENA|COQUIMBO|OVALLE|ILLAPEL|VICU[ÑN]A)\b/i, nombre: 'La Serena / Coquimbo / Ovalle (IV Región)', esRM: false },
+  { patron: /\b(VALLENAR)\b/i, nombre: 'Vallenar (III Región de Atacama)', esRM: false },
+  { patron: /\b(COPIAP[OÓ]|CALDERA|CHA[ÑN]ARAL)\b/i, nombre: 'Copiapó (III Región de Atacama)', esRM: false },
+  { patron: /\b(ANTOFAGASTA|CALAMA|TOCOPILLA|MEJILLONES)\b/i, nombre: 'Antofagasta / Calama (II Región)', esRM: false },
+  { patron: /\b(CONCEPCI[OÓ]N|TALCAHUANO|CORONEL|CHIGUAYANTE|LOS\s+[AÁ]NGELES|SAN\s+PEDRO\s+DE\s+LA\s+PAZ)\b/i, nombre: 'Concepción / Biobío (VIII Región)', esRM: false },
+  { patron: /\b(PUERTO\s+MONTT|PUERTO\s+VARAS|OSORNO|VALDIVIA|CASTRO|ANCUD|CHILO[EÉ])\b/i, nombre: 'Sur / Los Lagos (X Región)', esRM: false },
+  { patron: /\b(TEMUCO|VILLARRICA|PUC[OÓ]N|ANGOL)\b/i, nombre: 'Temuco / Araucanía (IX Región)', esRM: false },
+  { patron: /\b(VALPARA[IÍ]SO|VI[NÑ]A\s+DEL\s+MAR|QUILPU[EÉ]|VILLA\s+ALEMANA|SAN\s+ANTONIO|QUILLOTA|LOS\s+ANDES|SAN\s+FELIPE)\b/i, nombre: 'Valparaíso / Viña del Mar (V Región)', esRM: false },
+  { patron: /\b(CURIC[OÓ]|TALCA|LINARES|CHILL[AÁ]N|CONSTITUCI[OÓ]N)\b/i, nombre: 'Maule / Ñuble (VII-XVI Región)', esRM: false },
+  { patron: /\b(IQUIQUE|ALTO\s+HOSPICIO|ARICA)\b/i, nombre: 'Norte Grande (I-XV Región)', esRM: false },
+  { patron: /\b(COYHAIQUE|PUERTO\s+AYS[EÉ]N|PUNTA\s+ARENAS|PUERTO\s+NATALES)\b/i, nombre: 'Zona Austral (XI-XII Región)', esRM: false },
 ];
 
 const STOPWORDS_BUSQUEDA = new Set([
@@ -1114,8 +1164,22 @@ function esMensajeSeguimientoOCortesia(texto = '') {
  */
 function detectarComunaOModalidadEntrega(texto = '') {
   const limpio = String(texto || '').trim();
-  let comunaDetectada = null;
+  const upper = limpio.toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
+  // Si pregunta "¿es la única sucursal?", "¿cómo modifico la dirección?", "¿ya compré...?" o pide fotos, NO es selección de entrega
+  if (
+    /\b(UNICA\s+SUCURSAL|OTRA\s+SUCURSAL|DONDE\s+ESTAN|DONDE\s+QUEDA|MODIFICAR\s+(?:LA\s+|MI\s+)?DIRECCION|CAMBIAR\s+(?:LA\s+|MI\s+)?DIRECCION|YA\s+COMPRE|NUMERO\s+DE\s+ENVIO|NUMERO\s+DE\s+SEGUIMIENTO|QUE\s+HAGO\s+AQUI|MAS\s+FOTOS?)\b/.test(
+      upper
+    )
+  ) {
+    return {
+      esMensajeEntrega: false,
+      comunaDetectada: null,
+      modalidadPreferida: null,
+    };
+  }
+
+  let comunaDetectada = null;
   for (const c of COMUNAS_Y_CIUDADES_CHILE) {
     if (c.patron.test(limpio)) {
       comunaDetectada = c;
@@ -1123,28 +1187,28 @@ function detectarComunaOModalidadEntrega(texto = '') {
     }
   }
 
-  const upper = limpio.toUpperCase();
-  const pideRetiro = /\b(RETIRO|RETIRAR|MOSTRADOR|BODEGA|TIENDA|SUCURSAL|VOY\s+A\s+BUSCAR|PRESENCIAL|ENRIQUE\s+OLIVARES|OLIVARES\s*224)\b/.test(upper);
-  const pideDespacho = /\b(DESPACHO|ENV[IÍ]O|ENVIAR|DOMICILIO|STARKEN|CHILEXPRESS|BLUE\s*EXPRESS|POR\s+PAGAR)\b/.test(upper);
+  const pideRetiro =
+    /\b(PARA\s+RETIRO|QUIERO\s+RETIRAR|LO\s+RETIRO|VOY\s+A\s+RETIRAR|RETIRO\s+EN\s+(?:TIENDA|SUCURSAL|BODEGA|LA\s+FLORIDA|MOSTRADOR)|VOY\s+A\s+BUSCAR)\b/.test(
+      upper
+    ) || /^(RETIRO|RETIRAR|EN\s+TIENDA|LA\s+FLORIDA)$/i.test(upper);
 
-  // Es un mensaje enfocado en entrega/comuna si menciona una comuna o modalidad y tiene pocas palabras técnicas nuevas
-  const esMensajeEntrega =
-    Boolean(comunaDetectada) ||
-    pideRetiro ||
-    pideDespacho;
+  // Solo activar despacho directo cuando YA dio la comuna/ciudad (si solo dijo "Quiero para envío a región" sin ciudad, lo maneja PIDIO_ENVIO_SIN_COMUNA para preguntarle qué ciudad)
+  const pideDespachoConComuna =
+    Boolean(comunaDetectada) &&
+    /\b(DESPACHO|ENV[IÍ]O|ENVIAR|DOMICILIO|STARKEN|CHILEXPRESS|BLUE\s*EXPRESS)\b/i.test(limpio);
+
+  const esMensajeEntrega = Boolean(comunaDetectada) || pideRetiro || pideDespachoConComuna;
 
   return {
     esMensajeEntrega,
     comunaDetectada,
     modalidadPreferida: pideRetiro
       ? 'retiro_bodega'
-      : pideDespacho
-        ? 'despacho_domicilio'
-        : comunaDetectada
-          ? comunaDetectada.esRM
-            ? 'retiro_o_despacho_rm'
-            : 'despacho_regiones'
-          : null,
+      : comunaDetectada
+        ? comunaDetectada.esRM
+          ? 'despacho_domicilio'
+          : 'despacho_regiones'
+        : null,
   };
 }
 
@@ -1821,20 +1885,15 @@ async function ejecutarCascadaAgenteOmnicanal({
     modoForzado === 'auto'
   ) {
     const nombreComuna =
-      infoEntrega.comunaDetectada?.nombre || sesion.comunaCliente || 'Región Metropolitana';
-    const esRM = infoEntrega.comunaDetectada ? infoEntrega.comunaDetectada.esRM : true;
+      infoEntrega.comunaDetectada?.nombre || sesion.comunaCliente || 'Santiago (RM)';
     const modalidad =
       infoEntrega.modalidadPreferida === 'retiro_bodega'
         ? 'retiro_bodega'
-        : infoEntrega.modalidadPreferida === 'despacho_domicilio' || !esRM
-          ? 'despacho_domicilio'
-          : 'retiro_bodega';
+        : 'despacho_domicilio';
 
     const totalIva = carritoActual.reduce((acc, it) => acc + Number(it.precioVentaConIva || 0), 0);
-    const lineas = carritoActual.map(
-      (it) =>
-        `• 1x **${it.nombre}** (\`${it.skuPublicoFrp}\`) — **$${Number(it.precioVentaConIva).toLocaleString('es-CL')} IVA inc.**`
-    );
+    const ultItem = carritoActual[carritoActual.length - 1];
+    const nombreLimpioUlt = formatearNombreProductoParaVehiculoCliente(ultItem?.nombre);
 
     const cotizacionRef = cotizarDespachoAnticipado({
       direccionOComuna: nombreComuna,
@@ -1846,24 +1905,20 @@ async function ejecutarCascadaAgenteOmnicanal({
       itemsCarrito: carritoActual,
     });
     const costoEnvioRef = Number(cotizacionRef.costoDespachoConIva || 0);
-    const dimRef = cotizacionRef.volumetria?.dimensionesReferencialesCm || { largo: 32, ancho: 25, alto: 18 };
-    const tallaRef = cotizacionRef.volumetria?.tallaConsolidada || 'S';
 
-    const textoLogistica = esRM
-      ? `📍 Para **${nombreComuna}** gestionamos directamente tu entrega desde nuestra sucursal en **Enrique Olivares 224, La Florida** con dos opciones:\n` +
-        `1️⃣ **Retiro Gratis en Enrique Olivares 224, La Florida ($0):** ${promesaEntrega.textoRetiroCarrito}\n` +
-        `2️⃣ **Delivery a todo Santiago:** **$${costoEnvioRef.toLocaleString('es-CL')} IVA inc.** · ${promesaEntrega.textoDespachoSantiago} (Caja Talla ${tallaRef} ${dimRef.largo}×${dimRef.ancho}×${dimRef.alto} cm).`
-      : `🚚 Para **${nombreComuna}** despachamos **100% pre-pagado** saliendo desde **Enrique Olivares 224, La Florida** vía **${cotizacionRef.medioTransporte || 'Starken / Courier'}**:\n` +
-        `• **Valor Despacho Pre-Pagado (${cotizacionRef.nombreZona || 'Regiones'} — Talla ${tallaRef}):** **$${costoEnvioRef.toLocaleString('es-CL')} IVA inc.** (${cotizacionRef.tiempoEstimado}, sin cobros sorpresa al recibir).\n` +
-        `• O **Retiro Gratis ($0)** en **Enrique Olivares 224, La Florida, Santiago:** ${promesaEntrega.textoRetiroCarrito}`;
-
-    const respuestaTexto =
-      `¡Excelente! ${textoLogistica}\n\n` +
-      `🧾 **Resumen de tu cotización:**\n${lineas.join('\n')}\n` +
-      `• **Subtotal Repuestos:** **$${totalIva.toLocaleString('es-CL')} IVA inc.**\n` +
-      `• **Total con Despacho a ${nombreComuna}:** **$${(totalIva + costoEnvioRef).toLocaleString('es-CL')} IVA inc.**\n\n` +
-      `👉 Escribe **COMPRAR** para confirmar tu pedido ahora mismo.`;
-
+    let respuestaTexto = '';
+    if (modalidad === 'retiro_bodega') {
+      respuestaTexto =
+        `📍 **Retiro en Enrique Olivares 224, La Florida ($0 costo de envío):**\n` +
+        `${promesaEntrega.textoRetiroCarrito}\n` +
+        `👉 Compra directo tu **${nombreLimpioUlt}** (\`${ultItem?.skuPublicoFrp}\` — **$${totalIva.toLocaleString('es-CL')} IVA inc.**) aquí: ${ultItem?.urlProductoWoo}`;
+    } else {
+      respuestaTexto =
+        `🚚 **Envío a ${nombreComuna}:** **$${costoEnvioRef.toLocaleString('es-CL')} IVA inc.** (${cotizacionRef.tiempoEstimado || '24 a 48 hrs'}).\n` +
+        `• **Repuesto (${nombreLimpioUlt}):** $${totalIva.toLocaleString('es-CL')} IVA inc.\n` +
+        `• **Total con envío incluido:** **$${(totalIva + costoEnvioRef).toLocaleString('es-CL')} IVA inc.**\n` +
+        `👉 Puedes comprarlo directo aquí: ${ultItem?.urlProductoWoo}`;
+    }
 
     return {
       vehiculoDetectado: sesion.vehiculoContexto || null,
@@ -1886,18 +1941,22 @@ async function ejecutarCascadaAgenteOmnicanal({
   }
 
   // ─── PASO 1: IDENTIFICAR VEHÍCULO POR PATENTE, VIN O TEXTO NORMALIZADO ─────
-  const vehiculoEnMensajeActual = await resolverVehiculoOmnicanal({
+  const vehiculoExplicitoEnTurno = await resolverVehiculoOmnicanal({
     patenteInput: patenteForzada,
     textoMensaje: textoCombinado,
     vehiculoActual: null,
   });
-  const vehiculo = vehiculoEnMensajeActual || sesion.vehiculoContexto || null;
+  const vehiculo = await resolverVehiculoOmnicanal({
+    patenteInput: patenteForzada,
+    textoMensaje: textoCombinado,
+    vehiculoActual: sesion.vehiculoContexto || null,
+  });
 
-  // ─── PASO 1.B: CLASIFICADOR CONVERSACIONAL LUNA (EVITA DISPARAR TICKETS B2B EN SALUDOS O CONSULTAS INCOMPLETAS) ─
+  // ─── PASO 1.B: MOTOR DE INTENCIÓN CONTEXTUAL AGENTE 1 ───────────────────────
   const infoRepuestoActual = extraerRepuestoYCategoria(textoCombinado, vehiculo);
   const clasificacion = clasificarIntencionConversacional({
     textoBruto,
-    vehiculoMensajeActual: vehiculoEnMensajeActual,
+    vehiculoMensajeActual: vehiculoExplicitoEnTurno,
     vehiculoContextoSesion: sesion.vehiculoContexto || null,
     tokensRepuesto: infoRepuestoActual.tokensRepuesto,
     resumenRepuesto: infoRepuestoActual.resumenRepuesto,
@@ -1912,11 +1971,34 @@ async function ejecutarCascadaAgenteOmnicanal({
   if (clasificacion.tipo !== 'BUSQUEDA_CATALOGO' && modoForzado === 'auto') {
     const ctxHora = obtenerContextoHoraChile();
     let hechoBase = '';
-    let accionTomadaConv = 'conversacion_luna';
+    let accionTomadaConv = 'intencion_contextual_agente1';
     let pedidoActualizado = sesion.pedidoActivo || null;
     let repuestoPendienteNuevo = sesion.repuestoPendienteContexto || null;
 
-    if (clasificacion.tipo === 'CANCELAR_PEDIDO') {
+    if (clasificacion.tipo === 'PREGUNTA_SOBRE_PRODUCTO_COTIZADO') {
+      accionTomadaConv = 'respuesta_contextual_producto_cotizado';
+      hechoBase = construirRespuestaPreguntaSobreProductoCotizado({
+        textoCliente: textoBruto,
+        carritoCotizado: carritoActual,
+        vehiculo,
+      });
+    } else if (clasificacion.tipo === 'PIDIO_ENVIO_SIN_COMUNA') {
+      accionTomadaConv = 'solicitud_comuna_para_envio';
+      hechoBase = construirRespuestaAgente1Recepcion({
+        intencion: 'PIDIO_ENVIO_SIN_COMUNA',
+        vehiculo,
+        carritoCotizado: carritoActual,
+        textoCliente: textoBruto,
+      });
+    } else if (clasificacion.tipo === 'MODIFICAR_DIRECCION_ENVIO') {
+      accionTomadaConv = 'postventa_modificar_direccion';
+      hechoBase = construirRespuestaAgente1Recepcion({
+        intencion: 'MODIFICAR_DIRECCION_ENVIO',
+        vehiculo,
+        carritoCotizado: carritoActual,
+        textoCliente: textoBruto,
+      });
+    } else if (clasificacion.tipo === 'CANCELAR_PEDIDO') {
       accionTomadaConv = 'cancelacion_pedido';
       if (pedidoActualizado && pedidoActualizado.estadoPago === 'pendiente_simulacion') {
         pedidoActualizado = {
@@ -1939,7 +2021,7 @@ async function ejecutarCascadaAgenteOmnicanal({
         hechoBase = `Tu pedido \`${pedidoActualizado.codigoPedido}\` ha sido cancelado sin costo. Si necesitas cotizar otro repuesto, dime qué pieza buscas y para qué vehículo.`;
       } else {
         hechoBase =
-          'No tienes ningún pedido pendiente de pago por cancelar en este momento. ¿En qué repuesto te puedo ayudar hoy?';
+          'No tienes ningún pedido pendiente de pago por cancelar en este momento. ¿En qué te puedo ayudar?';
       }
     } else if (clasificacion.tipo === 'ESTADO_PEDIDO') {
       accionTomadaConv = 'consulta_estado_pedido';
@@ -1947,60 +2029,51 @@ async function ejecutarCascadaAgenteOmnicanal({
         hechoBase =
           `Tu pedido \`${pedidoActualizado.codigoPedido}\` por **$${Number(
             pedidoActualizado.totalConIva || 0
-          ).toLocaleString('es-CL')} IVA inc.** se encuentra en estado **${
-            pedidoActualizado.estadoPago === 'pagado_sandbox' ? 'Pagado y confirmado' : 'Pendiente de pago'
-          }** (${
+          ).toLocaleString('es-CL')} IVA inc.** está registrado (${
             pedidoActualizado.modalidadEntrega === 'retiro_bodega'
-              ? 'Retiro en tienda Enrique Olivares 224, La Florida'
+              ? 'Retiro en Enrique Olivares 224, La Florida'
               : `Despacho a ${pedidoActualizado.comunaEntrega || 'domicilio'}`
-          }).`;
-      } else if (tienePendientes) {
-        hechoBase = `Estamos validando con nuestros proveedores internos; apenas encontremos tu repuesto te lo confirmaremos por este mismo WhatsApp.`;
+          }). Apenas el transporte genere la orden de seguimiento te enviaremos el número de envío por este mismo WhatsApp.`;
       } else {
         hechoBase =
-          'Aún no tienes pedidos ni cotizaciones en curso. Cuéntame qué repuesto buscas y la patente (o marca, modelo y año) de tu vehículo para cotizarte al tiro.';
+          `📦 ¡Gracias por tu compra en **facilrepuestos.cl**! Ya notifiqué a nuestro equipo de despacho para que revise tu orden y te envíe tu **número de seguimiento / envío** por este mismo WhatsApp.\n` +
+          `Para agilizarlo al máximo, déjame escrito aquí tu **número de pedido web o tu RUT** por favor.`;
       }
     } else if (clasificacion.tipo === 'ATENCION_HUMANA') {
       accionTomadaConv = 'derivacion_ejecutivo_humano';
-      hechoBase = ctxHora.abiertoAhora
-        ? 'Ya dejé aviso a un vendedor especialista de mostrador de FácilRepuestos para que tome tu conversación. Mientras tanto, si quieres dejarme la patente y el repuesto que buscas, se lo dejo listo en pantalla.'
-        : 'En este momento nuestro mostrador está cerrado (atendemos de Lunes a Jueves de 9:30 a 18:00, Viernes de 9:30 a 17:00 y Sábado de 9:30 a 14:00 en Enrique Olivares 224, La Florida). Déjame anotado qué repuesto necesitas y tu patente para que un vendedor te contacte a primera hora.';
+      hechoBase = ctxHora.abierto
+        ? '👨‍💼 Ya dejé aviso prioritario a un asistente humano de FácilRepuestos para que tome tu conversación ahora mismo por este WhatsApp. Cuéntame en un mensaje qué necesitas resolver para que te responda directo.'
+        : '👨‍💼 Dejé tu conversación marcada como prioritaria para que un ejecutivo humano de FácilRepuestos te responda a primera hora (atendemos Lunes a Jueves 9:30 a 18:00, Viernes 9:30 a 17:00 y Sábado 9:30 a 14:00). Déjame escrito tu requerimiento aquí mismo.';
     } else if (clasificacion.tipo === 'CONSULTA_GARANTIAS') {
       accionTomadaConv = 'consulta_garantias';
       hechoBase =
-        'Todos nuestros repuestos nuevos en FácilRepuestos cuentan con **3 meses de garantía legal** por fallas de fabricación presentando tu boleta o factura. Si un repuesto no calza en tu vehículo, puedes cambiarlo sin problema (sin uso y en su caja original) en nuestra tienda en **Enrique Olivares 224, La Florida, Santiago**. ¿Qué repuesto andas buscando hoy?';
+        'Todos nuestros repuestos nuevos cuentan con **3 meses de garantía legal** presentando tu boleta o factura (y cambio directo en caso de no calzar, sin uso y en su empaque original).';
     } else if (clasificacion.tipo === 'CONSULTA_HORARIO') {
       accionTomadaConv = 'consulta_horario';
       hechoBase =
-        `Nuestro horario de atención en **Enrique Olivares 224, La Florida, Santiago** es:\n` +
-        `• **Lunes a Jueves:** 9:30 a 18:00 hrs\n` +
-        `• **Viernes:** 9:30 a 17:00 hrs\n` +
-        `• **Sábado:** 9:30 a 14:00 hrs\n` +
-        `¿Qué repuesto necesitas cotizar?`;
+        `Nuestro horario en **Enrique Olivares 224, La Florida** es: **Lunes a Jueves** 9:30 a 18:00 hrs, **Viernes** 9:30 a 17:00 hrs y **Sábado** 9:30 a 14:00 hrs.`;
     } else if (clasificacion.tipo === 'CONSULTA_RETIRO_DESPACHO') {
       accionTomadaConv = 'consulta_retiro_despacho';
       const prom = calcularPromesaRetiroYDespacho({
         itemsCarrito: carritoActual,
       });
       hechoBase =
-        `${prom.resumenReglasCliente}\n\n` +
-        (carritoActual.length > 0
-          ? `🛒 **Para tu carrito actual:** ${prom.textoRetiroCarrito}\n👉 Escribe **COMPRAR** si quieres confirmarlo ahora mismo.`
-          : '¿Qué repuesto necesitas cotizar y para qué patente?');
+        carritoActual.length > 0
+          ? `📍 **Para el repuesto de tu cotización:** ${prom.textoRetiroCarrito}\n¿Prefieres retirarlo en nuestra tienda de La Florida o que te calculemos el envío a tu comuna/ciudad?`
+          : `${prom.resumenReglasCliente}`;
     } else if (clasificacion.tipo === 'CONSULTA_SUCURSAL') {
       accionTomadaConv = 'consulta_sucursal';
-      const prom = calcularPromesaRetiroYDespacho({
-        itemsCarrito: carritoActual,
-      });
       hechoBase =
-        `Estamos ubicados en **Enrique Olivares 224, La Florida, Santiago de Chile** (con retiro gratis en mostrador).\n\n` +
-        `${prom.resumenReglasCliente}\n\n` +
-        `¿Qué repuesto estás buscando y para qué vehículo?`;
+        carritoActual.length > 0
+          ? `Sí, nuestra única sucursal física está en **Enrique Olivares 224, La Florida, Santiago**. Si te queda lejos, también hacemos despacho rápido a todo Santiago y regiones.\n¿Prefieres retirar en La Florida o que te calculemos el envío a tu comuna?`
+          : `Sí, nuestra única sucursal física está en **Enrique Olivares 224, La Florida, Santiago** (y además despachamos a todo Santiago y regiones).`;
     } else if (clasificacion.tipo === 'SOLO_VEHICULO_SIN_REPUESTO') {
       accionTomadaConv = 'vehiculo_identificado_esperando_repuesto';
       hechoBase = construirRespuestaAgente1Recepcion({
         intencion: 'SOLO_VEHICULO_SIN_REPUESTO',
         vehiculo,
+        carritoCotizado: carritoActual,
+        textoCliente: textoBruto,
       });
     } else if (clasificacion.tipo === 'SOLO_REPUESTO_SIN_VEHICULO') {
       accionTomadaConv = 'repuesto_identificado_esperando_vehiculo';
@@ -2013,12 +2086,16 @@ async function ejecutarCascadaAgenteOmnicanal({
         intencion: 'SOLO_REPUESTO_SIN_VEHICULO',
         vehiculo,
         repuestoDetectado: repuestoPendienteNuevo,
+        carritoCotizado: carritoActual,
+        textoCliente: textoBruto,
       });
     } else {
       accionTomadaConv = 'saludo_conversacional';
       hechoBase = construirRespuestaAgente1Recepcion({
         intencion: 'SALUDO_O_CONVERSACION_INICIAL',
         vehiculo,
+        carritoCotizado: carritoActual,
+        textoCliente: textoBruto,
       });
     }
 
@@ -3873,23 +3950,87 @@ export async function manejarWebhookPostMeta(req, res) {
         )
       ) || (esLineaMesaB2b ? abiertas[0] : null);
 
-      if (solicitudMatch && textoEntrante) {
+      if (solicitudMatch && (textoEntrante || msg.type === 'audio' || msg.type === 'image' || msg.type === 'document')) {
         const provMatch =
           (solicitudMatch.proveedoresContactados || []).find((p) =>
             String(p.telefono || '').replace(/\D/g, '').endsWith(remitenteTel.slice(-8))
           ) || solicitudMatch.proveedoresContactados?.[0];
+
+        // Si el proveedor envió un audio de voz o una fotografía por WhatsApp, descargarlo desde Meta Cloud API
+        const cfgMetaMedia = await obtenerConfigMetaWhatsapp();
+        let mediaAudioDescargado = null;
+        let mediaImagenDescargada = null;
+
+        if (msg.type === 'audio' && msg.audio?.id) {
+          mediaAudioDescargado = await descargarMediaMetaWhatsapp({
+            mediaId: msg.audio.id,
+            accessToken: cfgMetaMedia.accessToken,
+            graphVersion: cfgMetaMedia.graphVersion,
+          });
+        } else if (msg.type === 'image' && msg.image?.id) {
+          mediaImagenDescargada = await descargarMediaMetaWhatsapp({
+            mediaId: msg.image.id,
+            accessToken: cfgMetaMedia.accessToken,
+            graphVersion: cfgMetaMedia.graphVersion,
+          });
+        }
 
         // Acumular mensajes previos de este mismo proveedor en esta solicitud para completar datos en conversación multi-turno
         const prevOfertaProv = [...(solicitudMatch.ofertasRecibidas || [])]
           .reverse()
           .find((o) => String(o.telefonoProveedor || '').replace(/\D/g, '').endsWith(remitenteTel.slice(-8)));
 
-        const textoAcumuladoProv = prevOfertaProv?.mensajeOriginalWsp
-          ? `${prevOfertaProv.mensajeOriginalWsp} . ${textoEntrante}`
-          : textoEntrante;
+        const esNegativaDirectaWsp = detectarProveedorSinStock(textoEntrante);
+        const textoAcumuladoProv =
+          !esNegativaDirectaWsp && prevOfertaProv?.mensajeOriginalWsp && textoEntrante
+            ? `${prevOfertaProv.mensajeOriginalWsp} . ${textoEntrante}`
+            : textoEntrante || prevOfertaProv?.mensajeOriginalWsp || '';
         const turnosReconsultaPrevios = Number(prevOfertaProv?.turnosReconsulta || 0);
 
-        const extraido = extraerOfertaDesdeMensajeWsp({ mensajeTexto: textoAcumuladoProv });
+        const vehiculoStr = [
+          solicitudMatch.marcaVehiculo,
+          solicitudMatch.modeloVehiculo,
+          solicitudMatch.anioVehiculo,
+          solicitudMatch.motorVehiculo,
+        ]
+          .filter(Boolean)
+          .join(' ');
+
+        const nombreProvEfectivo = provMatch?.proveedorNombre || perfilNombre;
+
+        // Ejecutar análisis multimodal con Gemini (escucha de audio + lectura de foto de caja/repuesto + detección sin stock + resumen formal)
+        const datosMultimodalesIa = await analizarRespuestaMultimodalProveedorAgente4({
+          mensajeTexto: textoAcumuladoProv,
+          transcripcionAudioManual: prevOfertaProv?.transcripcionAudio || '',
+          audioBase64: mediaAudioDescargado?.base64 || '',
+          audioMimeType: mediaAudioDescargado?.mimeType || 'audio/ogg',
+          imagenBase64: mediaImagenDescargada?.base64 || '',
+          imagenMimeType: mediaImagenDescargada?.mimeType || 'image/jpeg',
+          imagenUrl: prevOfertaProv?.fotoUrl || '',
+          repuestoBuscado: solicitudMatch.repuestoBuscado,
+          vehiculoStr,
+          proveedorNombre: nombreProvEfectivo,
+        });
+
+        const margenPct = Number(solicitudMatch.margenPct) || 30;
+        const extraido = extraerOfertaDesdeMensajeWsp({
+          mensajeTexto: textoAcumuladoProv,
+          mensajeUltimoTurno: textoEntrante || datosMultimodalesIa?.transcripcionAudio || '',
+          transcripcionAudio:
+            datosMultimodalesIa?.transcripcionAudio || prevOfertaProv?.transcripcionAudio || '',
+          lecturaImagenIa:
+            datosMultimodalesIa?.lecturaImagenIa || prevOfertaProv?.lecturaImagenIa || '',
+          codigoOemDetectado:
+            datosMultimodalesIa?.codigoOemDetectado || prevOfertaProv?.codigoOemDetectado || '',
+          datosMultimodalesIa,
+          proveedorNombre: nombreProvEfectivo,
+          repuestoBuscado: solicitudMatch.repuestoBuscado,
+          vehiculoStr,
+          margenPct,
+        });
+
+        const fotoUrlGuardar =
+          mediaImagenDescargada?.dataUri || prevOfertaProv?.fotoUrl || '';
 
         // Si el proveedor tiene el repuesto pero le falta aclarar si es más IVA, la marca/origen o cuándo está listo para retiro,
         // el Agente Cotizador le repregunta de forma natural antes de dar por cerrada la oferta (máximo 2 repreguntas).
@@ -3903,23 +4044,30 @@ export async function manejarWebhookPostMeta(req, res) {
           const ofertaParcial = {
             id: prevOfertaProv?.id || `of-wsp-meta-${Date.now()}`,
             proveedorId: provMatch?.proveedorId || 'prov-wsp-meta',
-            proveedorNombre: provMatch?.proveedorNombre || perfilNombre,
+            proveedorNombre: nombreProvEfectivo,
             telefonoProveedor: `+${remitenteTel}`,
-            mensajeOriginalWsp: textoAcumuladoProv,
-            transcripcionAudio: '',
-            fotoUrl: '',
+            mensajeOriginalWsp:
+              textoAcumuladoProv ||
+              extraido.transcripcionAudio ||
+              '[Imagen / Audio enviado por proveedor]',
+            transcripcionAudio: extraido.transcripcionAudio || '',
+            lecturaImagenIa: extraido.lecturaImagenIa || '',
+            codigoOemDetectado: extraido.codigoOemDetectado || '',
+            resumenFormalIa: extraido.resumenFormalIa || '',
+            fotoUrl: fotoUrlGuardar,
             tieneStock: true,
             fabricante: extraido.fabricante,
             origen: extraido.origen,
             disponibilidad: extraido.disponibilidad,
             garantia: '6 meses',
             precioCostoNeto: extraido.precioCostoNeto,
-            margenAplicadoPct: Number(solicitudMatch.margenPct) || 30,
+            margenAplicadoPct: margenPct,
             precioVentaFrpNeto: 0,
             precioVentaFrpConIva: 0,
             confianzaIa: extraido.confianzaIa,
             ofertaCompleta: false,
             faltantesCotizacion: extraido.faltantesCotizacion,
+            preguntaSeguimientoProveedor: extraido.preguntaSeguimientoProveedor,
             turnosReconsulta: turnosReconsultaPrevios + 1,
             ganadora: false,
             recibidoEn: nowParc,
@@ -3928,11 +4076,21 @@ export async function manejarWebhookPostMeta(req, res) {
           const otrasOfertas = (solicitudMatch.ofertasRecibidas || []).filter(
             (o) => o.id !== ofertaParcial.id
           );
+          const ofertasParcialesList = [...otrasOfertas, ofertaParcial];
+          const resumenFormalMesaIa = construirResumenEjecutivoSolicitudIa({
+            codigoSolicitud: solicitudMatch.codigoSolicitud,
+            repuestoBuscado: solicitudMatch.repuestoBuscado,
+            vehiculoStr,
+            proveedoresContactados: solicitudMatch.proveedoresContactados,
+            ofertasRecibidas: ofertasParcialesList,
+          });
+
           await db
             .collection(COLECCION_SOLICITUDES_WSP)
             .doc(solicitudMatch.id)
             .update({
-              ofertasRecibidas: [...otrasOfertas, ofertaParcial],
+              ofertasRecibidas: ofertasParcialesList,
+              resumenFormalMesaIa,
               updatedAt: nowParc,
             });
 
@@ -3946,11 +4104,12 @@ export async function manejarWebhookPostMeta(req, res) {
             handledBy: 'agente4_reconsulta_datos_faltantes_proveedor',
             faltantes: extraido.faltantesCotizacion,
             preguntaEnviada: extraido.preguntaSeguimientoProveedor,
+            resumenFormalIa: extraido.resumenFormalIa,
           });
         }
-        const margenPct = Number(solicitudMatch.margenPct) || 30;
+
         const precioVentaFrpNeto =
-          extraido.precioCostoNeto > 0
+          extraido.tieneStock && extraido.precioCostoNeto > 0
             ? Math.round(extraido.precioCostoNeto * (1 + margenPct / 100))
             : 0;
         const precioVentaFrpConIva =
@@ -3958,13 +4117,19 @@ export async function manejarWebhookPostMeta(req, res) {
 
         const nowIso = new Date().toISOString();
         const nuevaOferta = {
-          id: `of-wsp-meta-${Date.now()}`,
+          id: prevOfertaProv?.id || `of-wsp-meta-${Date.now()}`,
           proveedorId: provMatch?.proveedorId || 'prov-wsp-meta',
-          proveedorNombre: provMatch?.proveedorNombre || perfilNombre,
+          proveedorNombre: nombreProvEfectivo,
           telefonoProveedor: `+${remitenteTel}`,
-          mensajeOriginalWsp: textoEntrante,
-          transcripcionAudio: '',
-          fotoUrl: '',
+          mensajeOriginalWsp:
+            textoAcumuladoProv ||
+            extraido.transcripcionAudio ||
+            (extraido.tieneStock ? '[Adjunto multimedia recibido]' : 'Sin stock disponible'),
+          transcripcionAudio: extraido.transcripcionAudio || '',
+          lecturaImagenIa: extraido.lecturaImagenIa || '',
+          codigoOemDetectado: extraido.codigoOemDetectado || '',
+          resumenFormalIa: extraido.resumenFormalIa || '',
+          fotoUrl: fotoUrlGuardar,
           tieneStock: extraido.tieneStock,
           fabricante: extraido.fabricante,
           origen: extraido.origen,
@@ -3975,19 +4140,95 @@ export async function manejarWebhookPostMeta(req, res) {
           precioVentaFrpNeto,
           precioVentaFrpConIva,
           confianzaIa: extraido.confianzaIa,
+          ofertaCompleta: extraido.ofertaCompleta,
+          faltantesCotizacion: extraido.faltantesCotizacion || [],
           ganadora: false,
           recibidoEn: nowIso,
         };
 
-        const ofertasActualizadas = [...(solicitudMatch.ofertasRecibidas || []), nuevaOferta];
+        const ofertasSinPrev = (solicitudMatch.ofertasRecibidas || []).filter(
+          (o) => o.id !== nuevaOferta.id
+        );
+        const ofertasActualizadas = [...ofertasSinPrev, nuevaOferta];
+
+        const contactosActualizados = (solicitudMatch.proveedoresContactados || []).map((c) =>
+          String(c.telefono || '').replace(/\D/g, '').endsWith(remitenteTel.slice(-8)) ||
+          (provMatch && c.proveedorId === provMatch.proveedorId)
+            ? {
+                ...c,
+                estadoContacto: extraido.tieneStock ? 'respondido' : 'sin_stock',
+                respondidoEn: nowIso,
+              }
+            : c
+        );
+
+        const resumenFormalMesaIa = construirResumenEjecutivoSolicitudIa({
+          codigoSolicitud: solicitudMatch.codigoSolicitud,
+          repuestoBuscado: solicitudMatch.repuestoBuscado,
+          vehiculoStr,
+          proveedoresContactados: contactosActualizados,
+          ofertasRecibidas: ofertasActualizadas,
+        });
+
+        // Si el proveedor informó que NO tiene el repuesto, agradecerle cordialmente y cerrar con él sin repreguntar
+        if (!extraido.tieneStock && extraido.mensajeCierreSinStockProveedor) {
+          await enviarMensajeMesaAbastecimientoWhatsapp({
+            telefonoDestino: remitenteTel,
+            texto: extraido.mensajeCierreSinStockProveedor,
+          }).catch(() => null);
+        }
+
         const mejorOfertaAuto = elegirMejorOfertaMesaWsp(ofertasActualizadas);
+        const nuevoEstadoMesa =
+          solicitudMatch.estado === 'adjudicada'
+            ? 'adjudicada'
+            : ofertasActualizadas.some((o) => o.tieneStock && o.precioCostoNeto > 0)
+            ? 'con_ofertas'
+            : 'esperando_respuestas';
+
         const updateSol = {
           ofertasRecibidas: ofertasActualizadas,
-          estado: 'con_ofertas',
+          proveedoresContactados: contactosActualizados,
+          resumenFormalMesaIa,
+          estado: nuevoEstadoMesa,
           updatedAt: nowIso,
         };
 
-        if (mejorOfertaAuto) {
+        const todosSinStockWsp =
+          contactosActualizados.length > 0 &&
+          contactosActualizados.every((c) => c.estadoContacto === 'sin_stock');
+
+        if (todosSinStockWsp && !mejorOfertaAuto && solicitudMatch.estado !== 'adjudicada') {
+          const msgClienteSinStock = `Hola 👋 Te comentamos que consultamos con nuestros proveedores locales por el **${solicitudMatch.repuestoBuscado}** para tu **${vehiculoStr}** y en este momento ninguno cuenta con stock disponible. Si necesitas cotizar otro repuesto para tu vehículo me avisas por aquí.`;
+          updateSol.mensajeCotizacionCliente = msgClienteSinStock;
+          let telCliente = String(solicitudMatch.clienteTelefonoReal || solicitudMatch.clienteTelefono || '').trim();
+          if (solicitudMatch.sesionAgenteId) {
+            const sesRef = db.collection(COLECCION_SESIONES_AGENTE).doc(solicitudMatch.sesionAgenteId);
+            const sesSnap = await sesRef.get().catch(() => null);
+            if (sesSnap?.exists) {
+              const sesData = sesSnap.data() || {};
+              if ((!telCliente || telCliente === 'CONFIDENCIAL-FRP') && sesData.clienteTelefono) {
+                telCliente = String(sesData.clienteTelefono).trim();
+              }
+              const mensajes = Array.isArray(sesData.mensajes) ? [...sesData.mensajes] : [];
+              mensajes.push({
+                id: `msg-wsp-sinstock-${Date.now()}`,
+                rol: 'agente',
+                autor: 'Repuestín · facilrepuestos.cl',
+                texto: msgClienteSinStock,
+                creadoEn: nowIso,
+                origen: 'mesa_wsp_sin_stock_confirmado',
+              });
+              await sesRef.update({ mensajes, updatedAt: nowIso });
+            }
+          }
+          if (telCliente && /\d{8,15}/.test(telCliente.replace(/\D/g, ''))) {
+            await enviarRespuestaClienteMetaWhatsapp({
+              telefonoDestino: telCliente,
+              texto: msgClienteSinStock,
+            }).catch(() => null);
+          }
+        } else if (mejorOfertaAuto) {
           const pubTemp = await crearYPublicarProductoTemporalMesaWsp({
             solicitud: solicitudMatch,
             ofertaGanadora: mejorOfertaAuto,

@@ -16,6 +16,7 @@
  *     de 4 horas que no fueron comprados.
  */
 
+import { google } from 'googleapis';
 import { db } from '../config/firebase.js';
 import { resolverImagenEfectivaProducto } from '../services/catalogoImagenesService.js';
 import { calcularHashCatalogoItem } from '../services/ailooCatalogSync.js';
@@ -25,6 +26,14 @@ import {
   obtenerUrlBaseTiendaWoo,
 } from '../services/woocommerceSync.js';
 import { evaluarLogisticaYDespachoAgente3 } from './agente3LogisticaYProveedores.js';
+import { obtenerConfiguracionAgentesIA } from './configAgentesService.js';
+
+const GCP_PROJECT = process.env.GCP_PROJECT || process.env.GOOGLE_CLOUD_PROJECT || 'facilrepuestos-prod';
+const GEMINI_MODEL_DEFAULT = process.env.GEMINI_AGENT_MODEL || 'gemini-4.0-neon';
+
+const googleAuth = new google.auth.GoogleAuth({
+  scopes: ['https://www.googleapis.com/auth/cloud-platform'],
+});
 
 const TTL_PRODUCTO_TEMPORAL_HORAS = 4;
 
@@ -299,6 +308,414 @@ export async function limpiarProductosTemporalesExpirados() {
     console.warn('[Agente4 TTL Cleaner] Aviso limpiando productos temporales:', err.message);
     return { revisados: 0, expiradosEliminados: 0 };
   }
+}
+
+/**
+ * Descarga un archivo multimedia (audio de voz, imagen de caja/repuesto o documento) desde Meta Cloud API
+ * usando su `mediaId` y lo devuelve en `base64` listo para ser analizado por Gemini Multimodal (Vertex AI).
+ */
+export async function descargarMediaMetaWhatsapp({
+  mediaId = '',
+  accessToken = '',
+  graphVersion = 'v21.0',
+}) {
+  const idLimpio = String(mediaId || '').trim();
+  const tokenLimpio = String(accessToken || '').trim();
+  if (!idLimpio || !tokenLimpio) return null;
+
+  try {
+    const metaResp = await fetch(`https://graph.facebook.com/${graphVersion}/${idLimpio}`, {
+      headers: { Authorization: `Bearer ${tokenLimpio}` },
+    });
+    if (!metaResp.ok) return null;
+    const metaData = await metaResp.json();
+    const downloadUrl = metaData?.url;
+    const mimeType = metaData?.mime_type || 'application/octet-stream';
+    if (!downloadUrl) return null;
+
+    const binResp = await fetch(downloadUrl, {
+      headers: { Authorization: `Bearer ${tokenLimpio}` },
+    });
+    if (!binResp.ok) return null;
+
+    const arrayBuffer = await binResp.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
+    return {
+      mediaId: idLimpio,
+      mimeType,
+      base64,
+      dataUri: `data:${mimeType};base64,${base64}`,
+    };
+  } catch (err) {
+    console.warn('[Agente4 Multimodal] Aviso descargando media de Meta:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Extrae `{ mimeType, base64 }` desde un Data URL (`data:image/jpeg;base64,...`) o descarga desde una URL HTTPS.
+ */
+async function resolverMediaBase64DesdeEntrada({
+  base64Directo = '',
+  mimeTypeDirecto = '',
+  dataUrlOrHttpUrl = '',
+  defaultMime = 'image/jpeg',
+}) {
+  if (base64Directo) {
+    return {
+      base64: String(base64Directo).replace(/^data:[^;]+;base64,/i, '').trim(),
+      mimeType: mimeTypeDirecto || defaultMime,
+    };
+  }
+  const raw = String(dataUrlOrHttpUrl || '').trim();
+  if (!raw) return null;
+
+  const matchData = raw.match(/^data:([^;]+);base64,(.+)$/i);
+  if (matchData) {
+    return {
+      mimeType: matchData[1] || defaultMime,
+      base64: matchData[2].trim(),
+    };
+  }
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 5500);
+      const r = await fetch(raw, { signal: controller.signal });
+      clearTimeout(tId);
+      if (!r.ok) return null;
+      const cType = r.headers.get('content-type') || defaultMime;
+      const ab = await r.arrayBuffer();
+      return {
+        mimeType: cType.split(';')[0].trim() || defaultMime,
+        base64: Buffer.from(ab).toString('base64'),
+      };
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Analiza con Gemini Multimodal (Vertex AI) la respuesta enviada por un proveedor en la Mesa de Abastecimiento:
+ *  - Escucha notas de voz / audios (`audio/ogg`, `audio/mpeg`, `audio/mp4`, `audio/wav`) y los transcribe íntegramente.
+ *  - Lee fotografías (`image/jpeg`, `image/png`, `image/webp`) de cajas de repuestos, etiquetas OEM, piezas en mesón
+ *    o capturas de pantalla del sistema ERP del proveedor.
+ *  - Detecta con precisión si el proveedor NO TIENE el repuesto (`tieneStock: false`) o SI LO TIENE (`tieneStock: true`).
+ *  - Genera un Resumen Formal Ejecutivo (`resumenFormalIa`) de lo informado por el proveedor.
+ */
+export async function analizarRespuestaMultimodalProveedorAgente4({
+  mensajeTexto = '',
+  transcripcionAudioManual = '',
+  audioBase64 = '',
+  audioMimeType = 'audio/ogg',
+  audioDataUrl = '',
+  imagenBase64 = '',
+  imagenMimeType = 'image/jpeg',
+  imagenUrl = '',
+  repuestoBuscado = '',
+  vehiculoStr = '',
+  proveedorNombre = 'Proveedor',
+}) {
+  const mediaAudio = await resolverMediaBase64DesdeEntrada({
+    base64Directo: audioBase64,
+    mimeTypeDirecto: audioMimeType,
+    dataUrlOrHttpUrl: audioDataUrl,
+    defaultMime: 'audio/ogg',
+  });
+
+  const mediaImagen = await resolverMediaBase64DesdeEntrada({
+    base64Directo: imagenBase64,
+    mimeTypeDirecto: imagenMimeType,
+    dataUrlOrHttpUrl: imagenUrl,
+    defaultMime: 'image/jpeg',
+  });
+
+  const tieneMultimedia = Boolean(mediaAudio?.base64 || mediaImagen?.base64);
+  const textoCombinado = `${mensajeTexto || ''} ${transcripcionAudioManual || ''}`.trim();
+
+  if (!tieneMultimedia && !textoCombinado) {
+    return null;
+  }
+
+  try {
+    const client = await googleAuth.getClient();
+    const tokenRes = await client.getAccessToken();
+    const accessToken = tokenRes?.token;
+    if (!accessToken) return null;
+
+    const cfgAgentes = await obtenerConfiguracionAgentesIA().catch(() => null);
+    const modeloPreferido =
+      cfgAgentes?.agentes?.agente4_mesa_abastecimiento?.modelo ||
+      cfgAgentes?.modeloGlobalPreferido ||
+      GEMINI_MODEL_DEFAULT;
+
+    const systemPrompt = `Eres el Agente 4 (Agente Cotizador de Abastecimiento B2B) de facilrepuestos.cl en Chile.
+Tu misión es analizar la respuesta enviada por el proveedor "${proveedorNombre}" ante nuestra solicitud de cotización para:
+- Repuesto consultado: ${repuestoBuscado || 'Repuesto automotriz'}
+- Vehículo: ${vehiculoStr || 'Por confirmar'}
+
+CAPACIDADES OBLIGATORIAS:
+1. DETECCIÓN DE FALTA DE STOCK (SIN STOCK):
+   - Debes identificar con 100% de precisión cuando el proveedor indica (por texto, audio o captura) que NO tiene el repuesto: ej. "no tengo", "no me queda", "agotado", "sin stock", "nada por acá", "no hay", "no trabajamos esa marca", "no me llegó", "se acabó", "paso", "negativo", "0 stock", o simplemente "no estimado".
+   - En esos casos marca "tieneStock": false y explica en "motivoSinStock".
+2. ESCUCHA Y TRANSCRIPCIÓN DE AUDIO:
+   - Si se adjunta un audio de voz del proveedor, escúchalo completo y escribe su transcripción exacta en "transcripcionAudio".
+3. LECTURA TÉCNICA DE IMÁGENES (VISIÓN IA):
+   - Si se adjunta una imagen (foto de caja de repuesto, etiqueta con código OEM/SKU, pieza física en mesón o pantalla de sistema ERP), léela al detalle y describe en "lecturaImagenIa" la marca impresa, el origen/país de fabricación, el código OEM/fabricante visible (en "codigoOemDetectado"), el estado de la pieza y cualquier precio que aparezca en pantalla.
+4. RESUMEN FORMAL EJECUTIVO ("resumenFormalIa"):
+   - Redacta un resumen formal, profesional y estructurado en español de todo lo que envió el proveedor (integrando lo dicho en texto, audio e imagen), indicando claramente si tiene o no stock, marca/origen, código OEM detectado, precio neto/IVA y disponibilidad de retiro.
+
+Devuelve ÚNICAMENTE un objeto JSON válido con esta estructura exacta (sin bloques markdown):
+{
+  "tieneStock": true,
+  "motivoSinStock": "",
+  "transcripcionAudio": "",
+  "lecturaImagenIa": "",
+  "codigoOemDetectado": "",
+  "precioCostoNeto": 0,
+  "tieneIvaExplicito": false,
+  "mencionaConIva": false,
+  "fabricante": "",
+  "origen": "",
+  "disponibilidad": "",
+  "resumenFormalIa": ""
+}`;
+
+    const userParts = [];
+    if (mediaAudio?.base64) {
+      userParts.push({
+        inlineData: {
+          mimeType: mediaAudio.mimeType || 'audio/ogg',
+          data: mediaAudio.base64,
+        },
+      });
+    }
+    if (mediaImagen?.base64) {
+      userParts.push({
+        inlineData: {
+          mimeType: mediaImagen.mimeType || 'image/jpeg',
+          data: mediaImagen.base64,
+        },
+      });
+    }
+    userParts.push({
+      text:
+        `[Proveedor]: ${proveedorNombre}\n` +
+        `[Repuesto Consultado]: ${repuestoBuscado} (${vehiculoStr})\n` +
+        `[Mensaje de Texto del Proveedor]: ${mensajeTexto || '(sin texto adicional)'}\n` +
+        (transcripcionAudioManual
+          ? `[Transcripción Manual de Audio]: ${transcripcionAudioManual}\n`
+          : '') +
+        (imagenUrl && !mediaImagen?.base64 ? `[URL Imagen Adjunta]: ${imagenUrl}\n` : '') +
+        `Analiza la respuesta del proveedor y devuelve el JSON estructurado.`,
+    });
+
+    const modelosIntento = Array.from(
+      new Set([modeloPreferido, 'gemini-3.8-flash', 'gemini-2.5-flash'])
+    );
+
+    let resp = null;
+    for (const modId of modelosIntento) {
+      const url = `https://aiplatform.googleapis.com/v1/projects/${GCP_PROJECT}/locations/global/publishers/google/models/${modId}:generateContent`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      try {
+        const intento = await fetch(url, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ role: 'user', parts: userParts }],
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: 650,
+              responseMimeType: 'application/json',
+            },
+          }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (intento.ok) {
+          resp = intento;
+          break;
+        }
+      } catch {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    if (!resp || !resp.ok) return null;
+    const data = await resp.json();
+    const rawText = (data?.candidates?.[0]?.content?.parts || [])
+      .filter((p) => !p.thought && p.text)
+      .map((p) => p.text)
+      .join('')
+      .trim();
+    if (!rawText) return null;
+
+    const jsonLimpio = rawText.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+    const parsed = JSON.parse(jsonLimpio);
+    return {
+      tieneStock: typeof parsed.tieneStock === 'boolean' ? parsed.tieneStock : null,
+      motivoSinStock: String(parsed.motivoSinStock || '').trim(),
+      transcripcionAudio: String(parsed.transcripcionAudio || transcripcionAudioManual || '').trim(),
+      lecturaImagenIa: String(parsed.lecturaImagenIa || '').trim(),
+      codigoOemDetectado: String(parsed.codigoOemDetectado || '').trim().toUpperCase(),
+      precioCostoNeto: Number(parsed.precioCostoNeto) || 0,
+      tieneIvaExplicito: Boolean(parsed.tieneIvaExplicito),
+      mencionaConIva: Boolean(parsed.mencionaConIva),
+      fabricante: String(parsed.fabricante || '').trim().toUpperCase(),
+      origen: String(parsed.origen || '').trim().toUpperCase(),
+      disponibilidad: String(parsed.disponibilidad || '').trim(),
+      resumenFormalIa: String(parsed.resumenFormalIa || '').trim(),
+    };
+  } catch (err) {
+    console.warn('[Agente4 Multimodal] Fallback a extractor determinístico:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Construye siempre un Resumen Formal Ejecutivo (`resumenFormalIa`) de la respuesta de un proveedor,
+ * combinando texto, audio transcrito, lectura de imagen y estado de disponibilidad (Con Stock / Sin Stock / En Reconsulta).
+ */
+export function construirResumenFormalProveedorIa({
+  proveedorNombre = 'Proveedor',
+  repuestoBuscado = 'Repuesto',
+  vehiculoStr = '',
+  tieneStock = true,
+  ofertaCompleta = false,
+  precioCostoNeto = 0,
+  precioVentaFrpNeto = 0,
+  precioVentaFrpConIva = 0,
+  margenPct = 30,
+  fabricante = 'ALTERNATIVO',
+  origen = 'IMPORTACIÓN',
+  disponibilidad = 'Por confirmar retiro',
+  codigoOemDetectado = '',
+  mensajeOriginal = '',
+  transcripcionAudio = '',
+  lecturaImagenIa = '',
+  faltantesCotizacion = [],
+  resumenGemini = '',
+}) {
+  const vehLabel = vehiculoStr ? ` para ${vehiculoStr}` : '';
+  const notasMultimodales = [];
+  if (transcripcionAudio) {
+    notasMultimodales.push(`🎙️ Audio transcrito: "${transcripcionAudio}"`);
+  }
+  if (lecturaImagenIa) {
+    notasMultimodales.push(`📷 Lectura de imagen IA: ${lecturaImagenIa}`);
+  }
+  if (codigoOemDetectado) {
+    notasMultimodales.push(`🔖 Código OEM/Ref leído: ${codigoOemDetectado}`);
+  }
+  const sufijoMultimodal = notasMultimodales.length > 0 ? ` | ${notasMultimodales.join(' · ')}` : '';
+
+  if (!tieneStock) {
+    const detalleNegativa =
+      transcripcionAudio ||
+      mensajeOriginal ||
+      'El proveedor indica que no cuenta con unidades disponibles en bodega.';
+    return (
+      `📋 INFORME FORMAL PROVEEDOR (${proveedorNombre}): SIN STOCK DISPONIBLE para ${repuestoBuscado}${vehLabel}. ` +
+      `Respuesta reportada: "${detalleNegativa}". Cotización descartada sin repreguntas.${sufijoMultimodal}`
+    );
+  }
+
+  if (!ofertaCompleta || precioCostoNeto <= 0) {
+    const faltantesTxt = (faltantesCotizacion || [])
+      .map((f) =>
+        f === 'precio'
+          ? 'precio y condición de IVA'
+          : f === 'iva'
+          ? 'confirmación si es +IVA o IVA incluido'
+          : f === 'marca_origen'
+          ? 'marca u origen del repuesto'
+          : 'plazo de disponibilidad para retiro'
+      )
+      .join(', ');
+    return (
+      `📋 INFORME FORMAL EN VALIDACIÓN (${proveedorNombre}): El proveedor indica disponibilidad para ${repuestoBuscado}${vehLabel}` +
+      (precioCostoNeto > 0 ? ` (valor preliminar informado: $${precioCostoNeto.toLocaleString('es-CL')})` : '') +
+      (fabricante && fabricante !== 'ALTERNATIVO' ? `, marca ${fabricante}` : '') +
+      `, pendiente confirmar: ${faltantesTxt || 'datos comerciales'}.${sufijoMultimodal}`
+    );
+  }
+
+  const baseResumen =
+    `📋 RESUMEN FORMAL DE COTIZACIÓN (${proveedorNombre}): Dispone de ${repuestoBuscado}${vehLabel} · ` +
+    `Marca/Fabricante: ${fabricante} (${origen})` +
+    (codigoOemDetectado ? ` · Cód. OEM: ${codigoOemDetectado}` : '') +
+    ` · Costo Proveedor: $${Math.round(precioCostoNeto).toLocaleString('es-CL')} neto (+IVA) · ` +
+    `Precio Venta facilrepuestos.cl (+${margenPct}%): $${Math.round(precioVentaFrpNeto).toLocaleString('es-CL')} neto ($${Math.round(precioVentaFrpConIva).toLocaleString('es-CL')} IVA inc.) · ` +
+    `Disponibilidad de retiro: ${disponibilidad}.${sufijoMultimodal}`;
+
+  if (resumenGemini && resumenGemini.length > 25 && !resumenGemini.includes('📋')) {
+    return `${baseResumen}\n💡 Síntesis IA: ${resumenGemini}`;
+  }
+  return baseResumen;
+}
+
+/**
+ * Construye el Resumen Ejecutivo consolidado a nivel de Solicitud de la Mesa de Abastecimiento (`resumenFormalMesaIa`),
+ * sintetizando cuántos proveedores respondieron con stock, cuántos informaron sin stock y cuál es la mejor opción.
+ */
+export function construirResumenEjecutivoSolicitudIa({
+  codigoSolicitud = '',
+  repuestoBuscado = '',
+  vehiculoStr = '',
+  proveedoresContactados = [],
+  ofertasRecibidas = [],
+}) {
+  const totalContactados = Array.isArray(proveedoresContactados) ? proveedoresContactados.length : 0;
+  const ofertasValidas = (Array.isArray(ofertasRecibidas) ? ofertasRecibidas : []).filter(
+    (o) => o && o.tieneStock && Number(o.precioCostoNeto) > 0
+  );
+  const ofertasEnReconsulta = (Array.isArray(ofertasRecibidas) ? ofertasRecibidas : []).filter(
+    (o) => o && o.tieneStock && (!o.ofertaCompleta || Number(o.precioCostoNeto) <= 0)
+  );
+  const sinStockList = (Array.isArray(ofertasRecibidas) ? ofertasRecibidas : []).filter(
+    (o) => o && o.tieneStock === false
+  );
+  const respondidosIds = new Set(
+    (Array.isArray(ofertasRecibidas) ? ofertasRecibidas : []).map((o) => o.proveedorId)
+  );
+  const pendientesCount = Math.max(0, totalContactados - respondidosIds.size);
+
+  if (sinStockList.length > 0 && ofertasValidas.length === 0 && ofertasEnReconsulta.length === 0 && pendientesCount === 0) {
+    const nombresSinStock = sinStockList.map((o) => o.proveedorNombre).join(', ');
+    return `📊 RESUMEN EJECUTIVO MESA #${codigoSolicitud}: Los ${sinStockList.length} proveedor(es) consultado(s) (${nombresSinStock}) confirmaron NO TENER STOCK disponible para ${repuestoBuscado} (${vehiculoStr}).`;
+  }
+
+  const partes = [];
+  if (ofertasValidas.length > 0) {
+    const mejor = elegirMejorOfertaMesaWsp(ofertasValidas) || ofertasValidas[0];
+    partes.push(
+      `✅ ${ofertasValidas.length} con stock confirmado (Mejor opción: ${mejor.proveedorNombre} · ${mejor.fabricante} ${mejor.origen} a $${Math.round(mejor.precioCostoNeto).toLocaleString('es-CL')} neto · ${mejor.disponibilidad})`
+    );
+  }
+  if (ofertasEnReconsulta.length > 0) {
+    partes.push(
+      `⏳ ${ofertasEnReconsulta.length} en validación de datos (${ofertasEnReconsulta.map((o) => o.proveedorNombre).join(', ')})`
+    );
+  }
+  if (sinStockList.length > 0) {
+    partes.push(
+      `❌ ${sinStockList.length} sin stock (${sinStockList.map((o) => o.proveedorNombre).join(', ')})`
+    );
+  }
+  if (pendientesCount > 0) {
+    partes.push(`📨 ${pendientesCount} pendiente(s) de respuesta`);
+  }
+
+  return `📊 RESUMEN EJECUTIVO MESA #${codigoSolicitud} (${repuestoBuscado} · ${vehiculoStr}): ${partes.join(' · ')}.`;
 }
 
 // Ejecutar limpieza automática cada 15 minutos en segundo plano

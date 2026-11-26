@@ -973,8 +973,14 @@ export interface OfertaRecibidaWsp {
   telefonoProveedor: string;
   mensajeOriginalWsp: string;
   transcripcionAudio?: string;
+  lecturaImagenIa?: string;
+  codigoOemDetectado?: string;
+  resumenFormalIa?: string;
   fotoUrl?: string;
   tieneStock: boolean;
+  ofertaCompleta?: boolean;
+  faltantesCotizacion?: string[];
+  preguntaSeguimientoProveedor?: string | null;
   fabricante: string;
   origen: string;
   disponibilidad: string;
@@ -1009,6 +1015,7 @@ export interface SolicitudCotizacionWsp {
   escalamientoOrigenId?: string | null;
   proveedoresContactados: ProveedorContactadoWsp[];
   ofertasRecibidas: OfertaRecibidaWsp[];
+  resumenFormalMesaIa?: string;
   ofertaGanadoraId?: string | null;
   skuPublicoGenerado?: string | null;
   inventarioCreadoId?: string | null;

@@ -1784,12 +1784,12 @@ async function ejecutarCascadaAgenteOmnicanal({
 
   if (esMensajeSeguimientoOCortesia(textoBruto) && modoForzado === 'auto') {
     if (respuestasVivas.length > 0) {
-      const detalleRespuestas = respuestasVivas.map(
-        (r) =>
-          `✅ **Respuesta confirmada (${r.referencia} — Mesa Técnica FácilRepuestos):**\n• **${r.repuesto}** (\`${r.skuPublicoFrp}\`) — **$${r.precioVentaNeto.toLocaleString(
-            'es-CL'
-          )} neto** (**$${r.precioVentaConIva.toLocaleString('es-CL')} IVA inc.**)\n  _${r.explicacion}_`
-      );
+      const detalleRespuestas = respuestasVivas.map((r) => {
+        const nomLimpio = formatearNombreProductoParaVehiculoCliente(r.repuesto);
+        return `• **${nomLimpio}** (\`${r.skuPublicoFrp}\`) — **$${r.precioVentaConIva.toLocaleString(
+          'es-CL'
+        )} IVA inc.**\n  ${r.explicacion}`;
+      });
       return {
         vehiculoDetectado: sesion.vehiculoContexto || null,
         carritoCotizado: carritoActual,
@@ -1799,9 +1799,9 @@ async function ejecutarCascadaAgenteOmnicanal({
         escalamientosAbiertos: [],
         solicitudesWspAbiertas: [],
         respuestaTexto:
-          `¡Buenas noticias! 🎉 Nuestra mesa técnica acaba de confirmar tu repuesto en línea:\n\n` +
+          `¡Buenas noticias! 🎉 Ya tenemos confirmado tu repuesto:\n\n` +
           `${detalleRespuestas.join('\n\n')}\n\n` +
-          `📍 ¿Prefieres **Despacho a domicilio (Santiago y todo Chile)** o **Retiro en nuestra sucursal en Enrique Olivares 224, La Florida, Santiago de Chile**? Escribe tu comuna o escribe **COMPRAR** de inmediato.`,
+          `¿Lo necesitas para **retiro en nuestra sucursal de La Florida** o prefieres **despacho a domicilio / región**?`,
         trazaCascada: {
           accionTomada: 'respuesta_proveedor_en_vivo',
           vehiculoDetectado: sesion.vehiculoContexto || null,

@@ -214,7 +214,7 @@ export default function AgenteOmnicanal() {
   const [guardandoConfigAgentes, setGuardandoConfigAgentes] = useState(false);
   const [enviandoPruebaPersonal, setEnviandoPruebaPersonal] = useState(false);
   const [telefonoPruebaPersonal, setTelefonoPruebaPersonal] = useState('+56951387986');
-  const [phoneNumberIdMesaInput, setPhoneNumberIdMesaInput] = useState('');
+  const [phoneNumberIdMesaInput, setPhoneNumberIdMesaInput] = useState('1438078979396084');
 
   // Panel Google Cloud CX · Quality AI & Conversational Insights
   const [mostrarPanelCx, setMostrarPanelCx] = useState(false);

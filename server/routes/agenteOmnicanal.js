@@ -3665,11 +3665,16 @@ export async function obtenerConfigMetaWhatsapp({ forceRefresh = false } = {}) {
 
   const config = {
     accessToken: String(docData.accessToken || process.env.META_WA_TOKEN || '').trim(),
-    phoneNumberId: String(docData.phoneNumberId || process.env.META_WA_PHONE_ID || '').trim(),
-    phoneNumberIdMesaB2b: String(
-      docData.phoneNumberIdMesaB2b || process.env.META_WA_MESA_PHONE_ID || ''
+    phoneNumberId: String(
+      docData.phoneNumberId || process.env.META_WA_PHONE_ID || '1492165227305531'
     ).trim(),
-    wabaId: String(docData.wabaId || process.env.META_WA_WABA_ID || '').trim(),
+    phoneNumberIdMesaB2b: String(
+      docData.phoneNumberIdMesaB2b || process.env.META_WA_MESA_PHONE_ID || '1438078979396084'
+    ).trim(),
+    wabaId: String(docData.wabaId || process.env.META_WA_WABA_ID || '1663353912115909').trim(),
+    wabaIdMesaB2b: String(
+      docData.wabaIdMesaB2b || process.env.META_WA_MESA_WABA_ID || '1089207750835848'
+    ).trim(),
     verifyToken: String(
       docData.verifyToken || process.env.META_WA_VERIFY_TOKEN || 'facilrepuestos_wsp_verify'
     ).trim(),

@@ -492,6 +492,20 @@ const MARCAS_CONOCIDAS = [
   'OMODA',
   'JETOUR',
   'KYC',
+  'JEEP',
+  'DODGE',
+  'RAM',
+  'FIAT',
+  'RENAULT',
+  'OPEL',
+  'HONDA',
+  'BYD',
+  'MAHINDRA',
+  'ZX AUTO',
+  'KARRY',
+  'KAIYI',
+  'SWM',
+  'SHINERAY',
 ];
 
 const MODELOS_A_MARCA = {
@@ -637,12 +651,26 @@ const MODELOS_A_MARCA = {
   J2: 'JAC',
   J3: 'JAC',
   J4: 'JAC',
+  J5: 'JAC',
+  J6: 'JAC',
+  S5: 'JAC',
   T6: 'JAC',
   T8: 'JAC',
   URBAN: 'JAC',
   '1061': 'JAC',
   SUNRAY: 'JAC',
   REFINE: 'JAC',
+  MIDI: 'FOTON',
+  TM3: 'FOTON',
+  TM5: 'FOTON',
+  TUNLAND: 'FOTON',
+  AUMARK: 'FOTON',
+  VIEW: 'FOTON',
+  COMPASS: 'JEEP',
+  RENEGADE: 'JEEP',
+  CHEROKEE: 'JEEP',
+  WRANGLER: 'JEEP',
+  PATRIOT: 'JEEP',
   JOYEAR: 'DFM',
   A30: 'DFM',
   AX3: 'DFM',
@@ -815,7 +843,8 @@ function normalizarTextoAutomotriz(texto = '') {
     [/\b(EMBRIAGUE|EMBRIAGE|EMBRIAJE)\b/gi, 'EMBRAGUE'],
     [/\b(FUJIAS|BUJIQS|BUGIAS|BUJIAS)\b/gi, 'BUJIA'],
     [/\bBOCO\b/gi, 'OPTICO FOCO'],
-    [/\bMASA\s+(DELANTERA|TRASERA|RUEDA)\b/gi, 'MAZA $1'],
+    [/\bMASAS?\s+(DELANTERAS?|TRASERAS?|RUEDAS?)\b/gi, 'MAZA $1'],
+    [/\bMASAS\b/gi, 'MAZAS'],
     [/\b(SOPORTE\s+DE\s+HUESO|HUESITO)\b/gi, 'SOPORTE MOTOR TRASERO'],
     [/\b(BULBO|VULVO)\s+(DE\s+)?TEMPERATURA\b/gi, 'SENSOR TEMPERATURA'],
     [/\bESTREMOS\b/gi, 'EXTREMO TERMINAL'],
@@ -946,8 +975,11 @@ async function resolverVehiculoOmnicanal({ patenteInput = '', textoMensaje = '',
     }
   }
 
-  // 2) Inferir marca, modelo y año desde el texto libre normalizado
-  const upper = textoNorm.toUpperCase();
+  // 2) Inferir marca, modelo y año desde el texto libre normalizado (quitando tildes para que "Fotón" == "FOTON", "Citroën" == "CITROEN")
+  const upper = textoNorm
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
   const esNegacionDeVehiculo =
     /\b(NO\s+ES\s+(?:UN|UNA|MI)|ESTAS?\s+TOMANDO\s+MAL|TE\s+EQUIVOCASTE\s+DE\s+AUTO|NO\s+TENGO\s+UN)\b/i.test(
       upper

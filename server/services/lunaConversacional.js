@@ -62,9 +62,51 @@ export const PALABRAS_CLAVE_PIEZAS_REALES = new Set([
 const FRASES_CANCELAR = new Set([
   'cancelar', 'cancela', 'cancelalo', 'anular', 'anula', 'anulalo',
   'cancelar pedido', 'anular pedido', 'cancelar compra', 'anular compra',
-  'cancelar el pedido', 'anular el pedido', 'ya no lo quiero', 'no lo quiero',
-  'ya no', 'no gracias cancelar',
+  'cancelar el pedido', 'anular el pedido', 'cancelar cotizacion', 'anular cotizacion',
+  'ya no lo quiero', 'no lo quiero', 'no lo quiero ya', 'ya no quiero',
+  'no quiero eso', 'otro repuesto', 'buscar otra cosa', 'empezar de nuevo',
+  'reiniciar', 'borrar carrito', 'limpiar carrito', 'descartar',
+  'ya no', 'no gracias cancelar', 'no gracias',
 ]);
+
+/**
+ * Detecta si el mensaje del cliente es únicamente un saludo ("Hola", "Buenas", "Hola buenas tardes", "Hola estás?")
+ */
+export function esSaludoSimpleCliente(texto = '') {
+  const limpio = String(texto || '')
+    .trim()
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[¡!¿?.,;]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return /^(HOLA|BUENAS|BUENOS\s+DIAS|BUENAS\s+TARDES|BUENAS\s+NOCHES|BUEN\s+DIA|HOLA\s+BUENAS|HOLA\s+BUENOS\s+DIAS|HOLA\s+BUENAS\s+TARDES|HOLA\s+BUENAS\s+NOCHES|HOLA\s+REPUESTIN|HOLA\s+AMIGO|HOLA\s+ESTIMADO|ALO|HOLA\s+ESTAS|HOLA\s+HAY\s+ALGUIEN)$/.test(
+    limpio
+  );
+}
+
+/**
+ * Calcula cuántos minutos han pasado desde el último mensaje previo en la conversación
+ * (ignorando el mensaje entrante actual que se acaba de pushear al final de `sesion.mensajes`).
+ */
+export function calcularMinutosInactividadSesion(sesion = {}) {
+  const mensajes = Array.isArray(sesion.mensajes) ? sesion.mensajes : [];
+  if (mensajes.length === 0) return 0;
+
+  const ahoraMs = Date.now();
+  // Buscar el último mensaje del agente_ia (o el penúltimo mensaje de la lista)
+  for (let i = mensajes.length - 1; i >= 0; i--) {
+    const m = mensajes[i];
+    const ts = Date.parse(m?.creadoEn || '') || 0;
+    if (!ts) continue;
+    // Ignorar burbujas creadas hace menos de 8 segundos (son parte de la ráfaga actual del cliente)
+    if (ahoraMs - ts < 8000 && m.autor === 'cliente') continue;
+    return Math.max(0, Math.round((ahoraMs - ts) / 60000));
+  }
+  return 0;
+}
 
 /**
  * Devuelve el contexto de día, fecha, hora actual en Chile y si la sucursal está abierta o cerrada.
@@ -194,7 +236,10 @@ export function esMensajeCancelarPedido(texto = '') {
     .replace(/[^a-z\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  return FRASES_CANCELAR.has(limpio);
+  if (FRASES_CANCELAR.has(limpio)) return true;
+  return /\b(ya\s+no\s+lo\s+quiero|no\s+lo\s+quiero(?:\s+ya)?|cancelar\s+(?:la\s+)?cotizacion|descartar\s+(?:la\s+)?cotizacion|quiero\s+cotizar\s+otra\s+cosa|busco\s+otra\s+cosa)\b/.test(
+    limpio
+  );
 }
 
 /**
@@ -273,9 +318,36 @@ export function clasificarIntencionConversacional({
   );
   const esCodigoOemDirecto = /\b([A-Z0-9]{5}[-][A-Z0-9]{4,7}|FRP-[A-Z]{3}-[A-Z0-9-]+|\d{12,13})\b/i.test(textoBruto);
 
-  // 1. Cancelar pedido pendiente
+  // 1. Cancelar pedido pendiente o descartar cotización activa
   if (esMensajeCancelarPedido(textoBruto)) {
     return { tipo: 'CANCELAR_PEDIDO' };
+  }
+
+  // 1.B Si viene del saludo de retoma ("¿Aún sigues interesado en el ... que cotizamos o quieres ver algo nuevo?")
+  //     y responde "Algo nuevo" / "Otro repuesto" / "Otra cosa" / "Sí todavía lo quiero"
+  const ultimoMsgAgente = [...(sesion.mensajes || [])]
+    .reverse()
+    .find((m) => m.autor === 'agente_ia' || m.rol === 'agente');
+  const veniaDeSaludoRetoma =
+    ultimoMsgAgente?.trazaCascada?.accionTomada === 'saludo_retoma_conversacion' ||
+    /sigues\s+interesado\s+en|seguimos\s+viendo\s+repuestos\s+para/i.test(String(ultimoMsgAgente?.texto || ''));
+
+  if (veniaDeSaludoRetoma && !tienePiezaEnMensaje && !tieneFoto) {
+    if (
+      /\b(ALGO\s+NUEVO|OTRA?\s+COSA|OTRO\s+REPUESTO|OTRA?\s+PIEZA|OTRO\s+AUTO|OTRO\s+VEHICULO|CAMBIE\s+DE\s+OPINION|BUSCO\s+OTRO|QUIERO\s+OTRO|VER\s+ALGO\s+NUEVO)\b/.test(
+        limpio
+      )
+    ) {
+      return { tipo: 'CANCELAR_PEDIDO' };
+    }
+    if (
+      tieneCarritoActivo &&
+      /^(SI|SII+|SI\s+TODAVIA|SI\s+AUN|EL\s+MISMO|ESE\s+MISMO|SI\s+ME\s+INTERESA|LO\s+QUIERO|DALE|CLARO)\b/.test(
+        limpio
+      )
+    ) {
+      return { tipo: 'PREGUNTA_SOBRE_PRODUCTO_COTIZADO' };
+    }
   }
 
   // 2. Solicitud de atención humana / asistente / ejecutivo (máxima prioridad ante frustración o consulta directa)
@@ -399,6 +471,24 @@ export function clasificarIntencionConversacional({
 
   // 13. Si no nombró ni vehículo nuevo ni repuesto (ej. "Hola", "?", comentario suelto)
   if (!tienePiezaEnMensaje && !tieneFoto) {
+    const minutosInactivo = calcularMinutosInactividadSesion(sesion);
+    const esSaludo = esSaludoSimpleCliente(textoBruto);
+
+    // Si el cliente saluda ("Hola", "Buenas") o vuelve a escribir después de un rato (ej. >= 10 min)
+    // teniendo productos cotizados o un auto en pantalla, NO repetir el precio ni el link como robot:
+    // saludarlo de vuelta de forma natural y preguntarle si sigue interesado en lo que cotizamos o si busca algo nuevo!
+    if (tieneCarritoActivo && (esSaludo || minutosInactivo >= 10)) {
+      return {
+        tipo: 'SALUDO_RETOMA_CON_COTIZACION_PREVIA',
+        minutosInactivo,
+      };
+    }
+    if (!tieneCarritoActivo && tieneVehiculoReal && (esSaludo || minutosInactivo >= 15)) {
+      return {
+        tipo: 'SALUDO_RETOMA_CON_COTIZACION_PREVIA',
+        minutosInactivo,
+      };
+    }
     if (tieneCarritoActivo) {
       return { tipo: 'PREGUNTA_SOBRE_PRODUCTO_COTIZADO' };
     }
@@ -901,6 +991,7 @@ export function requiereRedaccionConGemini({
 
   const intencionesCeroTokens = new Set([
     'CANCELAR_PEDIDO',
+    'SALUDO_RETOMA_CON_COTIZACION_PREVIA',
     'SOLO_VEHICULO_SIN_REPUESTO',
     'SOLO_REPUESTO_SIN_VEHICULO',
     'PIDIO_ENVIO_SIN_COMUNA',

@@ -183,7 +183,41 @@ export function construirRespuestaAgente1Recepcion({
   repuestoDetectado,
   carritoCotizado = [],
   textoCliente = '',
+  minutosInactivo = 0,
 }) {
+  if (intencion === 'SALUDO_RETOMA_CON_COTIZACION_PREVIA') {
+    const vehTxt = [vehiculo?.marca, vehiculo?.modelo, vehiculo?.anio]
+      .filter((x) => x && x !== 'MULTIMARCA')
+      .join(' ');
+    const saludoRetoma =
+      minutosInactivo >= 15
+        ? '¡Hola, qué bueno tenerte de vuelta! 👋'
+        : '¡Hola de nuevo! 👋';
+
+    if (carritoCotizado.length > 0) {
+      const nombresProductos = Array.from(
+        new Set(
+          carritoCotizado
+            .map((it) => formatearNombreProductoParaVehiculoCliente(it.nombre))
+            .filter(Boolean)
+        )
+      );
+      const listaProdTxt =
+        nombresProductos.length === 1
+          ? `el **${nombresProductos[0]}**`
+          : `los repuestos que vimos (**${nombresProductos.slice(0, 3).join(' / ')}**)`;
+      const sufijoAuto = vehTxt ? ` para tu **${vehTxt}**` : '';
+
+      return `${saludoRetoma} ¿Aún sigues interesado en ${listaProdTxt}${sufijoAuto} que cotizamos, o prefieres que veamos algún repuesto o vehículo nuevo?`;
+    }
+
+    if (vehTxt) {
+      return `${saludoRetoma} ¿Seguimos viendo repuestos para tu **${vehTxt}** o buscas algo para otro vehículo?`;
+    }
+
+    return `${saludoRetoma} Cuéntame, ¿qué repuesto buscas hoy y para qué vehículo?`;
+  }
+
   if (intencion === 'PREGUNTA_SOBRE_PRODUCTO_COTIZADO' && carritoCotizado.length > 0) {
     return construirRespuestaPreguntaSobreProductoCotizado({
       textoCliente,

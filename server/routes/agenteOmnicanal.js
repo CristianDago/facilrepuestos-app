@@ -2034,7 +2034,16 @@ async function ejecutarCascadaAgenteOmnicanal({
     let pedidoActualizado = sesion.pedidoActivo || null;
     let repuestoPendienteNuevo = sesion.repuestoPendienteContexto || null;
 
-    if (clasificacion.tipo === 'PREGUNTA_SOBRE_PRODUCTO_COTIZADO') {
+    if (clasificacion.tipo === 'SALUDO_RETOMA_CON_COTIZACION_PREVIA') {
+      accionTomadaConv = 'saludo_retoma_conversacion';
+      hechoBase = construirRespuestaAgente1Recepcion({
+        intencion: 'SALUDO_RETOMA_CON_COTIZACION_PREVIA',
+        vehiculo,
+        carritoCotizado: carritoActual,
+        textoCliente: textoBruto,
+        minutosInactivo: clasificacion.minutosInactivo || 0,
+      });
+    } else if (clasificacion.tipo === 'PREGUNTA_SOBRE_PRODUCTO_COTIZADO') {
       accionTomadaConv = 'respuesta_contextual_producto_cotizado';
       hechoBase = construirRespuestaPreguntaSobreProductoCotizado({
         textoCliente: textoBruto,
@@ -2059,6 +2068,19 @@ async function ejecutarCascadaAgenteOmnicanal({
       });
     } else if (clasificacion.tipo === 'CANCELAR_PEDIDO') {
       accionTomadaConv = 'cancelacion_pedido';
+      const teniaCotizacionActiva = carritoActual.length > 0 || Boolean(repuestoPendienteNuevo);
+      const ultCotizado = carritoActual[carritoActual.length - 1];
+      const nomDescartado = ultCotizado
+        ? formatearNombreProductoParaVehiculoCliente(ultCotizado.nombre)
+        : '';
+      const vehTxtCancel = [vehiculo?.marca, vehiculo?.modelo, vehiculo?.anio]
+        .filter((x) => x && x !== 'MULTIMARCA')
+        .join(' ');
+
+      // Limpiar la cotización / carrito activo para que si el cliente vuelve a hablar o saludar no le repita el repuesto descartado
+      carritoActual = [];
+      repuestoPendienteNuevo = null;
+
       if (pedidoActualizado && pedidoActualizado.estadoPago === 'pendiente_simulacion') {
         pedidoActualizado = {
           ...pedidoActualizado,
@@ -2077,10 +2099,14 @@ async function ejecutarCascadaAgenteOmnicanal({
             })
             .catch(() => null);
         }
-        hechoBase = `Tu pedido \`${pedidoActualizado.codigoPedido}\` ha sido cancelado sin costo. Si necesitas cotizar otro repuesto, dime qué pieza buscas y para qué vehículo.`;
+        hechoBase = `¡Listo, no te preocupes! Dejé cancelado tu pedido \`${pedidoActualizado.codigoPedido}\` y limpié la cotización. Si necesitas buscar otro repuesto, dime qué pieza buscas y para qué vehículo.`;
+      } else if (teniaCotizacionActiva) {
+        hechoBase = `¡Comprendido, no te preocupes! Dejé descartada la cotización${
+          nomDescartado ? ` del **${nomDescartado}**` : ''
+        }${vehTxtCancel ? ` para tu **${vehTxtCancel}**` : ''}. Si quieres cotizar otro repuesto (para este mismo auto u otro), dime cuál necesitas y lo vemos al tiro.`;
       } else {
         hechoBase =
-          'No tienes ningún pedido pendiente de pago por cancelar en este momento. ¿En qué te puedo ayudar?';
+          '¡Todo limpio! Cuéntame qué repuesto estás buscando y para qué vehículo (patente o marca, modelo y año) para ayudarte.';
       }
     } else if (clasificacion.tipo === 'ESTADO_PEDIDO') {
       accionTomadaConv = 'consulta_estado_pedido';

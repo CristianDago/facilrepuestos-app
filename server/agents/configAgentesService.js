@@ -11,7 +11,7 @@ import { db } from '../config/firebase.js';
 
 const COLECCION_CONFIG = 'configuracion_sistema';
 const DOC_AGENTES_IA = 'cerebros_agentes_ia';
-const VERSION_ESQUEMA_CONOCIMIENTO = 8;
+const VERSION_ESQUEMA_CONOCIMIENTO = 9;
 
 export const MODELOS_GEMINI_DISPONIBLES = [
   { id: 'gemini-4.0-neon', nombre: 'Gemini 4 Neon (Ultra Rápido · Recomendado Agentes)' },
@@ -196,11 +196,12 @@ CAPA 3B — TALLAS LOGÍSTICAS AUTOMOTRICES (VOLUMETRÍA POR DIMENSIÓN):
    - Crea el producto en Firebase (inventario) y en WordPress con SKU FRP-WSP-xxxx, margen aplicado (+30%), esProductoTemporalWsp = true y expiraEn = +4 horas.
    - Envía push directo al WhatsApp del cliente (< 24h) desde el número de Repuestín (+56 9 2110 9851) con el link directo del producto en la tienda (https://facilrepuestos.cl/?p=<wooId>) + valor de despacho calculado según dimensión por el Agente 3, avisando que estará activo por 4 horas.
 
-7. PROTOCOLO DE CIERRE DE COMPRA Y FACTURACIÓN CON EL PROVEEDOR CUANDO VENDEMOS EL PRODUCTO:
-   - Cuando concretamos la venta de un producto que nos cotizó un proveedor en la Mesa de Abastecimiento:
-     * A) Si ha pasado MÁS DE 1 HORA (> 60 minutos) desde que el proveedor nos cotizó: primero debemos escribirle para confirmar si aún lo tiene disponible en stock ("Ya concretamos la venta, pero como ha pasado más de una hora queríamos confirmar primero contigo: ¿aún lo tienes disponible en stock para comprártelo ahora?"). Una vez que el proveedor confirme que sí lo tiene, pasamos al punto B.
-     * B) Si ha pasado 1 HORA O MENOS (<= 60 minutos) o tras reconfirmar stock: le confirmamos la compra y le pedimos que nos haga la factura para poder hacerle el depósito de inmediato.
-   - Si el proveedor pregunta por los datos asociados a nuestra empresa para emitir la factura, le entregamos exactamente estos datos:
+7. PROTOCOLO DE CIERRE DE COMPRA Y FACTURACIÓN CON EL PROVEEDOR:
+   - NUNCA demos explicaciones de si el repuesto es para nosotros o para un cliente final; simplemente decimos que necesitamos comprarlo.
+   - Cuando compramos un producto que nos cotizó un proveedor en la Mesa de Abastecimiento:
+     * A) Si ha pasado MÁS DE 1 HORA (> 60 minutos) desde que el proveedor nos cotizó: primero le escribimos directo: "Hola estimado, necesito comprar el [Repuesto] para [Vehículo] que me cotizaste ($[Precio] + IVA). Confírmame por favor para depositarte que aún está disponible y envíame los datos."
+     * B) Cuando el proveedor confirma que aún está disponible (o si pasó <= 1 hora): le enviamos directamente los datos de factura y le pedimos que nos confirme la cuenta para transferencia o link de pago para depositarle.
+   - Datos oficiales para emisión de factura:
      * Nombre o razón social: EMCY GROUP SPA
      * Dirección: Enrique Olivares 224, La florida. Santiago de Chile.
      * RUT: 78298093-9

@@ -151,13 +151,14 @@ export async function iniciarCierreCompraConProveedorMesaWsp({
   if (pasoMasDeUnaHora) {
     nuevoEstadoCompra = 'esperando_reconfirmacion_stock_1h';
     textoMensajeProveedor =
-      `Hola estimado, te escribimos por el *${repuestoTxt}*${vehiculoTxt ? ` para *${vehiculoTxt}*` : ''} que nos cotizaste${precioNetoStr}. ` +
-      `Ya concretamos la venta, pero como ha pasado más de una hora queríamos confirmar primero contigo: ¿aún lo tienes disponible en stock para comprártelo ahora?`;
+      `Hola estimado, necesito comprar el *${repuestoTxt}*${vehiculoTxt ? ` para *${vehiculoTxt}*` : ''} que me cotizaste${precioNetoStr}. ` +
+      `Confírmame por favor para depositarte que aún está disponible y envíame los datos.`;
   } else {
     nuevoEstadoCompra = 'esperando_factura_para_deposito';
     textoMensajeProveedor =
-      `Hola estimado, te confirmamos la compra del *${repuestoTxt}*${vehiculoTxt ? ` para *${vehiculoTxt}*` : ''} que nos cotizaste${precioNetoStr}. ` +
-      `Por favor haznos la factura para poder hacerte el depósito de inmediato. Si necesitas los datos de nuestra empresa para facturar, avísanos por aquí y te los enviamos al tiro.`;
+      `Hola estimado, necesito comprar el *${repuestoTxt}*${vehiculoTxt ? ` para *${vehiculoTxt}*` : ''} que me cotizaste${precioNetoStr}. ` +
+      `Por favor haznos la factura y confírmanos la cuenta para transferencia o link de pago para depositarte:\n\n` +
+      `${DATOS_FACTURACION_EMCY_GROUP.bloqueTextoWhatsapp}`;
   }
 
   const updatePayload = {
@@ -250,14 +251,12 @@ export async function procesarMensajePostventaProveedorMesaWsp({
       };
     }
 
-    // El proveedor confirmó que sí lo tiene disponible después de > 1 hora -> pedirle que haga la factura para depositar
-    const msgPedirFactura = pideDatosFactura
-      ? `¡Excelente estimado, muchas gracias por confirmar! Por favor haznos la factura para poder hacerte el depósito de inmediato. Te dejo aquí mismo los datos de nuestra empresa:\n\n${DATOS_FACTURACION_EMCY_GROUP.bloqueTextoWhatsapp}\n\nCompártenos la factura y los datos de cuenta por aquí apenas la tengas lista.`
-      : `¡Excelente estimado, muchas gracias por confirmar que lo tienes! Por favor haznos la factura para poder hacerte el depósito de inmediato. Si necesitas los datos asociados a nuestra empresa para emitir la factura, avísame por aquí y te los envío al tiro.`;
+    // El proveedor confirmó que sí lo tiene disponible después de > 1 hora -> enviar datos de factura y pedir cuenta para transferencia o link de pago
+    const msgPedirFactura =
+      `Perfecto estimado, haznos la factura por favor y confírmanos la cuenta para transferencia o link de pago para depositarte:\n\n` +
+      `${DATOS_FACTURACION_EMCY_GROUP.bloqueTextoWhatsapp}`;
 
-    const nuevoEstado = pideDatosFactura
-      ? 'datos_facturacion_enviados'
-      : 'esperando_factura_para_deposito';
+    const nuevoEstado = 'datos_facturacion_enviados';
 
     if (solicitud?.id) {
       await db

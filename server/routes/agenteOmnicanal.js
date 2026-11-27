@@ -3688,6 +3688,7 @@ export async function obtenerConfigMetaWhatsapp({ forceRefresh = false } = {}) {
       docData.numeroMesaB2b || process.env.WHATSAPP_MESA_B2B_NUMBER || '56950960294'
     ).replace(/\D/g, ''),
     nombreAgente: String(docData.nombreAgente || 'Repuestin Facil Repuesto').trim(),
+    nombreMesaB2b: String(docData.nombreMesaB2b || 'Compras Repuesto').trim(),
     graphVersion: String(docData.graphVersion || 'v21.0').trim(),
     activo: docData.activo !== undefined ? Boolean(docData.activo) : true,
     updatedAt: docData.updatedAt || null,
@@ -4862,10 +4863,58 @@ router.post('/cx-insights/aplicar-mejora', async (req, res, next) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ACTUALIZACIÓN DE FOTO DE PERFIL Y NOMBRE DE EMPRESA EN META WHATSAPP CLOUD API
-// Sube `repuestin-avatar.jpg` vía Meta Resumable Upload API (`1639558204581901/uploads`)
-// y configura `whatsapp_business_profile` ("Repuestin Facil Repuesto") en Meta.
+// ACTUALIZACIÓN DE FOTOS DE PERFIL Y NOMBRES SEPARADOS EN META WHATSAPP CLOUD API:
+//  1) +56 9 2110 9851 (ID 1492165227305531) -> "Repuestin Facil Repuesto" + `repuestin-avatar.jpg`
+//  2) +56 9 5096 0294 (ID 1438078979396084) -> "Compras Repuesto" + `compras-repuesto-avatar.jpg`
 // ─────────────────────────────────────────────────────────────────────────────
+async function subirImagenPerfilAMetaResumable({ archivoRelativo, appId, accessToken, graphVersion }) {
+  const posiblesRutas = [
+    path.resolve(process.cwd(), `client/public/${archivoRelativo}`),
+    path.resolve(process.cwd(), `client/dist/${archivoRelativo}`),
+    path.resolve(process.cwd(), `dist/${archivoRelativo}`),
+  ];
+  const rutaArchivo = posiblesRutas.find((p) => fs.existsSync(p));
+  if (!rutaArchivo) {
+    return { handle: null, error: `Archivo ${archivoRelativo} no encontrado` };
+  }
+
+  try {
+    const fileBuffer = fs.readFileSync(rutaArchivo);
+    const startUrl = `https://graph.facebook.com/${graphVersion}/${appId}/uploads?file_length=${fileBuffer.length}&file_type=image/jpeg&access_token=${encodeURIComponent(accessToken)}`;
+    const rStart = await fetch(startUrl, { method: 'POST' });
+    const dataStart = await rStart.json();
+    const uploadId = dataStart?.id;
+
+    if (!uploadId) {
+      return {
+        handle: null,
+        error: dataStart?.error?.message || JSON.stringify(dataStart),
+      };
+    }
+
+    const uploadUrl = `https://graph.facebook.com/${graphVersion}/${uploadId}`;
+    const rUpload = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `OAuth ${accessToken}`,
+        file_offset: '0',
+        'Content-Type': 'image/jpeg',
+      },
+      body: fileBuffer,
+    });
+    const dataUpload = await rUpload.json();
+    if (dataUpload?.h) {
+      return { handle: dataUpload.h, error: null };
+    }
+    return {
+      handle: null,
+      error: dataUpload?.error?.message || JSON.stringify(dataUpload),
+    };
+  } catch (err) {
+    return { handle: null, error: err.message };
+  }
+}
+
 async function sincronizarPerfilYFotoMetaWhatsapp() {
   const cfg = await obtenerConfigMetaWhatsapp({ forceRefresh: true });
   if (!cfg.accessToken) {
@@ -4873,65 +4922,58 @@ async function sincronizarPerfilYFotoMetaWhatsapp() {
   }
 
   const appId = process.env.META_APP_ID || '1639558204581901';
-  const posiblesRutasAvatar = [
-    path.resolve(process.cwd(), 'client/public/repuestin-avatar.jpg'),
-    path.resolve(process.cwd(), 'client/dist/repuestin-avatar.jpg'),
-    path.resolve(process.cwd(), 'dist/repuestin-avatar.jpg'),
-  ];
-  const rutaAvatar = posiblesRutasAvatar.find((p) => fs.existsSync(p));
-  let profilePictureHandle = null;
-  let errorUploadFoto = null;
 
-  if (rutaAvatar) {
-    try {
-      const fileBuffer = fs.readFileSync(rutaAvatar);
-      const startUrl = `https://graph.facebook.com/${cfg.graphVersion}/${appId}/uploads?file_length=${fileBuffer.length}&file_type=image/jpeg&access_token=${encodeURIComponent(cfg.accessToken)}`;
-      const rStart = await fetch(startUrl, { method: 'POST' });
-      const dataStart = await rStart.json();
-      const uploadId = dataStart?.id;
+  const [uploadRepuestin, uploadCompras] = await Promise.all([
+    subirImagenPerfilAMetaResumable({
+      archivoRelativo: 'repuestin-avatar.jpg',
+      appId,
+      accessToken: cfg.accessToken,
+      graphVersion: cfg.graphVersion,
+    }),
+    subirImagenPerfilAMetaResumable({
+      archivoRelativo: 'compras-repuesto-avatar.jpg',
+      appId,
+      accessToken: cfg.accessToken,
+      graphVersion: cfg.graphVersion,
+    }),
+  ]);
 
-      if (uploadId) {
-        const uploadUrl = `https://graph.facebook.com/${cfg.graphVersion}/${uploadId}`;
-        const rUpload = await fetch(uploadUrl, {
-          method: 'POST',
-          headers: {
-            Authorization: `OAuth ${cfg.accessToken}`,
-            file_offset: '0',
-            'Content-Type': 'image/jpeg',
-          },
-          body: fileBuffer,
-        });
-        const dataUpload = await rUpload.json();
-        if (dataUpload?.h) {
-          profilePictureHandle = dataUpload.h;
-        } else {
-          errorUploadFoto = dataUpload?.error?.message || JSON.stringify(dataUpload);
-        }
-      } else {
-        errorUploadFoto = dataStart?.error?.message || JSON.stringify(dataStart);
-      }
-    } catch (err) {
-      errorUploadFoto = err.message;
-    }
-  }
-
-  const phoneIds = [
-    { phoneId: cfg.phoneNumberId || '1492165227305531', etiqueta: 'Repuestin Facil Repuesto (+56921109851)' },
-    { phoneId: cfg.phoneNumberIdMesaB2b || '1438078979396084', etiqueta: 'Repuestin Facil Repuesto Abastecimiento (+56950960294)' },
+  const perfilesConfigurar = [
+    {
+      phoneId: cfg.phoneNumberId || '1492165227305531',
+      nombre: 'Repuestin Facil Repuesto',
+      etiqueta: 'Repuestin Facil Repuesto (+56921109851 · Clientes)',
+      handleFoto: uploadRepuestin.handle,
+      errorFoto: uploadRepuestin.error,
+      about: 'Repuestin Facil Repuesto · facilrepuestos.cl',
+      description:
+        'Repuestin Facil Repuesto — Cotización inmediata de repuestos automotrices con retiro en Enrique Olivares 224, La Florida y despacho a todo Chile.',
+      websites: ['https://facilrepuestos.cl'],
+    },
+    {
+      phoneId: cfg.phoneNumberIdMesaB2b || '1438078979396084',
+      nombre: 'Compras Repuesto',
+      etiqueta: 'Compras Repuesto (+56950960294 · Mesa Abastecimiento)',
+      handleFoto: uploadCompras.handle,
+      errorFoto: uploadCompras.error,
+      about: 'Compras Repuesto · Adquisiciones Automotrices',
+      description:
+        'Compras Repuesto — Mesa de Adquisiciones y Cotización Mayorista de Repuestos Automotrices en Santiago.',
+      websites: ['https://facilrepuestos.cl'],
+    },
   ].filter((x) => Boolean(x.phoneId));
 
   const resultadosPorNumero = [];
-  for (const item of phoneIds) {
+  for (const item of perfilesConfigurar) {
     try {
       const payloadPerfil = {
         messaging_product: 'whatsapp',
-        about: 'Repuestin Facil Repuesto · facilrepuestos.cl',
+        about: item.about,
         address: 'Enrique Olivares 224, La Florida, Santiago de Chile',
-        description:
-          'Repuestin Facil Repuesto — Cotización inmediata de repuestos automotrices con retiro en Enrique Olivares 224, La Florida y despacho a todo Chile.',
+        description: item.description,
         vertical: 'AUTO',
-        websites: ['https://facilrepuestos.cl'],
-        ...(profilePictureHandle ? { profile_picture_handle: profilePictureHandle } : {}),
+        websites: item.websites,
+        ...(item.handleFoto ? { profile_picture_handle: item.handleFoto } : {}),
       };
 
       const rPerf = await fetch(
@@ -4948,14 +4990,17 @@ async function sincronizarPerfilYFotoMetaWhatsapp() {
       const dataPerf = await rPerf.json();
       resultadosPorNumero.push({
         phoneId: item.phoneId,
+        nombre: item.nombre,
         etiqueta: item.etiqueta,
         ok: rPerf.ok,
-        fotoActualizada: Boolean(profilePictureHandle && rPerf.ok),
+        fotoActualizada: Boolean(item.handleFoto && rPerf.ok),
+        errorFoto: item.errorFoto,
         respuestaMeta: dataPerf,
       });
     } catch (err) {
       resultadosPorNumero.push({
         phoneId: item.phoneId,
+        nombre: item.nombre,
         etiqueta: item.etiqueta,
         ok: false,
         error: err.message,
@@ -4970,6 +5015,8 @@ async function sincronizarPerfilYFotoMetaWhatsapp() {
       {
         nombreAgente: 'Repuestin Facil Repuesto',
         avatarUrl: '/repuestin-avatar.jpg',
+        nombreMesaB2b: 'Compras Repuesto',
+        avatarMesaB2bUrl: '/compras-repuesto-avatar.jpg',
         perfilMetaSincronizadoEn: new Date().toISOString(),
       },
       { merge: true }
@@ -4979,9 +5026,10 @@ async function sincronizarPerfilYFotoMetaWhatsapp() {
 
   return {
     ok: resultadosPorNumero.some((r) => r.ok),
-    nombreAgente: 'Repuestin Facil Repuesto',
-    fotoSubidaHandle: Boolean(profilePictureHandle),
-    errorUploadFoto,
+    nombreAgenteClientes: 'Repuestin Facil Repuesto',
+    nombreAgenteAbastecimiento: 'Compras Repuesto',
+    fotoRepuestinSubida: Boolean(uploadRepuestin.handle),
+    fotoComprasSubida: Boolean(uploadCompras.handle),
     resultadosPorNumero,
   };
 }

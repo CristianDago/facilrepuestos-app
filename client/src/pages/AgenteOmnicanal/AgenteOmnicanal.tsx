@@ -1337,24 +1337,27 @@ export default function AgenteOmnicanal() {
                 style={{ borderColor: '#ea580c', color: '#c2410c', fontWeight: 700 }}
                 onClick={async () => {
                   try {
-                    const r = await api.post<ApiResponse<{ ok: boolean; fotoSubidaHandle: boolean }>>(
-                      '/agente-omnicanal/meta-perfil/actualizar',
-                      {}
-                    );
+                    const r = await api.post<
+                      ApiResponse<{
+                        ok: boolean;
+                        fotoRepuestinSubida?: boolean;
+                        fotoComprasSubida?: boolean;
+                      }>
+                    >('/agente-omnicanal/meta-perfil/actualizar', {});
                     if (r.success && r.data?.ok) {
                       notify(
-                        '📸 Foto de perfil de Repuestín y descripción "Repuestin Facil Repuesto" actualizadas en Meta WhatsApp',
+                        '📸 Fotos y perfiles sincronizados en Meta: "Repuestin Facil Repuesto" (+56921109851) y "Compras Repuesto" (+56950960294)',
                         'success'
                       );
                     } else {
-                      notify('Perfil local actualizado; verifica permisos en Meta WhatsApp Manager', 'info');
+                      notify('Perfiles actualizados; verifica permisos en Meta WhatsApp Manager', 'info');
                     }
                   } catch {
-                    notify('Error al sincronizar foto de perfil en Meta', 'error');
+                    notify('Error al sincronizar fotos de perfil en Meta', 'error');
                   }
                 }}
               >
-                📸 Subir Foto y Perfil "Repuestin Facil Repuesto" a Meta WSP
+                📸 Subir Fotos a Meta ("Repuestin Facil Repuesto" + "Compras Repuesto")
               </button>
             </div>
           </div>

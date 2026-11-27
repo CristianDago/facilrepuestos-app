@@ -443,16 +443,32 @@ export default function MesaCotizacionWsp() {
 
   return (
     <div className={styles.container}>
-      {/* Cabecera limpia sin módulo de simulación */}
+      {/* Cabecera oficial Compras Repuesto (+56 9 5096 0294) */}
       <div className={styles.topBar}>
-        <div>
-          <h1 className={styles.title}>
-            📲 Mesa de Abastecimiento por WhatsApp
-          </h1>
-          <p className={styles.subtitle}>
-            Consulta automática al Top 3 de proveedores por WhatsApp desde el número exclusivo de abastecimiento{' '}
-            <strong>+56 9 5096 0294</strong> (separado del número de clientes de Repuestín <strong>+56 9 2110 9851</strong>).
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <img
+            src="/compras-repuesto-avatar.jpg"
+            alt="Compras Repuesto"
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: '50%',
+              objectFit: 'cover',
+              border: '2px solid #ea580c',
+              boxShadow: '0 2px 8px rgba(15, 23, 42, 0.18)',
+              flexShrink: 0,
+            }}
+          />
+          <div>
+            <h1 className={styles.title}>
+              Compras Repuesto · Mesa de Abastecimiento WSP
+            </h1>
+            <p className={styles.subtitle}>
+              Consulta automática al Top 3 de proveedores por WhatsApp desde el perfil{' '}
+              <strong>Compras Repuesto (+56 9 5096 0294)</strong> (separado de{' '}
+              <strong>Repuestin Facil Repuesto +56 9 2110 9851</strong>).
+            </p>
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>

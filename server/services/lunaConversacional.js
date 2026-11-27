@@ -55,9 +55,92 @@ export const PALABRAS_CLAVE_PIEZAS_REALES = new Set([
   'CINTA', 'AIRBAG', 'TELECOMANDO', 'ALZAVIDRIO', 'SWITCH', 'INTERRUPTOR', 'RELE', 'BATERIA',
   'HOMOCINETICA', 'TRIPOIDE', 'SEMIEJE', 'EJE', 'CARDAN', 'CRUCETA', 'DIFERENCIAL', 'SELECTORA',
   'OPTICO', 'OPTICOS', 'FOCO', 'FOCOS', 'FAROL', 'NEBLINERO', 'NEBLINEROS', 'PARACHOQUE', 'PARACHOQUES',
-  'CAPOT', 'TAPABARRO', 'GUARDABARRO', 'ESPEJO', 'ESPEJOS', 'MASCARA', 'GRILLA', 'MANILLA', 'PORTALON', 'PARABRISA', 'PARABRISAS',
-  'PLUMILLA', 'PLUMILLAS', 'COMPRESOR', 'CONDENSADOR', 'EVAPORADOR', ' CALEFACCION',
+  'CAPOT', 'TAPABARRO', 'TAPABARROS', 'GUARDABARRO', 'GUARDABARROS', 'GUARDAFANGO', 'GUARDAFANGOS',
+  'ESPEJO', 'ESPEJOS', 'MASCARA', 'GRILLA', 'REJILLA', 'REJILLAS', 'MANILLA', 'MANILLAS', 'PORTALON',
+  'PARABRISA', 'PARABRISAS', 'MENSULA', 'MENSULAS', 'MOLDURA', 'MOLDURAS', 'BISEL', 'BISELES',
+  'CROMADO', 'CROMADOS', 'REFLECTANTE', 'REFLECTANTES', 'PORTAPATENTE', 'GUARDAPOLVO', 'GUARDAPOLVOS',
+  'PLUMILLA', 'PLUMILLAS', 'COMPRESOR', 'CONDENSADOR', 'EVAPORADOR', 'CALEFACCION',
 ]);
+
+const EQUIVALENCIAS_MODELO_FAMILIA = {
+  JS2: ['JS2', 'S2'],
+  S2: ['S2', 'JS2'],
+  JS3: ['JS3', 'S3'],
+  S3: ['S3', 'JS3'],
+  JS4: ['JS4', 'S4'],
+  S4: ['S4', 'JS4'],
+};
+
+/**
+ * Determina si el vehículo mencionado en el mensaje actual es un AUTO DISTINTO al que estaba en la sesión
+ * (ej. tenía JAC JS2 y ahora dice "tengo un Jeep y una RAV4" o "tengo un FRTB68 JAC A137").
+ */
+export function esCambioDeVehiculoRespectoASesion(vehiculoNuevo = null, vehiculoSesion = null) {
+  if (!vehiculoNuevo || !vehiculoSesion) return false;
+
+  const patNueva = String(vehiculoNuevo.patente || '').trim().toUpperCase();
+  const patSesion = String(vehiculoSesion.patente || '').trim().toUpperCase();
+  if (patNueva && patSesion && patNueva !== patSesion) {
+    return true;
+  }
+
+  const marcaNueva = String(vehiculoNuevo.marca || '').trim().toUpperCase();
+  const marcaSesion = String(vehiculoSesion.marca || '').trim().toUpperCase();
+  if (
+    marcaNueva &&
+    marcaNueva !== 'MULTIMARCA' &&
+    marcaSesion &&
+    marcaSesion !== 'MULTIMARCA' &&
+    marcaNueva !== marcaSesion
+  ) {
+    return true;
+  }
+
+  const modNuevo = String(vehiculoNuevo.modelo || '').trim().toUpperCase().split(/[\s-]+/)[0] || '';
+  const modSesion = String(vehiculoSesion.modelo || '').trim().toUpperCase().split(/[\s-]+/)[0] || '';
+  if (modNuevo && modSesion && modNuevo !== modSesion) {
+    const fam = EQUIVALENCIAS_MODELO_FAMILIA[modSesion] || [modSesion];
+    if (!fam.includes(modNuevo)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Extrae la pieza base activa en la conversación (ej. "PARACHOQUE", "OPTICO", "PASTILLAS")
+ * para que si el cliente dice solo "delantero" o "y el trasero?" se combine con esa pieza.
+ */
+function obtenerPiezaBaseActivaEnSesion(sesion = {}) {
+  const PIEZAS_CON_POSICION = [
+    'PARACHOQUE', 'OPTICO', 'FOCO', 'NEBLINERO', 'MENSULA', 'TAPABARRO', 'ESPEJO',
+    'AMORTIGUADOR', 'BANDEJA', 'CAZOLETA', 'ESPIRAL', 'PASTILLAS', 'DISCO',
+    'RODAMIENTO', 'MAZA', 'HOMOCINETICA', 'TERMINAL', 'AXIAL', 'BIELETA', 'ROTULA',
+    'SOPORTE', 'MANILLA', 'PLUMILLA', 'BALATA', 'TAMBOR', 'CALIPER',
+  ];
+
+  // 1. Revisar última subconsulta o confirmación pendiente en sesión
+  const textoReciente = [
+    sesion.confirmacionMesaWspPendiente?.resumenFaltantes,
+    sesion.repuestoPendienteContexto?.resumenRepuesto,
+    ...(Array.isArray(sesion.carritoCotizado)
+      ? sesion.carritoCotizado.slice(-2).map((c) => c.nombre)
+      : []),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  for (const pieza of PIEZAS_CON_POSICION) {
+    if (new RegExp(`\\b${pieza}S?\\b`).test(textoReciente)) {
+      return pieza;
+    }
+  }
+  return null;
+}
 
 const FRASES_CANCELAR = new Set([
   'cancelar', 'cancela', 'cancelalo', 'anular', 'anula', 'anulalo',
@@ -377,11 +460,39 @@ export function clasificarIntencionConversacional({
     return { tipo: 'ESTADO_PEDIDO' };
   }
 
-  // 5. Si YA tiene un producto cotizado en el carrito y pide más fotos o hace una pregunta sobre ESE mismo repuesto
-  //    (incluso si repite el nombre del repuesto como "Tienes más fotos de la tapa termostato") -> NO re-buscar ni cambiarle el ítem!
+  // 5. Si YA tiene un producto cotizado en el carrito y pide más fotos o hace una pregunta/reclamo sobre ESE mismo repuesto
+  //    (incluso si repite el nombre del repuesto como "Tienes más fotos de la tapa termostato" o "por qué me volviste a mandar el parachoque trasero")
   const pideMasFotosDelCotizado =
     tieneCarritoActivo &&
     /\b(MAS\s+FOTOS?|OTRA\s+FOTO|TIENES?\s+FOTO|VER\s+FOTO|MANDAME\s+FOTO|FOTO\s+REAL|IMAGEN)\b/.test(limpio);
+
+  const esReclamoOConfusionSobreItemCotizado =
+    /\b(POR\s+QUE\s+ME\s+(?:VOLVISTE|MANDASTE|MANDAS|ENVIAS|ENVIASTE)|YA\s+ME\s+(?:MANDASTE|MOSTRASTE|COTIZASTE)|ESE\s+ES\s+(?:EL\s+)?(?:TRASERO|DELANTERO)|TE\s+PEDI\s+(?:EL\s+)?(?:DELANTERO|TRASERO)|NO\s+ES\s+ESE)\b/.test(
+      limpio
+    );
+
+  // 5.B Si el cliente cambia solo la POSICIÓN/LADO de la pieza activa (ej. tenía Parachoque Trasero y escribe "delantero", "y el trasero?", "izquierdo", "derecho")
+  //     sin repetir el sustantivo ("parachoque"), heredamos la pieza activa y buscamos la nueva posición en el catálogo!
+  const matchCambioPosicion = !tienePiezaEnMensaje
+    ? limpio.match(
+        /^(?:Y\s+)?(?:EL\s+|LA\s+|LOS\s+|LAS\s+|PERO\s+|NECESITO\s+EL\s+|BUSCO\s+EL\s+)?(DELANTERO|DELANTERA|DELANTEROS|DELANTERAS|TRASERO|TRASERA|TRASEROS|TRASERAS|IZQUIERDO|IZQUIERDA|DERECHO|DERECHA|LH|RH|PILOTO|COPILOTO)\b[?.!]*$/
+      )
+    : null;
+  if (matchCambioPosicion && tieneVehiculoReal) {
+    const piezaBaseActiva = obtenerPiezaBaseActivaEnSesion(sesion);
+    if (piezaBaseActiva) {
+      const posSolicitada = matchCambioPosicion[1];
+      return {
+        tipo: 'BUSQUEDA_CATALOGO',
+        usarRepuestoPendiente: true,
+        repuestoCombinado: {
+          tokensRepuesto: [piezaBaseActiva, posSolicitada],
+          resumenRepuesto: `${piezaBaseActiva} ${posSolicitada}`,
+          textoOriginal: `${piezaBaseActiva} ${posSolicitada}`,
+        },
+      };
+    }
+  }
 
   const esPreguntaSobreItemCotizado =
     tieneCarritoActivo &&
@@ -392,7 +503,7 @@ export function clasificarIntencionConversacional({
       (limpio.includes('?') &&
         !/\b(SUCURSAL|DIRECCION|UBICADOS|HORARIO|ABREN|CIERRAN|GARANTIA|DESPACHO|ENVIO|RETIRO)\b/.test(limpio)));
 
-  if (pideMasFotosDelCotizado || esPreguntaSobreItemCotizado) {
+  if (pideMasFotosDelCotizado || esReclamoOConfusionSobreItemCotizado || esPreguntaSobreItemCotizado) {
     return { tipo: 'PREGUNTA_SOBRE_PRODUCTO_COTIZADO' };
   }
 
@@ -446,14 +557,19 @@ export function clasificarIntencionConversacional({
     };
   }
 
-  // 10. Si YA tiene un carrito cotizado y envía datos adicionales de su vehículo (ej. "Es para mi changan s100 año 2012 1.0" o "S100")
-  //     sin nombrar otra pieza distinta -> confirmar compatibilidad sobre el producto ya cotizado!
-  if (!tienePiezaEnMensaje && tieneCarritoActivo && dioVehiculoNuevoEnEsteMensaje) {
+  const esCambioDeAuto = esCambioDeVehiculoRespectoASesion(
+    vehiculoMensajeActual,
+    vehiculoContextoSesion
+  );
+
+  // 10. Si YA tiene un carrito cotizado y envía datos adicionales del MISMO vehículo (ej. "año 2012 1.0")
+  //     sin nombrar otra pieza ni cambiar a otro vehículo distinto -> confirmar compatibilidad sobre el producto ya cotizado!
+  if (!tienePiezaEnMensaje && tieneCarritoActivo && dioVehiculoNuevoEnEsteMensaje && !esCambioDeAuto) {
     return { tipo: 'PREGUNTA_SOBRE_PRODUCTO_COTIZADO' };
   }
 
-  // 11. Si el cliente SOLO dio su vehículo o patente en ESTE mensaje, y AÚN NO tiene carrito cotizado
-  if (!tienePiezaEnMensaje && dioVehiculoNuevoEnEsteMensaje && !tieneCarritoActivo && !tieneFoto) {
+  // 11. Si el cliente SOLO dio su vehículo o patente en ESTE mensaje (sin repuesto, o cambiando a un vehículo nuevo distinto)
+  if (!tienePiezaEnMensaje && dioVehiculoNuevoEnEsteMensaje && (!tieneCarritoActivo || esCambioDeAuto) && !tieneFoto) {
     return { tipo: 'SOLO_VEHICULO_SIN_REPUESTO' };
   }
 

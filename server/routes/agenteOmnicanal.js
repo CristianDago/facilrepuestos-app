@@ -48,6 +48,7 @@ import {
   obtenerContextoHoraChile,
   clasificarIntencionConversacional,
   contieneRepuestoRealOCodigo,
+  esCambioDeVehiculoRespectoASesion,
   conducirFlujoCompraDeterministico,
   redactarRespuestaConGeminiLuna,
 } from '../services/lunaConversacional.js';
@@ -2005,10 +2006,24 @@ async function ejecutarCascadaAgenteOmnicanal({
     textoMensaje: textoCombinado,
     vehiculoActual: null,
   });
+  const cambioDeVehiculoDetectado = esCambioDeVehiculoRespectoASesion(
+    vehiculoExplicitoEnTurno,
+    sesion.vehiculoContexto || null
+  );
+  // Si el cliente cambió a un auto distinto (otra patente, otra marca u otro modelo diferente),
+  // limpiar el carrito cotizado del auto anterior para no mezclar ni volver a enviar fotos del auto viejo
+  if (cambioDeVehiculoDetectado) {
+    carritoActual = [];
+    sesion = {
+      ...sesion,
+      carritoCotizado: [],
+      confirmacionMesaWspPendiente: null,
+    };
+  }
   const vehiculo = await resolverVehiculoOmnicanal({
     patenteInput: patenteForzada,
     textoMensaje: textoCombinado,
-    vehiculoActual: sesion.vehiculoContexto || null,
+    vehiculoActual: cambioDeVehiculoDetectado ? null : sesion.vehiculoContexto || null,
   });
 
   // ─── PASO 1.B: MOTOR DE INTENCIÓN CONTEXTUAL AGENTE 1 ───────────────────────
@@ -2200,6 +2215,8 @@ async function ejecutarCascadaAgenteOmnicanal({
       intencion: clasificacion.tipo,
     })).replace(/f[áa]cilrepuestos\.cl/gi, 'facilrepuestos.cl');
 
+    const pideFotoEnMensaje = /\b(FOTO|FOTOS|IMAGEN|IMAGENES|VERLO|MOSTRAR)\b/i.test(textoBruto);
+
     return {
       vehiculoDetectado: vehiculo,
       carritoCotizado: carritoActual,
@@ -2216,7 +2233,7 @@ async function ejecutarCascadaAgenteOmnicanal({
         intencionConversacional: clasificacion.tipo,
         vehiculoDetectado: vehiculo,
         reglasConocimientoAplicadas: [],
-        candidatosInventario: carritoActual,
+        candidatosInventario: pideFotoEnMensaje ? carritoActual : [],
         escalamientoCreado: null,
         solicitudWspCreada: null,
       },
@@ -2506,8 +2523,10 @@ async function ejecutarCascadaAgenteOmnicanal({
             scoreVehiculo += 8;
           } else if (matchFamilia) {
             scoreVehiculo += 5;
-          } else if (modelosItem.length > 0) {
-            scoreVehiculo -= 8;
+          } else if (!marcasItem.includes('MULTIMARCA')) {
+            // Si el cliente especificó modelo (ej. JAC A137) y el producto NO coincide con ese modelo ni su familia (ej. es de JAC S2),
+            // penalizar fuertemente incluso cuando modelosCompatibles viene vacío y el modelo solo está en el título.
+            scoreVehiculo -= 12;
           }
         }
 
@@ -4673,10 +4692,50 @@ export async function manejarWebhookPostMeta(req, res) {
 
     await docRef.set(camposActualizados, { merge: true });
 
-    // Si hay un candidato único o principal con foto real de estudio, adjuntarla
-    const candidatoConFoto = (resultadoCascada.trazaCascada?.candidatosInventario || []).find(
-      (c) => c.imagenUrl && /^https:\/\//i.test(c.imagenUrl)
-    );
+    // Solo adjuntar foto de estudio por WhatsApp cuando:
+    //  1) Es una cotización nueva en este turno (`cotizacion_directa` o `cotizacion_parcial_con_mesa_wsp`) o el cliente pidió foto explícitamente, Y
+    //  2) Esa misma foto/SKU no fue enviada ya en mensajes previos de la sesión (salvo que el cliente pida ver la foto de nuevo).
+    const accionActual = resultadoCascada.trazaCascada?.accionTomada || '';
+    const pidioFotoExplicita = /\b(FOTO|FOTOS|IMAGEN|IMAGENES|VERLO|MOSTRAR)\b/i.test(textoUnificado);
+    const permiteAdjuntarFotoProducto =
+      accionActual === 'cotizacion_directa' ||
+      accionActual === 'cotizacion_parcial_con_mesa_wsp' ||
+      pidioFotoExplicita;
+
+    const skusConFotoYaEnviada = new Set();
+    if (!pidioFotoExplicita) {
+      for (const mPrev of sesionFresca.mensajes || []) {
+        if (mPrev.autor !== 'agente_ia' && mPrev.rol !== 'agente') continue;
+        if (mPrev.imagenEnviadaSku) {
+          skusConFotoYaEnviada.add(mPrev.imagenEnviadaSku);
+        }
+        const candsPrev = mPrev.trazaCascada?.candidatosInventario || [];
+        if (
+          mPrev.trazaCascada?.accionTomada === 'cotizacion_directa' ||
+          mPrev.trazaCascada?.accionTomada === 'cotizacion_parcial_con_mesa_wsp'
+        ) {
+          for (const cp of candsPrev) {
+            if (cp?.skuPublicoFrp && cp?.imagenUrl) {
+              skusConFotoYaEnviada.add(cp.skuPublicoFrp);
+            }
+          }
+        }
+      }
+    }
+
+    const candidatoConFoto = permiteAdjuntarFotoProducto
+      ? (resultadoCascada.trazaCascada?.candidatosInventario || []).find(
+          (c) =>
+            c.imagenUrl &&
+            /^https:\/\//i.test(c.imagenUrl) &&
+            (!c.skuPublicoFrp || !skusConFotoYaEnviada.has(c.skuPublicoFrp))
+        )
+      : null;
+
+    if (candidatoConFoto?.skuPublicoFrp) {
+      msgAgente.imagenEnviadaSku = candidatoConFoto.skuPublicoFrp;
+      await docRef.set({ mensajes: mensajesActualizados }, { merge: true });
+    }
 
     const envioMeta = await enviarRespuestaClienteMetaWhatsapp({
       telefonoDestino: remitenteTel,

@@ -106,19 +106,34 @@ export function construirRespuestaPreguntaSobreProductoCotizado({
   carritoCotizado = [],
   vehiculo = null,
 }) {
-  const item = carritoCotizado[carritoCotizado.length - 1] || carritoCotizado[0];
-  if (!item) return null;
-
   const limpio = String(textoCliente || '')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
-  const nombreFull = String(item.nombre || '').toUpperCase();
-  const nombreCorto = formatearNombreProductoParaVehiculoCliente(item.nombre);
-  const precioIva = Number(item.precioVentaConIva || 0).toLocaleString('es-CL');
   const vehStr = [vehiculo?.marca, vehiculo?.modelo, vehiculo?.anio, vehiculo?.motor]
     .filter(Boolean)
     .join(' ');
+
+  // 0. ¿El cliente reclama por qué se le envió o repitió un repuesto o aclara que pedía otra posición (delantero vs trasero)?
+  if (
+    /\b(por\s+que\s+me\s+(?:volviste|mandaste|mandas|envias|enviaste)|ya\s+me\s+(?:mandaste|mostraste|cotizaste)|ese\s+es\s+(?:el\s+)?(?:trasero|delantero)|te\s+pedi\s+(?:el\s+)?(?:delantero|trasero)|no\s+es\s+ese)\b/.test(
+      limpio
+    )
+  ) {
+    return (
+      `¡Toda la razón, disculpa la confusión! 🙏 Dejamos descartada esa referencia anterior.\n` +
+      `Cuéntame exactamente qué pieza o lado necesitas ver ahora para tu **${vehStr || 'vehículo'}** y lo revisamos de inmediato.`
+    );
+  }
+
+  const item = carritoCotizado[carritoCotizado.length - 1] || carritoCotizado[0];
+  if (!item) {
+    return `Cuéntame qué repuesto necesitas revisar para tu **${vehStr || 'vehículo'}** y lo vemos de inmediato.`;
+  }
+
+  const nombreFull = String(item.nombre || '').toUpperCase();
+  const nombreCorto = formatearNombreProductoParaVehiculoCliente(item.nombre);
+  const precioIva = Number(item.precioVentaConIva || 0).toLocaleString('es-CL');
 
   // 1. ¿Pregunta si es el par / juego / kit o si viene completo?
   if (/\b(par|dos|ambos|lados|juego|kit|completo|completa|unidad|individual|viene\s+con)\b/.test(limpio)) {

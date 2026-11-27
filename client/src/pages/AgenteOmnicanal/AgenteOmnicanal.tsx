@@ -780,13 +780,20 @@ export default function AgenteOmnicanal() {
       <div className={styles.headerCompact}>
         <div className={styles.headerCompactLeft}>
           <img
-            src="/logo-facil-repuestos.webp"
-            alt="Fácil Repuestos"
-            style={{ height: 28, width: 'auto', objectFit: 'contain' }}
+            src="/repuestin-avatar.jpg"
+            alt="Repuestin Facil Repuesto"
+            style={{
+              height: 40,
+              width: 40,
+              borderRadius: '50%',
+              objectFit: 'cover',
+              border: '2px solid #fb923c',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+            }}
           />
           <div>
             <h1 className={styles.titleCompact}>
-              🤖 Repuestín WhatsApp (+56 9 2110 9851)
+              Repuestin Facil Repuesto (+56 9 2110 9851)
             </h1>
             <span className={styles.subtitleCompact}>
               Espera 5s activa · Conversaciones se archivan en 24h a estadística
@@ -1323,6 +1330,31 @@ export default function AgenteOmnicanal() {
                 onClick={handleGuardarPhoneIdMesa}
               >
                 🔄 Vincular / Auto-Detectar en Meta
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                style={{ borderColor: '#ea580c', color: '#c2410c', fontWeight: 700 }}
+                onClick={async () => {
+                  try {
+                    const r = await api.post<ApiResponse<{ ok: boolean; fotoSubidaHandle: boolean }>>(
+                      '/agente-omnicanal/meta-perfil/actualizar',
+                      {}
+                    );
+                    if (r.success && r.data?.ok) {
+                      notify(
+                        '📸 Foto de perfil de Repuestín y descripción "Repuestin Facil Repuesto" actualizadas en Meta WhatsApp',
+                        'success'
+                      );
+                    } else {
+                      notify('Perfil local actualizado; verifica permisos en Meta WhatsApp Manager', 'info');
+                    }
+                  } catch {
+                    notify('Error al sincronizar foto de perfil en Meta', 'error');
+                  }
+                }}
+              >
+                📸 Subir Foto y Perfil "Repuestin Facil Repuesto" a Meta WSP
               </button>
             </div>
           </div>
@@ -1871,10 +1903,25 @@ export default function AgenteOmnicanal() {
                       }
                     >
                       <div className={styles.msgSender}>
-                        <span>
-                          {msg.autor === 'cliente'
-                            ? `👤 ${sesionActiva.clienteNombre}`
-                            : '🤖 Repuestín · facilrepuestos.cl'}
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          {msg.autor === 'cliente' ? (
+                            `👤 ${sesionActiva.clienteNombre}`
+                          ) : (
+                            <>
+                              <img
+                                src="/repuestin-avatar.jpg"
+                                alt="Repuestin Facil Repuesto"
+                                style={{
+                                  width: 22,
+                                  height: 22,
+                                  borderRadius: '50%',
+                                  objectFit: 'cover',
+                                  border: '1px solid #ea580c',
+                                }}
+                              />
+                              <span>Repuestin Facil Repuesto · facilrepuestos.cl</span>
+                            </>
+                          )}
                         </span>
                         <span>
                           {new Date(msg.creadoEn).toLocaleTimeString('es-CL', {

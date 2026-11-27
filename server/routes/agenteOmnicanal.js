@@ -29,6 +29,8 @@
  *               -> Abre o reutiliza solicitud en `solicitudes_cotizacion_wsp` hacia importadoras especialistas.
  */
 
+import fs from 'fs';
+import path from 'path';
 import { Router } from 'express';
 import { db } from '../config/firebase.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -3685,7 +3687,7 @@ export async function obtenerConfigMetaWhatsapp({ forceRefresh = false } = {}) {
     numeroMesaB2b: String(
       docData.numeroMesaB2b || process.env.WHATSAPP_MESA_B2B_NUMBER || '56950960294'
     ).replace(/\D/g, ''),
-    nombreAgente: String(docData.nombreAgente || 'Repuestín · facilrepuestos.cl').trim(),
+    nombreAgente: String(docData.nombreAgente || 'Repuestin Facil Repuesto').trim(),
     graphVersion: String(docData.graphVersion || 'v21.0').trim(),
     activo: docData.activo !== undefined ? Boolean(docData.activo) : true,
     updatedAt: docData.updatedAt || null,
@@ -4858,6 +4860,148 @@ router.post('/cx-insights/aplicar-mejora', async (req, res, next) => {
     next(err);
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ACTUALIZACIÓN DE FOTO DE PERFIL Y NOMBRE DE EMPRESA EN META WHATSAPP CLOUD API
+// Sube `repuestin-avatar.jpg` vía Meta Resumable Upload API (`1639558204581901/uploads`)
+// y configura `whatsapp_business_profile` ("Repuestin Facil Repuesto") en Meta.
+// ─────────────────────────────────────────────────────────────────────────────
+async function sincronizarPerfilYFotoMetaWhatsapp() {
+  const cfg = await obtenerConfigMetaWhatsapp({ forceRefresh: true });
+  if (!cfg.accessToken) {
+    return { ok: false, error: 'No hay accessToken de Meta configurado' };
+  }
+
+  const appId = process.env.META_APP_ID || '1639558204581901';
+  const posiblesRutasAvatar = [
+    path.resolve(process.cwd(), 'client/public/repuestin-avatar.jpg'),
+    path.resolve(process.cwd(), 'client/dist/repuestin-avatar.jpg'),
+    path.resolve(process.cwd(), 'dist/repuestin-avatar.jpg'),
+  ];
+  const rutaAvatar = posiblesRutasAvatar.find((p) => fs.existsSync(p));
+  let profilePictureHandle = null;
+  let errorUploadFoto = null;
+
+  if (rutaAvatar) {
+    try {
+      const fileBuffer = fs.readFileSync(rutaAvatar);
+      const startUrl = `https://graph.facebook.com/${cfg.graphVersion}/${appId}/uploads?file_length=${fileBuffer.length}&file_type=image/jpeg&access_token=${encodeURIComponent(cfg.accessToken)}`;
+      const rStart = await fetch(startUrl, { method: 'POST' });
+      const dataStart = await rStart.json();
+      const uploadId = dataStart?.id;
+
+      if (uploadId) {
+        const uploadUrl = `https://graph.facebook.com/${cfg.graphVersion}/${uploadId}`;
+        const rUpload = await fetch(uploadUrl, {
+          method: 'POST',
+          headers: {
+            Authorization: `OAuth ${cfg.accessToken}`,
+            file_offset: '0',
+            'Content-Type': 'image/jpeg',
+          },
+          body: fileBuffer,
+        });
+        const dataUpload = await rUpload.json();
+        if (dataUpload?.h) {
+          profilePictureHandle = dataUpload.h;
+        } else {
+          errorUploadFoto = dataUpload?.error?.message || JSON.stringify(dataUpload);
+        }
+      } else {
+        errorUploadFoto = dataStart?.error?.message || JSON.stringify(dataStart);
+      }
+    } catch (err) {
+      errorUploadFoto = err.message;
+    }
+  }
+
+  const phoneIds = [
+    { phoneId: cfg.phoneNumberId || '1492165227305531', etiqueta: 'Repuestin Facil Repuesto (+56921109851)' },
+    { phoneId: cfg.phoneNumberIdMesaB2b || '1438078979396084', etiqueta: 'Repuestin Facil Repuesto Abastecimiento (+56950960294)' },
+  ].filter((x) => Boolean(x.phoneId));
+
+  const resultadosPorNumero = [];
+  for (const item of phoneIds) {
+    try {
+      const payloadPerfil = {
+        messaging_product: 'whatsapp',
+        about: 'Repuestin Facil Repuesto · facilrepuestos.cl',
+        address: 'Enrique Olivares 224, La Florida, Santiago de Chile',
+        description:
+          'Repuestin Facil Repuesto — Cotización inmediata de repuestos automotrices con retiro en Enrique Olivares 224, La Florida y despacho a todo Chile.',
+        vertical: 'AUTO',
+        websites: ['https://facilrepuestos.cl'],
+        ...(profilePictureHandle ? { profile_picture_handle: profilePictureHandle } : {}),
+      };
+
+      const rPerf = await fetch(
+        `https://graph.facebook.com/${cfg.graphVersion}/${item.phoneId}/whatsapp_business_profile`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${cfg.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payloadPerfil),
+        }
+      );
+      const dataPerf = await rPerf.json();
+      resultadosPorNumero.push({
+        phoneId: item.phoneId,
+        etiqueta: item.etiqueta,
+        ok: rPerf.ok,
+        fotoActualizada: Boolean(profilePictureHandle && rPerf.ok),
+        respuestaMeta: dataPerf,
+      });
+    } catch (err) {
+      resultadosPorNumero.push({
+        phoneId: item.phoneId,
+        etiqueta: item.etiqueta,
+        ok: false,
+        error: err.message,
+      });
+    }
+  }
+
+  await db
+    .collection(COLECCION_CONFIG_SISTEMA)
+    .doc(DOC_CONFIG_META_WSP)
+    .set(
+      {
+        nombreAgente: 'Repuestin Facil Repuesto',
+        avatarUrl: '/repuestin-avatar.jpg',
+        perfilMetaSincronizadoEn: new Date().toISOString(),
+      },
+      { merge: true }
+    )
+    .catch(() => null);
+  cacheConfigMeta = { data: null, loadedAt: 0 };
+
+  return {
+    ok: resultadosPorNumero.some((r) => r.ok),
+    nombreAgente: 'Repuestin Facil Repuesto',
+    fotoSubidaHandle: Boolean(profilePictureHandle),
+    errorUploadFoto,
+    resultadosPorNumero,
+  };
+}
+
+router.post('/meta-perfil/actualizar', async (_req, res, next) => {
+  try {
+    const resultado = await sincronizarPerfilYFotoMetaWhatsapp();
+    res.json({
+      success: true,
+      data: resultado,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Sincronizar automáticamente la foto de perfil de Repuestín y descripción en Meta al iniciar el servidor
+setTimeout(() => {
+  sincronizarPerfilYFotoMetaWhatsapp().catch(() => null);
+}, 6000);
 
 export default router;
 

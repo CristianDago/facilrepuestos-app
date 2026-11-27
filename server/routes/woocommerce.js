@@ -17,7 +17,10 @@ import {
   sincronizarTodosLosNodosAiloo,
   calcularHashCatalogoItem,
 } from '../services/ailooCatalogSync.js';
-import { enviarRespuestaClienteMetaWhatsapp } from './agenteOmnicanal.js';
+import {
+  enviarRespuestaClienteMetaWhatsapp,
+  enviarMensajeMesaAbastecimientoWhatsapp,
+} from './agenteOmnicanal.js';
 import { confirmarPagoWordPressPorWhatsapp } from '../agents/agente5CajeroYWebhookWoo.js';
 
 const router = Router();
@@ -643,10 +646,12 @@ router.post('/webhook/pedido', async (req, res, next) => {
       await batch.commit();
 
       // Agente 5: Confirmar automáticamente al cliente por WhatsApp cuando se registra el pago en WordPress
+      // y activar cierre de compra / facturación EMCY GROUP SPA en la Mesa de Abastecimiento si aplica
       await confirmarPagoWordPressPorWhatsapp({
         pedidoWoo: pedido,
         itemsProcesados,
         enviarWhatsappFn: enviarRespuestaClienteMetaWhatsapp,
+        enviarMensajeMesaFn: enviarMensajeMesaAbastecimientoWhatsapp,
       });
 
       return res.json({ success: true, itemsDescontados: itemsProcesados.length });

@@ -7,6 +7,7 @@ import {
   manejarWebhookGetMeta,
   manejarWebhookPostMeta,
   enviarRespuestaClienteMetaWhatsapp,
+  enviarMensajeMesaAbastecimientoWhatsapp,
 } from './agenteOmnicanal.js';
 import {
   seleccionarTop3ProveedoresMesaWsp,
@@ -15,6 +16,9 @@ import {
   analizarRespuestaMultimodalProveedorAgente4,
   construirResumenFormalProveedorIa,
   construirResumenEjecutivoSolicitudIa,
+  DATOS_FACTURACION_EMCY_GROUP,
+  iniciarCierreCompraConProveedorMesaWsp,
+  procesarMensajePostventaProveedorMesaWsp,
 } from '../agents/agente4MesaYPublicadorTemporal.js';
 import {
   obtenerConfiguracionAgentesIA,
@@ -1633,6 +1637,17 @@ router.post('/solicitudes/:id/adjudicar', requireAuth, async (req, res, next) =>
 
     await solRef.update(actualizacionSolicitud);
 
+    // Si en la adjudicación se indica que ya se concretó la venta (`ventaConfirmada === true`),
+    // ejecutar protocolo con el proveedor (> 1h reconfirma stock; <= 1h pide factura a EMCY GROUP SPA para depositar)
+    let cierreCompraProveedor = null;
+    if (req.body?.ventaConfirmada === true) {
+      cierreCompraProveedor = await iniciarCierreCompraConProveedorMesaWsp({
+        solicitud: { ...solicitud, ...actualizacionSolicitud },
+        ofertaGanadora,
+        enviarMensajeMesaFn: enviarMensajeMesaAbastecimientoWhatsapp,
+      }).catch(() => null);
+    }
+
     res.json({
       success: true,
       data: {
@@ -1644,11 +1659,55 @@ router.post('/solicitudes/:id/adjudicar', requireAuth, async (req, res, next) =>
         conocimientoCreadoId,
         skuPublicoFrp,
         mensajeCotizacionCliente,
+        cierreCompraProveedor,
       },
     });
   } catch (error) {
     next(error);
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/mesa-wsp/solicitudes/:id/confirmar-compra-proveedor
+// Dispara el cierre de compra con el proveedor que cotizó el producto vendido:
+//  - Si pasó más de 1 hora desde la cotización -> primero reconfirma si aún tiene stock.
+//  - Si pasó <= 1 hora -> pide directamente emitir la factura para depositar (EMCY GROUP SPA).
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/solicitudes/:id/confirmar-compra-proveedor', requireAuth, async (req, res, next) => {
+  try {
+    const solRef = db.collection(COLECCION_SOLICITUDES_WSP).doc(req.params.id);
+    const solSnap = await solRef.get();
+    if (!solSnap.exists) {
+      return res.status(404).json({ success: false, error: 'Solicitud WhatsApp no encontrada' });
+    }
+    const solicitud = { id: solSnap.id, ...solSnap.data() };
+    const ofertaGanadora = req.body?.ofertaId
+      ? (solicitud.ofertasRecibidas || []).find((o) => o.id === req.body.ofertaId)
+      : null;
+
+    const resultado = await iniciarCierreCompraConProveedorMesaWsp({
+      solicitud,
+      ofertaGanadora,
+      enviarMensajeMesaFn: enviarMensajeMesaAbastecimientoWhatsapp,
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...resultado,
+        datosFacturacionEmpresa: DATOS_FACTURACION_EMCY_GROUP,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/datos-facturacion', requireAuth, (_req, res) => {
+  res.json({
+    success: true,
+    data: DATOS_FACTURACION_EMCY_GROUP,
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

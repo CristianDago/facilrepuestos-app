@@ -69,6 +69,8 @@ import {
   descargarMediaMetaWhatsapp,
   analizarRespuestaMultimodalProveedorAgente4,
   construirResumenEjecutivoSolicitudIa,
+  esPreguntaDatosFacturacionProveedor,
+  procesarMensajePostventaProveedorMesaWsp,
 } from '../agents/agente4MesaYPublicadorTemporal.js';
 import {
   construirDashboardCxBandeja,
@@ -4142,10 +4144,49 @@ export async function manejarWebhookPostMeta(req, res) {
     // - Si escribes a Mesa de Abastecimiento (+56 9 5096 0294) -> te atiende el Agente 4 como Proveedor.
     if (esLineaMesaB2b) {
       const solSnap = await db.collection(COLECCION_SOLICITUDES_WSP).get().catch(() => null);
-      const abiertas = (solSnap?.docs || [])
+      const todasSolicitudes = (solSnap?.docs || [])
         .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((s) => s.estado !== 'adjudicada' && s.estado !== 'cerrada')
-        .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+        .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+
+      // 0) Revisar primero si el proveedor está respondiendo a una reconfirmación de stock post-venta (> 1 hora)
+      //    o si nos está pidiendo los datos de facturación de nuestra empresa (EMCY GROUP SPA, RUT 78298093-9)
+      const solicitudPostventaMatch =
+        todasSolicitudes.find(
+          (s) =>
+            (s.estadoCompraProveedor === 'esperando_reconfirmacion_stock_1h' ||
+              s.estadoCompraProveedor === 'esperando_factura_para_deposito' ||
+              s.estado === 'adjudicada') &&
+            (String(s.telefonoProveedorGanador || '').replace(/\D/g, '').endsWith(remitenteTel.slice(-8)) ||
+              (s.proveedoresContactados || []).some((p) =>
+                String(p.telefono || '').replace(/\D/g, '').endsWith(remitenteTel.slice(-8))
+              ))
+        ) || null;
+
+      if (
+        textoEntrante &&
+        (solicitudPostventaMatch?.estadoCompraProveedor === 'esperando_reconfirmacion_stock_1h' ||
+          esPreguntaDatosFacturacionProveedor(textoEntrante))
+      ) {
+        const resPostventa = await procesarMensajePostventaProveedorMesaWsp({
+          solicitud: solicitudPostventaMatch,
+          textoEntrante,
+          remitenteTel,
+          enviarMensajeMesaFn: enviarMensajeMesaAbastecimientoWhatsapp,
+          esSinStock: detectarProveedorSinStock(textoEntrante),
+        });
+        if (resPostventa.procesado) {
+          return res.status(200).json({
+            received: true,
+            handledBy: resPostventa.accion,
+            solicitudId: solicitudPostventaMatch?.id || null,
+            estadoCompraProveedor: resPostventa.estadoCompraProveedor,
+          });
+        }
+      }
+
+      const abiertas = todasSolicitudes.filter(
+        (s) => s.estado !== 'adjudicada' && s.estado !== 'cerrada'
+      );
 
       const solicitudMatch = abiertas.find((s) =>
         (s.proveedoresContactados || []).some((p) =>

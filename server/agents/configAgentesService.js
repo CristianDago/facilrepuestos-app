@@ -11,7 +11,7 @@ import { db } from '../config/firebase.js';
 
 const COLECCION_CONFIG = 'configuracion_sistema';
 const DOC_AGENTES_IA = 'cerebros_agentes_ia';
-const VERSION_ESQUEMA_CONOCIMIENTO = 7;
+const VERSION_ESQUEMA_CONOCIMIENTO = 8;
 
 export const MODELOS_GEMINI_DISPONIBLES = [
   { id: 'gemini-4.0-neon', nombre: 'Gemini 4 Neon (Ultra Rápido · Recomendado Agentes)' },
@@ -194,10 +194,28 @@ CAPA 3B — TALLAS LOGÍSTICAS AUTOMOTRICES (VOLUMETRÍA POR DIMENSIÓN):
 6. PUBLICADOR DE PRODUCTO TEMPORAL EN FIREBASE + WORDPRESS (TTL 4 HORAS) Y AUTO-LIMPIEZA:
    - Asigna foto referencial limpia: usa foto del proveedor o reutiliza el media_id oficial de WordPress por subcategoría.
    - Crea el producto en Firebase (inventario) y en WordPress con SKU FRP-WSP-xxxx, margen aplicado (+30%), esProductoTemporalWsp = true y expiraEn = +4 horas.
-   - Envía push directo al WhatsApp del cliente (< 24h) desde el número de Repuestín (+56 9 2110 9851) con el link directo del producto en la tienda (https://facilrepuestos.cl/?p=<wooId>) + valor de despacho calculado según dimensión por el Agente 3, avisando que estará activo por 4 horas.`,
+   - Envía push directo al WhatsApp del cliente (< 24h) desde el número de Repuestín (+56 9 2110 9851) con el link directo del producto en la tienda (https://facilrepuestos.cl/?p=<wooId>) + valor de despacho calculado según dimensión por el Agente 3, avisando que estará activo por 4 horas.
+
+7. PROTOCOLO DE CIERRE DE COMPRA Y FACTURACIÓN CON EL PROVEEDOR CUANDO VENDEMOS EL PRODUCTO:
+   - Cuando concretamos la venta de un producto que nos cotizó un proveedor en la Mesa de Abastecimiento:
+     * A) Si ha pasado MÁS DE 1 HORA (> 60 minutos) desde que el proveedor nos cotizó: primero debemos escribirle para confirmar si aún lo tiene disponible en stock ("Ya concretamos la venta, pero como ha pasado más de una hora queríamos confirmar primero contigo: ¿aún lo tienes disponible en stock para comprártelo ahora?"). Una vez que el proveedor confirme que sí lo tiene, pasamos al punto B.
+     * B) Si ha pasado 1 HORA O MENOS (<= 60 minutos) o tras reconfirmar stock: le confirmamos la compra y le pedimos que nos haga la factura para poder hacerle el depósito de inmediato.
+   - Si el proveedor pregunta por los datos asociados a nuestra empresa para emitir la factura, le entregamos exactamente estos datos:
+     * Nombre o razón social: EMCY GROUP SPA
+     * Dirección: Enrique Olivares 224, La florida. Santiago de Chile.
+     * RUT: 78298093-9
+     * Descripción de Act: Venta de partes, piezas y Accesorios para vehiculos automotores
+     * Contacto: admin@facilrepuestos.cl`,
       contextoExtra: `FORMATO NATURAL DE MENSAJE DE SALIDA A PROVEEDORES (DESDE +56 9 5096 0294):
 "Estimado,
-Necesito [repuesto] para [Marca Modelo Año Motor] patente [PATENTE], compárteme por favor las opciones que tengas con stock disponible y precio."`,
+Necesito [repuesto] para [Marca Modelo Año Motor] patente [PATENTE], compárteme por favor las opciones que tengas con stock disponible y precio."
+
+DATOS OFICIALES PARA EMISIÓN DE FACTURA (MESA DE ABASTECIMIENTO):
+Nombre o razón social: EMCY GROUP SPA
+Dirección: Enrique Olivares 224, La florida. Santiago de Chile.
+RUT: 78298093-9
+Descripción de Act: Venta de partes, piezas y Accesorios para vehiculos automotores
+Contacto: admin@facilrepuestos.cl`,
       activo: true,
     },
 

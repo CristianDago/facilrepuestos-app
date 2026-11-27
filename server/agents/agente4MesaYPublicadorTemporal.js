@@ -37,6 +37,284 @@ const googleAuth = new google.auth.GoogleAuth({
 
 const TTL_PRODUCTO_TEMPORAL_HORAS = 4;
 
+/**
+ * Datos oficiales de facturación de nuestra empresa para entregar a proveedores de la Mesa de Abastecimiento
+ * cuando cerramos la compra de un repuesto cotizado y solicitamos la emisión de factura para depositar.
+ */
+export const DATOS_FACTURACION_EMCY_GROUP = {
+  razonSocial: 'EMCY GROUP SPA',
+  direccion: 'Enrique Olivares 224, La florida. Santiago de Chile.',
+  rut: '78298093-9',
+  descripcionActividad: 'Venta de partes, piezas y Accesorios para vehiculos automotores',
+  contacto: 'admin@facilrepuestos.cl',
+  bloqueTextoWhatsapp:
+    `📄 *Datos para emisión de factura:*\n` +
+    `Nombre o razón social: EMCY GROUP SPA\n` +
+    `Dirección: Enrique Olivares 224, La florida. Santiago de Chile.\n` +
+    `RUT: 78298093-9\n` +
+    `Descripción de Act: Venta de partes, piezas y Accesorios para vehiculos automotores\n` +
+    `Contacto: admin@facilrepuestos.cl`,
+};
+
+/**
+ * Detecta si un proveedor en la Mesa de Abastecimiento está pidiendo los datos de nuestra empresa
+ * para emitir la factura (RUT, razón social, giro, dirección, correo de facturación, etc.).
+ */
+export function esPreguntaDatosFacturacionProveedor(texto = '') {
+  const limpio = String(texto || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+  if (!limpio) return false;
+  return /\b(datos\s+(?:de\s+|para\s+)?(?:la\s+)?factur|rut\b|razon\s+social|a\s+nombre\s+de\s+quien|giro\b|datos\s+de\s+(?:la\s+|tu\s+|su\s+)?empresa|para\s+(?:hacer(?:te|les)?|emitir(?:te|les)?)\s+la\s+factura|mandame\s+(?:el\s+rut|los\s+datos)|enviame\s+(?:el\s+rut|los\s+datos)|pasame\s+(?:el\s+rut|los\s+datos)|cual\s+es\s+(?:el\s+|tu\s+|su\s+)?rut|correo\s+para\s+(?:la\s+)?factura|a\s+que\s+rut\s+factur)\b/i.test(
+    limpio
+  );
+}
+
+/**
+ * Construye el mensaje de WhatsApp con los datos oficiales de facturación de EMCY GROUP SPA.
+ */
+export function construirMensajeDatosFacturacionProveedor() {
+  return (
+    `¡Claro estimado! Aquí tienes los datos de nuestra empresa para emitir la factura:\n\n` +
+    `${DATOS_FACTURACION_EMCY_GROUP.bloqueTextoWhatsapp}\n\n` +
+    `Apenas tengas emitida la factura, compártenosla por aquí junto con los datos de transferencia para realizar el depósito de inmediato.`
+  );
+}
+
+/**
+ * Ejecuta el protocolo de cierre de compra con el proveedor de la Mesa de Abastecimiento cuando
+ * vendemos un producto que él nos cotizó:
+ *  1) Si ha pasado MÁS DE 1 HORA (> 60 min) desde que el proveedor envió su cotización:
+ *     primero le pregunta si aún lo tiene disponible en stock.
+ *  2) Si ha pasado 1 HORA O MENOS (<= 60 min):
+ *     le confirma la compra directamente y le pide que haga la factura para poder depositar
+ *     (y si pide los datos de la empresa, le entrega los datos de EMCY GROUP SPA).
+ */
+export async function iniciarCierreCompraConProveedorMesaWsp({
+  solicitud,
+  ofertaGanadora = null,
+  ahoraMs = Date.now(),
+  enviarMensajeMesaFn = null,
+}) {
+  if (!solicitud) return null;
+
+  const ofertas = Array.isArray(solicitud.ofertasRecibidas) ? solicitud.ofertasRecibidas : [];
+  const oferta =
+    ofertaGanadora ||
+    ofertas.find((o) => o.id === solicitud.ofertaGanadoraId) ||
+    ofertas.find((o) => o.ganadora === true) ||
+    elegirMejorOfertaMesaWsp(ofertas);
+
+  if (!oferta) return null;
+
+  const contactoMatch = (solicitud.proveedoresContactados || []).find(
+    (c) => c.proveedorId === oferta.proveedorId || (c.telefono && c.telefono === oferta.telefonoProveedor)
+  );
+  const telefonoProveedor = String(
+    oferta.telefonoProveedor || contactoMatch?.telefono || ''
+  ).trim();
+
+  const tsRef =
+    Date.parse(
+      oferta.recibidoEn ||
+        oferta.respondidoEn ||
+        contactoMatch?.respondidoEn ||
+        solicitud.adjudicadaEn ||
+        solicitud.updatedAt ||
+        solicitud.createdAt ||
+        ''
+    ) || 0;
+
+  const minutosTranscurridos =
+    tsRef > 0 ? Math.max(0, Math.round((ahoraMs - tsRef) / 60000)) : 0;
+  const pasoMasDeUnaHora = minutosTranscurridos > 60;
+
+  const vehiculoTxt = [
+    solicitud.marcaVehiculo,
+    solicitud.modeloVehiculo,
+    solicitud.anioVehiculo,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const repuestoTxt = solicitud.repuestoBuscado || 'repuesto';
+  const precioNetoStr =
+    Number(oferta.precioCostoNeto) > 0
+      ? ` ($${Math.round(Number(oferta.precioCostoNeto)).toLocaleString('es-CL')} + IVA)`
+      : '';
+
+  const nowIso = new Date(ahoraMs).toISOString();
+  let textoMensajeProveedor = '';
+  let nuevoEstadoCompra = '';
+
+  if (pasoMasDeUnaHora) {
+    nuevoEstadoCompra = 'esperando_reconfirmacion_stock_1h';
+    textoMensajeProveedor =
+      `Hola estimado, te escribimos por el *${repuestoTxt}*${vehiculoTxt ? ` para *${vehiculoTxt}*` : ''} que nos cotizaste${precioNetoStr}. ` +
+      `Ya concretamos la venta, pero como ha pasado más de una hora queríamos confirmar primero contigo: ¿aún lo tienes disponible en stock para comprártelo ahora?`;
+  } else {
+    nuevoEstadoCompra = 'esperando_factura_para_deposito';
+    textoMensajeProveedor =
+      `Hola estimado, te confirmamos la compra del *${repuestoTxt}*${vehiculoTxt ? ` para *${vehiculoTxt}*` : ''} que nos cotizaste${precioNetoStr}. ` +
+      `Por favor haznos la factura para poder hacerte el depósito de inmediato. Si necesitas los datos de nuestra empresa para facturar, avísanos por aquí y te los enviamos al tiro.`;
+  }
+
+  const updatePayload = {
+    estadoCompraProveedor: nuevoEstadoCompra,
+    minutosDesdeCotizacionAlVender: minutosTranscurridos,
+    pasoMasDeUnaHoraAlVender: pasoMasDeUnaHora,
+    telefonoProveedorGanador: telefonoProveedor,
+    proveedorGanadorId: oferta.proveedorId || null,
+    proveedorGanadorNombre: oferta.proveedorNombre || null,
+    ultimoMensajeCompraProveedor: textoMensajeProveedor,
+    cierreCompraIniciadoEn: nowIso,
+    updatedAt: nowIso,
+  };
+
+  if (solicitud.id) {
+    await db
+      .collection('solicitudes_cotizacion_wsp')
+      .doc(solicitud.id)
+      .update(updatePayload)
+      .catch(() => null);
+  }
+
+  let envioWsp = null;
+  if (typeof enviarMensajeMesaFn === 'function' && telefonoProveedor) {
+    envioWsp = await enviarMensajeMesaFn({
+      telefonoDestino: telefonoProveedor,
+      texto: textoMensajeProveedor,
+    }).catch(() => null);
+  }
+
+  return {
+    solicitudId: solicitud.id || null,
+    telefonoProveedor,
+    minutosTranscurridos,
+    pasoMasDeUnaHora,
+    estadoCompraProveedor: nuevoEstadoCompra,
+    textoMensajeProveedor,
+    envioWsp,
+  };
+}
+
+/**
+ * Procesa los mensajes entrantes del proveedor en la Mesa de Abastecimiento (+56 9 5096 0294)
+ * posteriores al inicio del cierre de compra:
+ *  - Si estábamos en `esperando_reconfirmacion_stock_1h` y el proveedor confirma que sí lo tiene ->
+ *    le pide que haga la factura para poder depositar (y si ya pidió datos de facturación, se los adjunta).
+ *  - Si el proveedor pregunta en cualquier momento por los datos de facturación / RUT / razón social ->
+ *    le envía los datos oficiales de EMCY GROUP SPA (RUT 78298093-9).
+ */
+export async function procesarMensajePostventaProveedorMesaWsp({
+  solicitud = null,
+  textoEntrante = '',
+  remitenteTel = '',
+  enviarMensajeMesaFn = null,
+  esSinStock = false,
+}) {
+  const texto = String(textoEntrante || '').trim();
+  if (!texto) return { procesado: false };
+
+  const pideDatosFactura = esPreguntaDatosFacturacionProveedor(texto);
+  const estadoCompra = solicitud?.estadoCompraProveedor || '';
+  const nowIso = new Date().toISOString();
+
+  // Caso 1: Estábamos esperando reconfirmación porque había pasado > 1 hora desde la cotización
+  if (estadoCompra === 'esperando_reconfirmacion_stock_1h') {
+    if (esSinStock) {
+      const msgSinStockPost =
+        'Muchas gracias por avisar estimado, quedamos atentos para una próxima oportunidad.';
+      if (solicitud?.id) {
+        await db
+          .collection('solicitudes_cotizacion_wsp')
+          .doc(solicitud.id)
+          .update({
+            estadoCompraProveedor: 'sin_stock_post_1h',
+            ultimoMensajeCompraProveedor: msgSinStockPost,
+            updatedAt: nowIso,
+          })
+          .catch(() => null);
+      }
+      if (typeof enviarMensajeMesaFn === 'function' && remitenteTel) {
+        await enviarMensajeMesaFn({ telefonoDestino: remitenteTel, texto: msgSinStockPost }).catch(
+          () => null
+        );
+      }
+      return {
+        procesado: true,
+        accion: 'proveedor_sin_stock_post_1h',
+        estadoCompraProveedor: 'sin_stock_post_1h',
+        respuestaEnviada: msgSinStockPost,
+      };
+    }
+
+    // El proveedor confirmó que sí lo tiene disponible después de > 1 hora -> pedirle que haga la factura para depositar
+    const msgPedirFactura = pideDatosFactura
+      ? `¡Excelente estimado, muchas gracias por confirmar! Por favor haznos la factura para poder hacerte el depósito de inmediato. Te dejo aquí mismo los datos de nuestra empresa:\n\n${DATOS_FACTURACION_EMCY_GROUP.bloqueTextoWhatsapp}\n\nCompártenos la factura y los datos de cuenta por aquí apenas la tengas lista.`
+      : `¡Excelente estimado, muchas gracias por confirmar que lo tienes! Por favor haznos la factura para poder hacerte el depósito de inmediato. Si necesitas los datos asociados a nuestra empresa para emitir la factura, avísame por aquí y te los envío al tiro.`;
+
+    const nuevoEstado = pideDatosFactura
+      ? 'datos_facturacion_enviados'
+      : 'esperando_factura_para_deposito';
+
+    if (solicitud?.id) {
+      await db
+        .collection('solicitudes_cotizacion_wsp')
+        .doc(solicitud.id)
+        .update({
+          estadoCompraProveedor: nuevoEstado,
+          stockReconfirmadoPost1hEn: nowIso,
+          ultimoMensajeCompraProveedor: msgPedirFactura,
+          updatedAt: nowIso,
+        })
+        .catch(() => null);
+    }
+
+    if (typeof enviarMensajeMesaFn === 'function' && remitenteTel) {
+      await enviarMensajeMesaFn({ telefonoDestino: remitenteTel, texto: msgPedirFactura }).catch(
+        () => null
+      );
+    }
+
+    return {
+      procesado: true,
+      accion: 'reconfirmado_1h_solicitar_factura_para_deposito',
+      estadoCompraProveedor: nuevoEstado,
+      respuestaEnviada: msgPedirFactura,
+    };
+  }
+
+  // Caso 2: El proveedor pide los datos de facturación / RUT / razón social de nuestra empresa
+  if (pideDatosFactura) {
+    const msgDatos = construirMensajeDatosFacturacionProveedor();
+    if (solicitud?.id) {
+      await db
+        .collection('solicitudes_cotizacion_wsp')
+        .doc(solicitud.id)
+        .update({
+          estadoCompraProveedor: 'datos_facturacion_enviados',
+          datosFacturacionEnviadosEn: nowIso,
+          ultimoMensajeCompraProveedor: msgDatos,
+          updatedAt: nowIso,
+        })
+        .catch(() => null);
+    }
+    if (typeof enviarMensajeMesaFn === 'function' && remitenteTel) {
+      await enviarMensajeMesaFn({ telefonoDestino: remitenteTel, texto: msgDatos }).catch(() => null);
+    }
+    return {
+      procesado: true,
+      accion: 'envio_datos_facturacion_emcy_group',
+      estadoCompraProveedor: 'datos_facturacion_enviados',
+      respuestaEnviada: msgDatos,
+    };
+  }
+
+  return { procesado: false };
+}
+
 const SECTORES_CERCANIA_SCORE = [
   { regex: /\b(la\s+florida|macul|puente\s+alto|pe[ñn]alolen|san\s+joaquin)\b/i, score: 15 },
   { regex: /\b(10\s+de\s+julio|diez\s+de\s+julio|lira|santiago\s+centro|san\s+miguel|gran\s+avenida|ñuñoa|nunoa)\b/i, score: 12 },

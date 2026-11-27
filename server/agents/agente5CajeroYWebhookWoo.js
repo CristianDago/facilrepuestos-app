@@ -14,15 +14,18 @@
  */
 
 import { db } from '../config/firebase.js';
+import { iniciarCierreCompraConProveedorMesaWsp } from './agente4MesaYPublicadorTemporal.js';
 
 /**
  * Procesa la confirmación de pago entrante desde el Webhook de WordPress/WooCommerce
- * y notifica automáticamente al cliente por WhatsApp.
+ * y notifica automáticamente al cliente por WhatsApp, además de activar en la Mesa de Abastecimiento
+ * la confirmación de stock (> 1h) y solicitud de factura a EMCY GROUP SPA cuando el ítem provino de un proveedor WSP.
  */
 export async function confirmarPagoWordPressPorWhatsapp({
   pedidoWoo = {},
   itemsProcesados = [],
   enviarWhatsappFn,
+  enviarMensajeMesaFn = null,
 }) {
   try {
     const numeroOrden = pedidoWoo.number || pedidoWoo.id;
@@ -35,18 +38,63 @@ export async function confirmarPagoWordPressPorWhatsapp({
     const comunaDestino = pedidoWoo.shipping?.city || pedidoWoo.billing?.city || 'tu dirección';
     const totalPagado = Math.round(Number(pedidoWoo.total || 0));
 
-    // 1. Marcar como `compradoEnTienda: true` cualquier producto temporal para que el TTL cleaner no lo borre
+    // 1. Marcar como `compradoEnTienda: true` cualquier producto temporal para que el TTL cleaner no lo borre,
+    //    y si el producto fue cotizado por un proveedor de la Mesa de Abastecimiento WSP, iniciar el cierre de compra
+    //    (reconfirmando stock si pasó > 1 hora y pidiendo factura a nombre de EMCY GROUP SPA para depositar).
     for (const it of itemsProcesados) {
       if (it.inventarioId) {
-        await db
-          .collection('inventario')
-          .doc(it.inventarioId)
+        const invRef = db.collection('inventario').doc(it.inventarioId);
+        const invSnap = await invRef.get().catch(() => null);
+        const invData = invSnap?.exists ? invSnap.data() || {} : {};
+
+        await invRef
           .update({
             compradoEnTienda: true,
             estadoTemporal: 'comprado_confirmado',
             ultimaCompraWooId: String(numeroOrden),
           })
           .catch(() => null);
+
+        const esDeMesaWsp =
+          Boolean(invData.solicitudWspId) ||
+          Boolean(invData.codigoSolicitudWsp) ||
+          invData.esProductoTemporalWsp === true ||
+          invData.origenDatos === 'mesa_whatsapp_vivo' ||
+          String(invData.skuPublicoFrp || it.skuPublicoFrp || '')
+            .toUpperCase()
+            .startsWith('FRP-WSP-');
+
+        if (esDeMesaWsp) {
+          let solicitudDoc = null;
+          if (invData.solicitudWspId) {
+            const solSnap = await db
+              .collection('solicitudes_cotizacion_wsp')
+              .doc(invData.solicitudWspId)
+              .get()
+              .catch(() => null);
+            if (solSnap?.exists) {
+              solicitudDoc = { id: solSnap.id, ...solSnap.data() };
+            }
+          }
+          if (!solicitudDoc) {
+            const skuTarget = String(invData.skuPublicoFrp || it.skuPublicoFrp || '').toUpperCase();
+            const qSnap = await db
+              .collection('solicitudes_cotizacion_wsp')
+              .where('skuPublicoGenerado', '==', skuTarget)
+              .limit(1)
+              .get()
+              .catch(() => null);
+            if (qSnap && !qSnap.empty) {
+              solicitudDoc = { id: qSnap.docs[0].id, ...qSnap.docs[0].data() };
+            }
+          }
+          if (solicitudDoc) {
+            await iniciarCierreCompraConProveedorMesaWsp({
+              solicitud: solicitudDoc,
+              enviarMensajeMesaFn,
+            }).catch(() => null);
+          }
+        }
       }
     }
 

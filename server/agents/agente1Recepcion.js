@@ -259,15 +259,31 @@ export function construirRespuestaAgente1Recepcion({
   }
 
   if (intencion === 'SALUDO_O_CONVERSACION_INICIAL') {
+    const limpioMsg = String(textoCliente || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+    const pideCatalogoGeneralAuto =
+      /\b(mandame\s+repuestos|enviame\s+repuestos|que\s+repuestos\s+tienen|que\s+tienen\s+para|repuestos\s+para\s+es[eo]\s+auto|que\s+piezas\s+tienen|catalogo)\b/.test(
+        limpioMsg
+      );
+
     if (carritoCotizado.length > 0) {
       const ult = carritoCotizado[carritoCotizado.length - 1];
       return (
         `Seguimos atentos a tu cotización de **${formatearNombreProductoParaVehiculoCliente(ult.nombre)}** (\`${ult.skuPublicoFrp}\` — **$${Number(ult.precioVentaConIva || 0).toLocaleString('es-CL')} IVA inc.**).\n` +
-        `Cuéntame si tienes alguna duda sobre el repuesto, si necesitas el valor de envío a tu comuna/región o si necesitas ayuda con tu compra.`
+        `Cuéntame si tienes alguna duda sobre el repuesto, si necesitas el valor de envío a tu comuna/región o si buscas otra pieza adicional.`
       );
     }
     if (vehiculo?.marca && vehiculo.marca !== 'MULTIMARCA') {
-      return `¡Hola! 👋 Soy **Repuestín** de **facilrepuestos.cl**. Tengo en pantalla tu **${vehiculo.marca} ${vehiculo.modelo || ''} ${vehiculo.anio || ''}**.\nCuéntame, ¿qué repuesto necesitas hoy?`;
+      const autoTxt = `${vehiculo.marca} ${vehiculo.modelo || ''} ${vehiculo.anio || ''}`.replace(/\s+/g, ' ').trim();
+      if (pideCatalogoGeneralAuto) {
+        return (
+          `Para tu **${autoTxt}** trabajamos repuestos de **carrocería** (parachoques, ópticos, máscaras, espejos, tapabarros), **frenos** (pastillas, discos), **suspensión** (amortiguadores, bandejas, cazoletas), **embrague, filtros y motor**.\n` +
+          `Dime qué pieza específica necesitas cotizar y te reviso stock y precio de inmediato.`
+        );
+      }
+      return `Tengo en pantalla tu **${autoTxt}**. Cuéntame qué repuesto específico necesitas cotizar (por ejemplo: pastillas de freno, parachoque, óptico, amortiguadores, embrague o motor) para revisarlo al tiro.`;
     }
     return '¡Hola! 👋 Soy **Repuestín** de **facilrepuestos.cl**.\nCuéntame **qué repuesto buscas** y la **patente** de tu vehículo (o marca, modelo y año) para verlo al tiro.';
   }

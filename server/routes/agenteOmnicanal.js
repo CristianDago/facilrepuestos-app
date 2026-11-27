@@ -770,7 +770,6 @@ const STOPWORDS_BUSQUEDA = new Set([
   'PATENTE',
   'AÑO',
   'ANIO',
-  'MOTOR',
   'ORIGINAL',
   'ALTERNATIVO',
   'REPUESTO',
@@ -827,6 +826,11 @@ const STOPWORDS_BUSQUEDA = new Set([
   'ESA',
   'ESTE',
   'ESTA',
+  'ESO',
+  'MANDAME',
+  'ENVIAME',
+  'MOSTRAME',
+  'MUESTRAME',
 ]);
 
 /**

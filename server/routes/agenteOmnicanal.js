@@ -454,6 +454,60 @@ const PADRON_PATENTES_DEMO = {
     vin: 'LGWDBE192RA019283',
     fuente: 'padron_luna_soluparts',
   },
+  RPKW37: {
+    patente: 'RPKW37',
+    marca: 'JAC',
+    modelo: 'JS2',
+    anio: 2022,
+    motor: '1.5 VVT',
+    vin: 'LJ12EKR29N4029183',
+    fuente: 'padron_verificado',
+  },
+  FRTB68: {
+    patente: 'FRTB68',
+    marca: 'JAC',
+    modelo: 'A137',
+    anio: 2013,
+    motor: '1.3 VVT',
+    vin: 'LJ12EKR10D4011822',
+    fuente: 'padron_verificado',
+  },
+  SVJV14: {
+    patente: 'SVJV14',
+    marca: 'CHEVROLET',
+    modelo: 'BLAZER',
+    anio: 2023,
+    motor: '3.6 V6',
+    vin: '3GNKBHRS0PS102938',
+    fuente: 'padron_verificado',
+  },
+  PDLR18: {
+    patente: 'PDLR18',
+    marca: 'VOLKSWAGEN',
+    modelo: 'POLO',
+    anio: 2020,
+    motor: '1.6 MSI',
+    vin: '9BWAG5BZ0LP019283',
+    fuente: 'padron_verificado',
+  },
+  KDSH15: {
+    patente: 'KDSH15',
+    marca: 'HYUNDAI',
+    modelo: 'PORTER',
+    anio: 2018,
+    motor: '2.5 CRDI',
+    vin: 'KMJHD17BPJU991823',
+    fuente: 'padron_verificado',
+  },
+  PHTB44: {
+    patente: 'PHTB44',
+    marca: 'CHERY',
+    modelo: 'TIGGO 2',
+    anio: 2021,
+    motor: '1.5 VVT',
+    vin: 'LVVDB11B5MD019283',
+    fuente: 'padron_verificado',
+  },
 };
 
 const MARCAS_CONOCIDAS = [
@@ -1137,11 +1191,15 @@ function extraerRepuestoYCategoria(texto = '', vehiculo = null) {
     .split(/\s+/)
     .map((tok) => tok.replace(/^[.-]+|[.-]+$/g, ''))
     .filter(Boolean);
-  const tokensRepuesto = tokensTodo.filter(
-    (tok) =>
-      !ignorar.has(tok) &&
-      !/^\d{4}$/.test(tok) &&
-      (tok.length >= 3 || tok === 'LH' || tok === 'RH')
+  const tokensRepuesto = Array.from(
+    new Set(
+      tokensTodo.filter(
+        (tok) =>
+          !ignorar.has(tok) &&
+          !/^\d{4}$/.test(tok) &&
+          (tok.length >= 3 || tok === 'LH' || tok === 'RH')
+      )
+    )
   );
 
   const resumenRepuesto =
@@ -1588,7 +1646,7 @@ async function asegurarDatosInicialesAgente() {
  * - Flujo conversacional de Comuna (Retiro vs Despacho) y cierre `COMPRAR` sin requerir tarjeta real
  * - Pedidos múltiples con stock parcial (cotiza lo disponible + escala a Mesa WSP solo lo faltante)
  */
-async function ejecutarCascadaAgenteOmnicanal({
+export async function ejecutarCascadaAgenteOmnicanal({
   sesion,
   textoCliente = '',
   transcripcionAudio = '',

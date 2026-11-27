@@ -1872,6 +1872,7 @@ export function construirLinksCarroWooCommerce(items = []) {
     return {
       tieneWooIds: false,
       urlCarroPrincipal: urlBusqueda,
+      urlCarroUnificado: urlBusqueda,
       urlCheckoutDirecto: `${baseUrl}/finalizar-compra/`,
       enlacesPorItem: lista.map((it) => ({
         skuPublicoFrp: it.skuPublicoFrp || it.codigo || '',
@@ -1896,11 +1897,17 @@ export function construirLinksCarroWooCommerce(items = []) {
 
   const primero = conWooId[0];
   const qtyPrimero = Math.max(1, Number(primero.cantidad || 1));
+  const idsUnificados = conWooId.map((it) => Number(it.wooProductId)).join(',');
   const urlCarroPrincipal = `${baseUrl}/?add-to-cart=${Number(primero.wooProductId)}&quantity=${qtyPrimero}`;
+  const urlCarroUnificado =
+    conWooId.length > 1
+      ? `${baseUrl}/?add-to-cart=${idsUnificados}`
+      : urlCarroPrincipal;
 
   return {
     tieneWooIds: true,
     urlCarroPrincipal,
+    urlCarroUnificado,
     urlCheckoutDirecto: `${baseUrl}/finalizar-compra/`,
     enlacesPorItem,
   };

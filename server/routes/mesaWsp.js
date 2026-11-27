@@ -159,23 +159,28 @@ export function detectarProveedorSinStock(texto = '') {
  * - Disponibilidad de entrega (Inmediata, Hoy, 24h, Sin stock)
  * - Resumen Formal Ejecutivo (`resumenFormalIa`) de lo enviado por el proveedor
  */
-export function extraerOfertaDesdeMensajeWsp({
-  mensajeTexto = '',
-  mensajeUltimoTurno = '',
-  transcripcionAudio = '',
-  lecturaImagenIa = '',
-  codigoOemDetectado = '',
-  precioManualNeto = null,
-  fabricanteManual = '',
-  origenManual = '',
-  disponibilidadManual = '',
-  sinStockExplicito = false,
-  datosMultimodalesIa = null,
-  proveedorNombre = 'Proveedor',
-  repuestoBuscado = 'Repuesto',
-  vehiculoStr = '',
-  margenPct = 30,
-}) {
+export function extraerOfertaDesdeMensajeWsp(inputOrOpts = {}, margenPctArg = 30) {
+  const opts =
+    typeof inputOrOpts === 'string'
+      ? { mensajeTexto: inputOrOpts, margenPct: margenPctArg }
+      : inputOrOpts || {};
+  const {
+    mensajeTexto = '',
+    mensajeUltimoTurno = '',
+    transcripcionAudio = '',
+    lecturaImagenIa = '',
+    codigoOemDetectado = '',
+    precioManualNeto = null,
+    fabricanteManual = '',
+    origenManual = '',
+    disponibilidadManual = '',
+    sinStockExplicito = false,
+    datosMultimodalesIa = null,
+    proveedorNombre = 'Proveedor',
+    repuestoBuscado = 'Repuesto',
+    vehiculoStr = '',
+    margenPct = 30,
+  } = opts;
   const audioEfectivo = String(
     transcripcionAudio || datosMultimodalesIa?.transcripcionAudio || ''
   ).trim();

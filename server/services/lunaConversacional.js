@@ -499,23 +499,10 @@ export function clasificarIntencionConversacional({
         repuestoCombinado: {
           tokensRepuesto: [piezaBaseActiva, posSolicitada],
           resumenRepuesto: `${piezaBaseActiva} ${posSolicitada}`,
-          textoOriginal: `${piezaBaseActiva} ${posSolicitada}`,
+          textoOriginal: piezaBaseActiva,
         },
       };
     }
-  }
-
-  const esPreguntaSobreItemCotizado =
-    tieneCarritoActivo &&
-    !tienePiezaEnMensaje &&
-    (/\b(ES\s+EL\s+PAR|VIENE\s+EL\s+PAR|POR\s+PAR|COMPLETO|COMPLETA|VIENE\s+CON|TRAE|INCLUYE|QUE\s+MARCA|DE\s+QUE\s+ORIGEN|ES\s+ORIGINAL|ES\s+ALTERNATIVO|SIRVE\s+PARA|LE\s+HACE|CALZA|CUANTAS?\s+UNIDADES|PRECIO\s+POR\s+UNIDAD|PRECIO\s+POR\s+PAR)\b/.test(
-      limpio
-    ) ||
-      (limpio.includes('?') &&
-        !/\b(SUCURSAL|DIRECCION|UBICADOS|HORARIO|ABREN|CIERRAN|GARANTIA|DESPACHO|ENVIO|RETIRO)\b/.test(limpio)));
-
-  if (pideMasFotosDelCotizado || esReclamoOConfusionSobreItemCotizado || esPreguntaSobreItemCotizado) {
-    return { tipo: 'PREGUNTA_SOBRE_PRODUCTO_COTIZADO' };
   }
 
   // 6. Si el cliente dice "Quiero para envío a región" / "Con despacho a domicilio" pero aún no nombra la ciudad/comuna
@@ -528,7 +515,7 @@ export function clasificarIntencionConversacional({
     return { tipo: 'PIDIO_ENVIO_SIN_COMUNA' };
   }
 
-  // 7. Consulta específica sobre reglas/tiempos de retiro o despacho
+  // 7. Consulta específica sobre reglas/tiempos de retiro o despacho (debe evaluarse antes del signo '?' genérico)
   if (
     !tienePiezaEnMensaje &&
     /\b(CUANDO\s+PUEDO\s+RETIRAR|A\s+QUE\s+HORA\s+PUEDO\s+RETIRAR|PUEDO\s+RETIRAR\s+HOY|CUANTO\s+DEMORA\s+EL\s+RETIRO|CUANTO\s+TARDA\s+EL\s+RETIRO|COMO\s+FUNCIONA\s+EL\s+RETIRO|TIENEN\s+RETIRO|DONDE\s+RETIRO|PUEDO\s+IR\s+A\s+RETIRAR|CUANTO\s+DEMORA\s+EL\s+DESPACHO|CUANTO\s+TARDA\s+EL\s+DESPACHO|DESPACHAN\s+HOY|TIENEN\s+DELIVERY|PARA\s+RETIRO|QUIERO\s+RETIRAR)\b/.test(
@@ -557,6 +544,21 @@ export function clasificarIntencionConversacional({
     ) {
       return { tipo: 'CONSULTA_SUCURSAL' };
     }
+  }
+
+  const esPreguntaSobreItemCotizado =
+    tieneCarritoActivo &&
+    !tienePiezaEnMensaje &&
+    (/\b(ES\s+EL\s+PAR|VIENE\s+EL\s+PAR|POR\s+PAR|COMPLETO|COMPLETA|VIENE\s+CON|TRAE|INCLUYE|QUE\s+MARCA|DE\s+QUE\s+ORIGEN|ES\s+ORIGINAL|ES\s+ALTERNATIVO|SIRVE\s+PARA|LE\s+HACE|CALZA|CUANTAS?\s+UNIDADES|PRECIO\s+POR\s+UNIDAD|PRECIO\s+POR\s+PAR)\b/.test(
+      limpio
+    ) ||
+      (limpio.includes('?') &&
+        !/\b(SUCURSAL|DIRECCION|UBICADOS|HORARIO|ABREN|CIERRAN|GARANTIA|DESPACHO|DESPACHAN|ENVIO|ENVIAN|RETIRO|RETIRAR)\b/.test(
+          limpio
+        )));
+
+  if (pideMasFotosDelCotizado || esReclamoOConfusionSobreItemCotizado || esPreguntaSobreItemCotizado) {
+    return { tipo: 'PREGUNTA_SOBRE_PRODUCTO_COTIZADO' };
   }
 
   // 9. Si el cliente envía un vehículo/patente ahora y TENÍA un repuesto pendiente del turno anterior -> ¡Combinar!

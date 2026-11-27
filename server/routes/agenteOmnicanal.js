@@ -4869,6 +4869,9 @@ router.post('/cx-insights/aplicar-mejora', async (req, res, next) => {
 // ─────────────────────────────────────────────────────────────────────────────
 async function subirImagenPerfilAMetaResumable({ archivoRelativo, appId, accessToken, graphVersion }) {
   const posiblesRutas = [
+    path.resolve(process.cwd(), `public/${archivoRelativo}`),
+    path.resolve(process.cwd(), `assets/${archivoRelativo}`),
+    path.resolve(process.cwd(), `server/assets/${archivoRelativo}`),
     path.resolve(process.cwd(), `client/public/${archivoRelativo}`),
     path.resolve(process.cwd(), `client/dist/${archivoRelativo}`),
     path.resolve(process.cwd(), `dist/${archivoRelativo}`),

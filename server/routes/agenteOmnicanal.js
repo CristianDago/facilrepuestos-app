@@ -3968,6 +3968,21 @@ export async function manejarWebhookPostMeta(req, res) {
     const perfilNombre =
       change?.contacts?.[0]?.profile?.name || `Cliente WhatsApp (+${remitenteTel})`;
 
+    // ─── DESCARGA TEMPRANA DE FOTOS/AUDIOS EN PARALELO ANTES DEL BUFFER ───────
+    // Si un cliente envía 3 fotos seguidas a la misma hora (como Cristian a las 03:18 p.m.),
+    // guardamos su `mediaId` al instante y las descargamos en paralelo desde Meta Cloud API
+    // para que todas las fotos queden visibles en miniatura dentro de sus burbujas del chat.
+    const mediaIdEntrante = String(
+      msg.image?.id || msg.audio?.id || msg.document?.id || ''
+    ).trim();
+    const tipoMediaEntrante =
+      msg.type === 'image' ||
+      (msg.type === 'document' && /^image\//i.test(String(msg.document?.mime_type || '')))
+        ? 'imagen'
+        : msg.type === 'audio'
+        ? 'audio'
+        : '';
+
     // Identificar con 100% de exactitud a cuál de los 2 números de WhatsApp entró el mensaje:
     //  • +56 9 5096 0294 (Phone ID 1438078979396084) -> Línea Exclusiva Mesa de Abastecimiento (Proveedores B2B)
     //  • +56 9 2110 9851 (Phone ID 1492165227305531) -> Línea Exclusiva Repuestín Clientes (Ventas B2C)
@@ -4425,39 +4440,25 @@ export async function manejarWebhookPostMeta(req, res) {
       await docRef.set(sesion);
     }
 
-    // Si el cliente envió una fotografía o audio de voz por WhatsApp, descargarlo desde Meta Cloud API
-    // para que quede visible en el listado de fotos del portal de revisión y disponible para la IA
     let fotoUrlCliente = '';
     let transcripcionAudioCliente = '';
     let lecturaImagenIaCliente = '';
-    let tipoAdjuntoCliente = '';
+    let tipoAdjuntoCliente = tipoMediaEntrante;
 
-    if (msg.type === 'image' || msg.type === 'audio' || msg.type === 'document') {
+    if (mediaIdEntrante && tipoMediaEntrante) {
       const cfgMetaCli = await obtenerConfigMetaWhatsapp();
-      if (msg.type === 'image' && msg.image?.id) {
-        tipoAdjuntoCliente = 'imagen';
+      if (tipoMediaEntrante === 'imagen') {
         const imgDesc = await descargarMediaMetaWhatsapp({
-          mediaId: msg.image.id,
+          mediaId: mediaIdEntrante,
           accessToken: cfgMetaCli.accessToken,
           graphVersion: cfgMetaCli.graphVersion,
         });
         if (imgDesc?.dataUri) {
           fotoUrlCliente = imgDesc.dataUri;
         }
-      } else if (msg.type === 'document' && msg.document?.id && /^image\//i.test(String(msg.document?.mime_type || ''))) {
-        tipoAdjuntoCliente = 'imagen';
-        const docDesc = await descargarMediaMetaWhatsapp({
-          mediaId: msg.document.id,
-          accessToken: cfgMetaCli.accessToken,
-          graphVersion: cfgMetaCli.graphVersion,
-        });
-        if (docDesc?.dataUri) {
-          fotoUrlCliente = docDesc.dataUri;
-        }
-      } else if (msg.type === 'audio' && msg.audio?.id) {
-        tipoAdjuntoCliente = 'audio';
+      } else if (tipoMediaEntrante === 'audio') {
         const audDesc = await descargarMediaMetaWhatsapp({
-          mediaId: msg.audio.id,
+          mediaId: mediaIdEntrante,
           accessToken: cfgMetaCli.accessToken,
           graphVersion: cfgMetaCli.graphVersion,
         });
@@ -4482,9 +4483,9 @@ export async function manejarWebhookPostMeta(req, res) {
     const textoEtiquetaAdjunto =
       textoEntrante ||
       (fotoUrlCliente
-        ? '📷 [Fotografía enviada por WhatsApp]'
+        ? ''
         : transcripcionAudioCliente
-        ? `🎙️ [Audio de voz]: "${transcripcionAudioCliente}"`
+        ? `🎙️ "${transcripcionAudioCliente}"`
         : '[Adjunto enviado por WhatsApp]');
 
     const msgCliente = {
@@ -4495,12 +4496,23 @@ export async function manejarWebhookPostMeta(req, res) {
       lecturaImagenIa: lecturaImagenIaCliente,
       fotoUrl: fotoUrlCliente,
       tipoAdjunto: tipoAdjuntoCliente || (msg.type !== 'text' ? msg.type : ''),
-      mediaIdMeta: msg.image?.id || msg.audio?.id || msg.document?.id || '',
+      mediaIdMeta: mediaIdEntrante,
       creadoEn: now,
     };
 
-    // Guardar de inmediato la burbuja entrante del cliente en Firestore para que se vea en tiempo real
-    const mensajesConEntrante = [...(sesion.mensajes || []), msgCliente];
+    // Re-leer mensajes actuales desde Firestore justo antes de insertar para NO sobrescribir
+    // cuando llegan 3 fotos en la misma fracción de segundo
+    const snapActual = await docRef.get();
+    const mensajesExistentes = snapActual.exists
+      ? Array.isArray(snapActual.data()?.mensajes)
+        ? snapActual.data().mensajes
+        : []
+      : sesion.mensajes || [];
+    const idxPrev = mensajesExistentes.findIndex((m) => m.id === msgCliente.id);
+    const mensajesConEntrante =
+      idxPrev >= 0
+        ? mensajesExistentes.map((m, i) => (i === idxPrev ? { ...m, ...msgCliente } : m))
+        : [...mensajesExistentes, msgCliente];
     await docRef.set(
       {
         estado: 'activa',

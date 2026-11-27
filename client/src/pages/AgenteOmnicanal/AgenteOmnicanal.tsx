@@ -1976,8 +1976,8 @@ export default function AgenteOmnicanal() {
                   </div>
                 </div>
 
-                {/* BARRA RÁPIDA DE FOTOS Y CONTEXTO VISUAL EN EL CHAT */}
-                {galeriaFotosContexto.length > 0 && (
+                {/* BARRA RÁPIDA DE MINIATURAS DE FOTOS EN EL CHAT (SOLO CUANDO HAY FOTOS REALES) */}
+                {galeriaFotosContexto.some((f) => Boolean(f.url)) && (
                   <div
                     style={{
                       background: '#f8fafc',
@@ -1997,11 +1997,12 @@ export default function AgenteOmnicanal() {
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      🖼️ Fotos del Contexto ({galeriaFotosContexto.length}):
+                      🖼️ Fotos en esta conversación:
                     </span>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      {galeriaFotosContexto.map((itemFoto) =>
-                        itemFoto.url ? (
+                      {galeriaFotosContexto
+                        .filter((itemFoto) => Boolean(itemFoto.url))
+                        .map((itemFoto) => (
                           <div
                             key={itemFoto.id}
                             onClick={() =>
@@ -2062,120 +2063,242 @@ export default function AgenteOmnicanal() {
                               </div>
                             </div>
                           </div>
-                        ) : (
-                          <div
-                            key={itemFoto.id}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 6,
-                              background: '#fef9c3',
-                              border: '1px solid #fde047',
-                              borderRadius: 8,
-                              padding: '5px 9px',
-                              fontSize: '0.71rem',
-                              color: '#854d0e',
-                              fontWeight: 700,
-                              flexShrink: 0,
-                            }}
-                          >
-                            <span>📎 {itemFoto.titulo}</span>
-                            <span style={{ fontWeight: 500 }}>({itemFoto.hora})</span>
-                          </div>
-                        )
-                      )}
+                        ))}
                     </div>
                   </div>
                 )}
 
                 <div className={styles.messagesArea}>
-                  {(sesionActiva.mensajes || []).map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={
-                        msg.autor === 'cliente' ? styles.msgRowCliente : styles.msgRowAgente
-                      }
-                    >
-                      <div className={styles.msgSender}>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                          {msg.autor === 'cliente' ? (
-                            `👤 ${sesionActiva.clienteNombre}`
-                          ) : (
-                            <>
-                              <img
-                                src="/repuestin-avatar.jpg"
-                                alt="Repuestin Facil Repuesto"
-                                style={{
-                                  width: 22,
-                                  height: 22,
-                                  borderRadius: '50%',
-                                  objectFit: 'cover',
-                                  border: '1px solid #ea580c',
-                                }}
-                              />
-                              <span>Repuestin Facil Repuesto · facilrepuestos.cl</span>
-                            </>
-                          )}
-                        </span>
-                        <span>
-                          {new Date(msg.creadoEn).toLocaleTimeString('es-CL', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
-                      </div>
-                      <div className={styles.msgText}>{renderizarTextoMensaje(msg.texto)}</div>
+                  {(sesionActiva.mensajes || []).map((msg) => {
+                    const esTextoPlaceholderFoto =
+                      !msg.texto ||
+                      msg.texto === '[Adjunto enviado por WhatsApp]' ||
+                      msg.texto === '📷 [Fotografía enviada por WhatsApp]';
+                    const candsConFotoMsg = (msg.trazaCascada?.candidatosInventario || [])
+                      .map((c) => {
+                        const idSol = String(c.id || '').startsWith('ailoo_soluparts_')
+                          ? String(c.id).replace('ailoo_soluparts_', '')
+                          : '';
+                        const urlImg =
+                          c.imagenUrl ||
+                          (idSol
+                            ? `https://www.soluparts.cl/Content/products/${idSol}_600.jpg`
+                            : '');
+                        return { ...c, urlImg };
+                      })
+                      .filter((c) => Boolean(c.urlImg));
 
-                      {msg.transcripcionAudio && (
-                        <div
-                          style={{
-                            marginTop: 7,
-                            paddingTop: 6,
-                            borderTop: '1px dashed rgba(0,0,0,0.15)',
-                            fontSize: '0.78rem',
-                          }}
-                        >
-                          🎙️ <strong>Audio transcrito:</strong> "{msg.transcripcionAudio}"
+                    return (
+                      <div
+                        key={msg.id}
+                        className={
+                          msg.autor === 'cliente' ? styles.msgRowCliente : styles.msgRowAgente
+                        }
+                      >
+                        <div className={styles.msgSender}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {msg.autor === 'cliente' ? (
+                              `👤 ${sesionActiva.clienteNombre}`
+                            ) : (
+                              <>
+                                <img
+                                  src="/repuestin-avatar.jpg"
+                                  alt="Repuestin Facil Repuesto"
+                                  style={{
+                                    width: 22,
+                                    height: 22,
+                                    borderRadius: '50%',
+                                    objectFit: 'cover',
+                                    border: '1px solid #ea580c',
+                                  }}
+                                />
+                                <span>Repuestin Facil Repuesto · facilrepuestos.cl</span>
+                              </>
+                            )}
+                          </span>
+                          <span>
+                            {new Date(msg.creadoEn).toLocaleTimeString('es-CL', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
                         </div>
-                      )}
 
-                      {msg.fotoUrl && (
-                        <div style={{ marginTop: 8 }}>
-                          <img
-                            src={msg.fotoUrl}
-                            alt="Foto enviada por cliente"
-                            onClick={() =>
-                              setFotoLightbox({
-                                url: msg.fotoUrl!,
-                                titulo:
-                                  msg.texto &&
-                                  msg.texto !== '[Adjunto enviado por WhatsApp]' &&
-                                  msg.texto !== '📷 [Fotografía enviada por WhatsApp]'
+                        {/* SI TIENE FOTO ENVIADA POR EL CLIENTE -> MOSTRAR LA FOTO EN MINIATURA EN VEZ DEL TEXTO "[Adjunto enviado por WhatsApp]" */}
+                        {msg.fotoUrl ? (
+                          <div style={{ marginTop: 4 }}>
+                            <img
+                              src={msg.fotoUrl}
+                              alt="Foto enviada por cliente"
+                              onClick={() =>
+                                setFotoLightbox({
+                                  url: msg.fotoUrl!,
+                                  titulo: !esTextoPlaceholderFoto
                                     ? msg.texto
                                     : `Fotografía enviada por ${sesionActiva.clienteNombre}`,
-                                subtitulo: `Enviada a las ${new Date(msg.creadoEn).toLocaleTimeString('es-CL', {
-                                  hour: '2-digit',
-                                  minute: '2-digit',
-                                })}`,
-                              })
-                            }
-                            style={{
-                              maxHeight: 190,
-                              maxWidth: '100%',
-                              borderRadius: 10,
-                              border: '2px solid #86efac',
-                              cursor: 'zoom-in',
-                              objectFit: 'cover',
-                              boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
-                            }}
-                          />
-                          <div style={{ fontSize: '0.71rem', color: '#15803d', marginTop: 3, fontWeight: 700 }}>
-                            🔍 Haz clic en la foto para ampliarla
+                                  subtitulo: `Enviada a las ${new Date(msg.creadoEn).toLocaleTimeString(
+                                    'es-CL',
+                                    {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    }
+                                  )}`,
+                                })
+                              }
+                              style={{
+                                maxHeight: 210,
+                                maxWidth: 260,
+                                width: '100%',
+                                borderRadius: 10,
+                                border: '2px solid #86efac',
+                                cursor: 'zoom-in',
+                                objectFit: 'cover',
+                                display: 'block',
+                                background: '#ffffff',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+                              }}
+                            />
+                            {!esTextoPlaceholderFoto && (
+                              <div className={styles.msgText} style={{ marginTop: 6 }}>
+                                {renderizarTextoMensaje(msg.texto)}
+                              </div>
+                            )}
+                            <div
+                              style={{
+                                fontSize: '0.7rem',
+                                color: '#15803d',
+                                marginTop: 4,
+                                fontWeight: 700,
+                              }}
+                            >
+                              🔍 Clic en la miniatura para agrandar
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                        ) : esTextoPlaceholderFoto && msg.autor === 'cliente' ? (
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              background: 'rgba(255,255,255,0.65)',
+                              border: '1px dashed #86efac',
+                              borderRadius: 10,
+                              padding: '8px 10px',
+                              marginTop: 2,
+                            }}
+                          >
+                            <span style={{ fontSize: '1.35rem' }}>📷</span>
+                            <div style={{ fontSize: '0.76rem', color: '#065f46', lineHeight: 1.35 }}>
+                              <strong>Fotografía enviada antes de activar visor de imágenes</strong>
+                              <div style={{ fontSize: '0.7rem', color: '#047857' }}>
+                                Las nuevas fotos que envíen los clientes se muestran aquí en miniatura automáticamente.
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className={styles.msgText}>{renderizarTextoMensaje(msg.texto)}</div>
+                        )}
+
+                        {msg.transcripcionAudio && (
+                          <div
+                            style={{
+                              marginTop: 7,
+                              paddingTop: 6,
+                              borderTop: '1px dashed rgba(0,0,0,0.15)',
+                              fontSize: '0.78rem',
+                            }}
+                          >
+                            🎙️ <strong>Audio transcrito:</strong> "{msg.transcripcionAudio}"
+                          </div>
+                        )}
+
+                        {/* MINIATURA INLINE DEL REPUESTO COTIZADO EN LA BURBUJA DEL AGENTE */}
+                        {msg.autor !== 'cliente' && candsConFotoMsg.length > 0 && (
+                          <div
+                            style={{
+                              marginTop: 10,
+                              paddingTop: 8,
+                              borderTop: '1px dashed #cbd5e1',
+                              display: 'flex',
+                              gap: 8,
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            {candsConFotoMsg.map((cand) => (
+                              <div
+                                key={`${msg.id}-${cand.skuPublicoFrp}`}
+                                onClick={() =>
+                                  setFotoLightbox({
+                                    url: cand.urlImg,
+                                    titulo: `${cand.nombre} (${cand.skuPublicoFrp})`,
+                                    subtitulo: `$${Number(cand.precioVentaConIva || 0).toLocaleString(
+                                      'es-CL'
+                                    )} IVA inc.`,
+                                    urlWeb: cand.urlProductoWoo,
+                                  })
+                                }
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 8,
+                                  background: '#f8fafc',
+                                  border: '1px solid #cbd5e1',
+                                  borderRadius: 8,
+                                  padding: 6,
+                                  cursor: 'zoom-in',
+                                  maxWidth: 280,
+                                }}
+                                title="Clic para ampliar foto del repuesto"
+                              >
+                                <img
+                                  src={cand.urlImg}
+                                  alt={cand.nombre}
+                                  style={{
+                                    width: 48,
+                                    height: 48,
+                                    borderRadius: 6,
+                                    objectFit: 'cover',
+                                    border: '1px solid #cbd5e1',
+                                    background: '#ffffff',
+                                    flexShrink: 0,
+                                  }}
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                                <div style={{ minWidth: 0 }}>
+                                  <div
+                                    style={{
+                                      fontSize: '0.72rem',
+                                      fontWeight: 800,
+                                      color: '#0f172a',
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                    }}
+                                  >
+                                    {cand.skuPublicoFrp}
+                                  </div>
+                                  <div
+                                    style={{
+                                      fontSize: '0.7rem',
+                                      color: '#0f766e',
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    ${Number(cand.precioVentaConIva || 0).toLocaleString('es-CL')} IVA inc.
+                                  </div>
+                                  <div style={{ fontSize: '0.66rem', color: '#0284c7' }}>
+                                    🔍 Ver foto repuesto
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 {/* COMPOSER CON ESPERA DE 5 SEGUNDOS */}

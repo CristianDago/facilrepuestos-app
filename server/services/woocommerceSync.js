@@ -1420,6 +1420,33 @@ export async function obtenerEstadoColaWooCommerce() {
 }
 
 /**
+ * Verifica que el umbral de inventario agotado en WooCommerce (`woocommerce_notify_no_stock_amount`)
+ * sea `0` (y no `3`), ya que la mayoría de los repuestos automotrices en Ailoo tienen entre 1 y 3 unidades
+ * en bodega; si el umbral es 3, WooCommerce marca erróneamente como `outofstock` cualquier producto con 1, 2 o 3 unidades.
+ */
+let _umbralStockWooVerificado = false;
+export async function asegurarUmbralStockCeroEnWooCommerce() {
+  if (_umbralStockWooVerificado || !isWooConfigured()) return null;
+  try {
+    const setting = await wcFetch('/settings/products/woocommerce_notify_no_stock_amount').catch(() => null);
+    if (setting && Number(setting.value) > 0) {
+      console.log(
+        `[woo-sync] Corrigiendo woocommerce_notify_no_stock_amount de ${setting.value} -> 0 en WordPress para permitir venta de productos con 1-${setting.value} unidades.`
+      );
+      await wcFetch('/settings/products/woocommerce_notify_no_stock_amount', {
+        method: 'PUT',
+        body: JSON.stringify({ value: '0' }),
+      });
+    }
+    _umbralStockWooVerificado = true;
+    return setting?.value || '0';
+  } catch (err) {
+    console.warn('[woo-sync] Aviso verificando woocommerce_notify_no_stock_amount:', err.message);
+    return null;
+  }
+}
+
+/**
  * Sincroniza el inventario hacia WooCommerce.
  * - Por defecto (`soloDelta = true`) sincroniza únicamente los ítems con `needsWooSync === true`
  *   o que nunca se han sincronizado (`!lastWooSyncAt`), logrando sincronización incremental rápida.
@@ -1428,6 +1455,9 @@ export async function obtenerEstadoColaWooCommerce() {
  */
 export async function sincronizarInventarioConWooCommerce({ soloDelta = true, maxItems = 0, todosPreCargados = null } = {}) {
   const configured = isWooConfigured();
+  if (configured) {
+    await asegurarUmbralStockCeroEnWooCommerce();
+  }
   let todos = todosPreCargados;
   if (!Array.isArray(todos)) {
     const snap = await db.collection('inventario').get();
@@ -2264,6 +2294,9 @@ export async function aplicarMarcasDirectoAProductosWoo(
       sku: skuDeItem(item.id, item),
       codigoInterno: item.codigo ? String(item.codigo).trim().toUpperCase() : '',
       wooProductId: item.wooProductId ? Number(item.wooProductId) : 0,
+      stock: Number(item.stock) || 0,
+      stockReservado: Number(item.stockReservado) || 0,
+      precioVenta: Number(item.precioVenta || item.precioCompra || 0),
       brands: brandIds.map((id) => ({ id })),
       yaTeniaBrandsAplicados,
       attributes: globalAttrs.length > 0 ? globalAttrs : info.attributes || [],
@@ -2291,7 +2324,14 @@ export async function aplicarMarcasDirectoAProductosWoo(
         0;
     }
     if (wid > 0) {
-      conWooIdValido.push({ ...cand, wooProductId: wid });
+      const disp = Math.max(0, Math.floor((Number(cand.stock) || 0) - (Number(cand.stockReservado) || 0)));
+      conWooIdValido.push({
+        ...cand,
+        wooProductId: wid,
+        stockQuantity: disp,
+        stockStatus: disp > 0 ? 'instock' : 'outofstock',
+        regularPrice: String(cand.precioVenta || 0),
+      });
     }
   }
 
@@ -2314,6 +2354,9 @@ export async function aplicarMarcasDirectoAProductosWoo(
       grupo.map(async (chunk) => {
         const updatePayload = chunk.map((c) => ({
           id: c.wooProductId,
+          manage_stock: true,
+          stock_quantity: c.stockQuantity,
+          stock_status: c.stockStatus,
           ...(c.yaTeniaBrandsAplicados ? {} : { brands: c.brands }),
           attributes: c.attributes,
         }));
@@ -2446,15 +2489,160 @@ export async function iniciarJobAsignacionMarcasEnBackground() {
   return _estadoJobMarcas;
 }
 
+let _jobSyncDeltaEnCurso = false;
+let _reparacionInicialStockStatusHecha = false;
+let _estadoJobSyncDelta = {
+  enCurso: false,
+  iniciadoEn: null,
+  actualizadoEn: null,
+  ultimaIngestaAiloo: null,
+  lotesProcesados: 0,
+  creadosAcumulados: 0,
+  actualizadosAcumulados: 0,
+  ocultadosAcumulados: 0,
+  pendientesRestantes: 0,
+  ultimoError: null,
+};
+
+export function obtenerEstadoJobSyncDeltaWoo() {
+  return _estadoJobSyncDelta;
+}
+
+/**
+ * Ejecuta el ciclo completo de sincronización entre saltos:
+ *   Salto 1 -> 2: BigQuery (`soluparts-mostrador-prod.soluparts.v_agente_catalogo`) -> Firestore `inventario` (con detección de stock = 0).
+ *   Salto 2 -> 3: Firestore `inventario` (`needsWooSync == true`) -> WordPress / WooCommerce (`facilrepuestos.cl`) en lotes hasta vaciar la cola.
+ */
+export async function ejecutarCicloCompletoAilooYWooEnBackground({
+  ejecutarIngestaAiloo = true,
+  forzarAiloo = false,
+  sincronizarTodosStockStatus = false,
+  maxLotes = 60,
+} = {}) {
+  if (_jobSyncDeltaEnCurso) return _estadoJobSyncDelta;
+  _jobSyncDeltaEnCurso = true;
+  _estadoJobSyncDelta = {
+    enCurso: true,
+    iniciadoEn: new Date().toISOString(),
+    actualizadoEn: new Date().toISOString(),
+    ultimaIngestaAiloo: _estadoJobSyncDelta.ultimaIngestaAiloo,
+    lotesProcesados: 0,
+    creadosAcumulados: 0,
+    actualizadosAcumulados: 0,
+    ocultadosAcumulados: 0,
+    pendientesRestantes: 0,
+    ultimoError: null,
+  };
+
+  (async () => {
+    try {
+      await asegurarUmbralStockCeroEnWooCommerce();
+
+      if (ejecutarIngestaAiloo) {
+        const { sincronizarTodosLosNodosAiloo } = await import('./ailooCatalogSync.js');
+        const resAiloo = await sincronizarTodosLosNodosAiloo({ forzar: forzarAiloo });
+        _estadoJobSyncDelta.ultimaIngestaAiloo = {
+          sincronizadoEn: resAiloo.sincronizadoEn,
+          totalLeidos: resAiloo.totalLeidos,
+          totalNuevos: resAiloo.totalNuevos,
+          totalActualizados: resAiloo.totalActualizados,
+          totalAgotados: resAiloo.totalAgotados || 0,
+        };
+        _estadoJobSyncDelta.actualizadoEn = new Date().toISOString();
+      }
+
+      if (!isWooConfigured()) return;
+
+      // Drenar todos los productos con needsWooSync === true hacia WordPress
+      for (let i = 1; i <= maxLotes; i++) {
+        const resLote = await sincronizarInventarioConWooCommerce({
+          soloDelta: true,
+          maxItems: 200,
+        });
+        _estadoJobSyncDelta.lotesProcesados += 1;
+        _estadoJobSyncDelta.creadosAcumulados += resLote.creados || 0;
+        _estadoJobSyncDelta.actualizadosAcumulados += resLote.actualizados || 0;
+        _estadoJobSyncDelta.ocultadosAcumulados += resLote.ocultados || 0;
+        _estadoJobSyncDelta.pendientesRestantes = resLote.pendientesRestantes || 0;
+        _estadoJobSyncDelta.actualizadoEn = new Date().toISOString();
+
+        if ((resLote.pendientesRestantes || 0) === 0 || (resLote.procesados || 0) === 0) {
+          break;
+        }
+      }
+
+      // Si se solicitó reparar el stock_status de todos los productos tras corregir woocommerce_notify_no_stock_amount = 0
+      const debeRepararStockStatus = sincronizarTodosStockStatus || !_reparacionInicialStockStatusHecha;
+      if (debeRepararStockStatus) {
+        _reparacionInicialStockStatusHecha = true;
+        const snap = await db.collection('inventario').get();
+        const todos = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((it) => !it.ocultarEnTienda && Number(it.wooProductId) > 0);
+
+        const CHUNK_REPAIR = 90;
+        const CONCURRENCY_REPAIR = 3;
+        const chunks = [];
+        for (let i = 0; i < todos.length; i += CHUNK_REPAIR) {
+          chunks.push(todos.slice(i, i + CHUNK_REPAIR));
+        }
+
+        for (let g = 0; g < chunks.length; g += CONCURRENCY_REPAIR) {
+          const grupo = chunks.slice(g, g + CONCURRENCY_REPAIR);
+          await Promise.all(
+            grupo.map(async (chunk) => {
+              const updatePayload = chunk.map((it) => {
+                const disp = Math.max(0, Math.floor((Number(it.stock) || 0) - (Number(it.stockReservado) || 0)));
+                return {
+                  id: Number(it.wooProductId),
+                  manage_stock: true,
+                  stock_quantity: disp,
+                  stock_status: disp > 0 ? 'instock' : 'outofstock',
+                  regular_price: String(it.precioVenta || it.precioCompra || 0),
+                };
+              });
+              await wcFetch('/products/batch', {
+                method: 'POST',
+                body: JSON.stringify({ update: updatePayload }),
+              }).catch(() => null);
+              _estadoJobSyncDelta.actualizadosAcumulados += updatePayload.length;
+              _estadoJobSyncDelta.actualizadoEn = new Date().toISOString();
+            })
+          );
+        }
+      }
+    } catch (err) {
+      console.warn('[woo-delta-bg] Aviso en ciclo automático Ailoo -> Firestore -> Woo:', err.message);
+      _estadoJobSyncDelta.ultimoError = err.message;
+    } finally {
+      _jobSyncDeltaEnCurso = false;
+      _estadoJobSyncDelta.enCurso = false;
+      _estadoJobSyncDelta.actualizadoEn = new Date().toISOString();
+    }
+  })();
+
+  return _estadoJobSyncDelta;
+}
+
 // Al iniciar el servidor en producción, verificar tras 15s si quedan marcas o productos pendientes
-// de asignación en WooCommerce y procesarlos automáticamente en segundo plano.
+// de asignación en WooCommerce y ejecutar el ciclo automático Ailoo -> Firestore -> WooCommerce cada 30 minutos.
 const _autoStartBrandsTimer = setTimeout(() => {
   if (isWooConfigured() && process.env.DISABLE_AUTO_BRANDS_JOB !== '1') {
+    ejecutarCicloCompletoAilooYWooEnBackground({ ejecutarIngestaAiloo: true }).catch(() => null);
     iniciarJobAsignacionMarcasEnBackground().catch(() => null);
   }
 }, 15000);
 if (typeof _autoStartBrandsTimer.unref === 'function') {
   _autoStartBrandsTimer.unref();
+}
+
+const _autoPeriodicSyncTimer = setInterval(() => {
+  if (isWooConfigured() && process.env.DISABLE_AUTO_BRANDS_JOB !== '1') {
+    ejecutarCicloCompletoAilooYWooEnBackground({ ejecutarIngestaAiloo: true }).catch(() => null);
+  }
+}, 30 * 60 * 1000);
+if (typeof _autoPeriodicSyncTimer.unref === 'function') {
+  _autoPeriodicSyncTimer.unref();
 }
 
 /**

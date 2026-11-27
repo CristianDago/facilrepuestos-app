@@ -920,6 +920,72 @@ export async function sincronizarCatalogoNodoAiloo(nodoId, { forzar = false } = 
     }
   }
 
+  // 8. Marcar con stock = 0 cualquier ítem existente de este nodo Ailoo que haya dejado de venir con stock > 0 en la vista
+  const idsVistosConStock = new Set();
+  for (const rawItem of origen.items) {
+    const idAiloo = String(rawItem.id_ailoo || rawItem.codigo || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (idAiloo) {
+      idsVistosConStock.add(`ailoo_${nodo.id}_${idAiloo}`);
+    }
+  }
+
+  let agotados = 0;
+  if (origen.items.length > 100) {
+    for (const [docId, docData] of existentesPorId.entries()) {
+      const esDeEsteNodo =
+        docData.nodoAilooId === nodo.id ||
+        docData.proveedorId === nodo.id ||
+        docId.startsWith(`ailoo_${nodo.id}_`);
+      if (!esDeEsteNodo) continue;
+      if (idsVistosConStock.has(docId)) continue;
+      if (Number(docData.stock || 0) > 0) {
+        const actualizadoSinStock = {
+          ...docData,
+          stock: 0,
+          stockSantiago: 0,
+          stockRancagua: 0,
+          stockSerena: 0,
+          stockCentro: 0,
+          stockNorte: 0,
+          sucursalesConStock: 0,
+        };
+        const nuevoHash = calcularHashCatalogoItem(actualizadoSinStock);
+        const ref = db.collection('inventario').doc(docId);
+        batch.update(ref, {
+          stock: 0,
+          stockSantiago: 0,
+          stockRancagua: 0,
+          stockSerena: 0,
+          stockCentro: 0,
+          stockNorte: 0,
+          sucursalesConStock: 0,
+          deltaHash: nuevoHash,
+          needsWooSync: true,
+          wooSyncMotivo: 'agotado_en_ailoo',
+          updatedAt: ahora,
+          actualizadoEn: ahora,
+          ultimaIngestaAiloo: ahora,
+        });
+        opsInBatch++;
+        actualizados++;
+        agotados++;
+        if (itemsConDelta.length < 200) {
+          itemsConDelta.push({
+            id: docId,
+            skuPublicoFrp: docData.skuPublicoFrp || docData.codigo || docId,
+            nombre: docData.nombre || 'REPUESTO AILOO',
+            accion: 'agotado_stock_0',
+            stock: 0,
+            precioVenta: Number(docData.precioVenta || 0),
+          });
+        }
+        if (opsInBatch >= BATCH_LIMIT) {
+          await flushBatch();
+        }
+      }
+    }
+  }
+
   await flushBatch();
 
   await db.collection('nodos_ailoo').doc(nodo.id).update({
@@ -928,6 +994,7 @@ export async function sincronizarCatalogoNodoAiloo(nodoId, { forzar = false } = 
       totalLeidos: origen.items.length,
       nuevos,
       actualizados,
+      agotados,
       sinCambiosOmitidos,
       modoOrigen: origen.modoOrigen,
     },
@@ -943,6 +1010,7 @@ export async function sincronizarCatalogoNodoAiloo(nodoId, { forzar = false } = 
     totalLeidos: origen.items.length,
     nuevos,
     actualizados,
+    agotados,
     sinCambiosOmitidos,
     itemsConDelta,
     sincronizadoEn: ahora,
@@ -989,6 +1057,7 @@ export async function sincronizarTodosLosNodosAiloo({ forzar = false } = {}) {
     totalLeidos: resultados.reduce((acc, r) => acc + r.totalLeidos, 0),
     totalNuevos: resultados.reduce((acc, r) => acc + r.nuevos, 0),
     totalActualizados: resultados.reduce((acc, r) => acc + r.actualizados, 0),
+    totalAgotados: resultados.reduce((acc, r) => acc + (r.agotados || 0), 0),
     totalSinCambiosOmitidos: resultados.reduce((acc, r) => acc + r.sinCambiosOmitidos, 0),
     nodos: resultados,
     sincronizadoEn: new Date().toISOString(),

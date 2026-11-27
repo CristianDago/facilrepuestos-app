@@ -1063,6 +1063,7 @@ export interface CandidatoInventarioCascada {
   wooProductId?: number | null;
   urlProductoWoo?: string;
   urlAgregarAlCarroWoo?: string;
+  imagenUrl?: string;
   subConsultaResumen?: string;
 }
 
@@ -1145,7 +1146,10 @@ export interface MensajeSesionAgente {
   autor: 'cliente' | 'agente_ia';
   texto: string;
   transcripcionAudio?: string;
+  lecturaImagenIa?: string;
   fotoUrl?: string;
+  tipoAdjunto?: string;
+  mediaIdMeta?: string;
   creadoEn: string;
   trazaCascada?: TrazaCascadaAgente;
 }

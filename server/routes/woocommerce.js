@@ -9,6 +9,8 @@ import {
   obtenerPedidosWooCommerceRecientes,
   obtenerResumenMarcasCompatibilidadInventario,
   sincronizarMarcasCompatibilidadWooCommerce,
+  ejecutarCicloCompletoAilooYWooEnBackground,
+  obtenerEstadoJobSyncDeltaWoo,
 } from '../services/woocommerceSync.js';
 import {
   sincronizarCatalogoNodoAiloo,
@@ -462,18 +464,33 @@ router.post('/sync', requireSyncAccess, async (req, res, next) => {
 });
 
 // POST /api/woocommerce/sync-ailoo
-// Ingesta incrementalmente (Delta) los catálogos de TODOS los nodos Ailoo activos (`soluparts` + `global`)
-// hacia Firebase `inventario`. Si `autoSyncWoo: true`, dispara inmediatamente el Delta Sync a WooCommerce.
+// Ingesta incrementalmente (Delta) los catálogos de TODOS los nodos Ailoo activos (`soluparts`)
+// hacia Firebase `inventario`. Si `autoSyncWoo: true`, dispara inmediatamente el Delta Sync a WooCommerce
+// y deja corriendo el job en background hasta vaciar toda la cola de pendientes.
 router.post('/sync-ailoo', requireSyncAccess, async (req, res, next) => {
   try {
     const forzar = Boolean(req.body?.forzar);
-    const autoSyncWoo = Boolean(req.body?.autoSyncWoo);
+    const autoSyncWoo = req.body?.autoSyncWoo !== false;
+    const repararStockStatus = Boolean(req.body?.repararStockStatus);
     const ingesta = await sincronizarTodosLosNodosAiloo({ forzar });
     let wooSync = null;
     if (autoSyncWoo) {
-      wooSync = await sincronizarInventarioConWooCommerce({ soloDelta: true });
+      wooSync = await sincronizarInventarioConWooCommerce({ soloDelta: true, maxItems: 200 });
+      if ((wooSync.pendientesRestantes || 0) > 0 || repararStockStatus) {
+        ejecutarCicloCompletoAilooYWooEnBackground({
+          ejecutarIngestaAiloo: false,
+          sincronizarTodosStockStatus: repararStockStatus,
+        });
+      }
     }
-    res.json({ success: true, data: { ingesta, wooSync } });
+    res.json({
+      success: true,
+      data: {
+        ingesta,
+        wooSync,
+        jobBackground: obtenerEstadoJobSyncDeltaWoo(),
+      },
+    });
   } catch (error) {
     next(error);
   }

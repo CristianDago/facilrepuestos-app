@@ -192,6 +192,12 @@ export default function AgenteOmnicanal() {
   const [fotoUrl, setFotoUrl] = useState('');
   const [patenteInput, setPatenteInput] = useState('');
   const [mostrarOpcionesPrueba, setMostrarOpcionesPrueba] = useState(false);
+  const [fotoLightbox, setFotoLightbox] = useState<{
+    url: string;
+    titulo: string;
+    subtitulo?: string;
+    urlWeb?: string;
+  } | null>(null);
 
   // Buffer de 5 segundos desde el último mensaje para agrupar múltiples envíos seguidos
   const [mensajesEnBuffer, setMensajesEnBuffer] = useState<string[]>([]);
@@ -631,6 +637,79 @@ export default function AgenteOmnicanal() {
     () => calcularResumenLogisticoSesion(carritoSesionActiva),
     [carritoSesionActiva]
   );
+
+  // Listado de todas las fotos y adjuntos de la conversación (fotos enviadas por el cliente + fotos de repuestos cotizados)
+  const galeriaFotosContexto = useMemo(() => {
+    if (!sesionActiva) return [];
+    const lista: Array<{
+      id: string;
+      tipo: 'foto_cliente' | 'adjunto_wsp_sin_url' | 'foto_repuesto';
+      url: string;
+      titulo: string;
+      subtitulo: string;
+      hora: string;
+      urlWeb?: string;
+    }> = [];
+
+    for (const m of sesionActiva.mensajes || []) {
+      const hora = m.creadoEn
+        ? new Date(m.creadoEn).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })
+        : '';
+      if (m.fotoUrl) {
+        lista.push({
+          id: `cli-foto-${m.id}`,
+          tipo: 'foto_cliente',
+          url: m.fotoUrl,
+          titulo:
+            m.texto &&
+            m.texto !== '[Adjunto enviado por WhatsApp]' &&
+            m.texto !== '📷 [Fotografía enviada por WhatsApp]'
+              ? m.texto
+              : `Foto enviada por ${sesionActiva.clienteNombre}`,
+          subtitulo: `📸 Enviada por cliente (${hora})`,
+          hora,
+        });
+      } else if (
+        m.autor === 'cliente' &&
+        (String(m.texto || '').includes('[Adjunto enviado por WhatsApp]') ||
+          String(m.texto || '').includes('[Fotografía enviada por WhatsApp]'))
+      ) {
+        lista.push({
+          id: `cli-adj-${m.id}`,
+          tipo: 'adjunto_wsp_sin_url',
+          url: '',
+          titulo: `Adjunto WhatsApp de ${sesionActiva.clienteNombre}`,
+          subtitulo: `📎 Recibido a las ${hora}`,
+          hora,
+        });
+      }
+    }
+
+    const vistosSku = new Set<string>();
+    for (const c of carritoSesionActiva) {
+      if (vistosSku.has(c.skuPublicoFrp)) continue;
+      vistosSku.add(c.skuPublicoFrp);
+      const idSoluparts = String(c.id || '').startsWith('ailoo_soluparts_')
+        ? String(c.id).replace('ailoo_soluparts_', '')
+        : '';
+      const imgUrl =
+        c.imagenUrl ||
+        (idSoluparts ? `https://www.soluparts.cl/Content/products/${idSoluparts}_600.jpg` : '');
+      if (imgUrl) {
+        lista.push({
+          id: `rep-foto-${c.skuPublicoFrp}`,
+          tipo: 'foto_repuesto',
+          url: imgUrl,
+          titulo: `${c.nombre} (${c.skuPublicoFrp})`,
+          subtitulo: `🛒 Cotizado: $${Number(c.precioVentaConIva || 0).toLocaleString('es-CL')} IVA inc.`,
+          hora: 'Catálogo',
+          urlWeb: c.urlProductoWoo,
+        });
+      }
+    }
+
+    return lista;
+  }, [sesionActiva, carritoSesionActiva]);
 
   // KPIs operativos reales
   const kpis = useMemo(() => {
@@ -1897,6 +1976,118 @@ export default function AgenteOmnicanal() {
                   </div>
                 </div>
 
+                {/* BARRA RÁPIDA DE FOTOS Y CONTEXTO VISUAL EN EL CHAT */}
+                {galeriaFotosContexto.length > 0 && (
+                  <div
+                    style={{
+                      background: '#f8fafc',
+                      borderBottom: '1px solid #cbd5e1',
+                      padding: '8px 14px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      overflowX: 'auto',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: '0.73rem',
+                        fontWeight: 800,
+                        color: '#0f172a',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      🖼️ Fotos del Contexto ({galeriaFotosContexto.length}):
+                    </span>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      {galeriaFotosContexto.map((itemFoto) =>
+                        itemFoto.url ? (
+                          <div
+                            key={itemFoto.id}
+                            onClick={() =>
+                              setFotoLightbox({
+                                url: itemFoto.url,
+                                titulo: itemFoto.titulo,
+                                subtitulo: itemFoto.subtitulo,
+                                urlWeb: itemFoto.urlWeb,
+                              })
+                            }
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 7,
+                              background:
+                                itemFoto.tipo === 'foto_cliente' ? '#dcfce7' : '#ffffff',
+                              border: `1px solid ${
+                                itemFoto.tipo === 'foto_cliente' ? '#86efac' : '#cbd5e1'
+                              }`,
+                              borderRadius: 8,
+                              padding: '4px 8px 4px 4px',
+                              cursor: 'pointer',
+                              flexShrink: 0,
+                            }}
+                            title="Haz clic para ver la foto en grande"
+                          >
+                            <img
+                              src={itemFoto.url}
+                              alt={itemFoto.titulo}
+                              style={{
+                                width: 38,
+                                height: 38,
+                                borderRadius: 6,
+                                objectFit: 'cover',
+                                border: '1px solid #cbd5e1',
+                                background: '#fff',
+                              }}
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                            <div style={{ maxWidth: 165 }}>
+                              <div
+                                style={{
+                                  fontSize: '0.72rem',
+                                  fontWeight: 800,
+                                  color: '#0f172a',
+                                  whiteSpace: 'nowrap',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                }}
+                              >
+                                {itemFoto.tipo === 'foto_cliente' ? '📸 Cliente' : '🔩 Repuesto'}:{' '}
+                                {itemFoto.titulo}
+                              </div>
+                              <div style={{ fontSize: '0.67rem', color: '#475569' }}>
+                                {itemFoto.subtitulo}
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            key={itemFoto.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              background: '#fef9c3',
+                              border: '1px solid #fde047',
+                              borderRadius: 8,
+                              padding: '5px 9px',
+                              fontSize: '0.71rem',
+                              color: '#854d0e',
+                              fontWeight: 700,
+                              flexShrink: 0,
+                            }}
+                          >
+                            <span>📎 {itemFoto.titulo}</span>
+                            <span style={{ fontWeight: 500 }}>({itemFoto.hora})</span>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className={styles.messagesArea}>
                   {(sesionActiva.mensajes || []).map((msg) => (
                     <div
@@ -1953,12 +2144,34 @@ export default function AgenteOmnicanal() {
                           <img
                             src={msg.fotoUrl}
                             alt="Foto enviada por cliente"
+                            onClick={() =>
+                              setFotoLightbox({
+                                url: msg.fotoUrl!,
+                                titulo:
+                                  msg.texto &&
+                                  msg.texto !== '[Adjunto enviado por WhatsApp]' &&
+                                  msg.texto !== '📷 [Fotografía enviada por WhatsApp]'
+                                    ? msg.texto
+                                    : `Fotografía enviada por ${sesionActiva.clienteNombre}`,
+                                subtitulo: `Enviada a las ${new Date(msg.creadoEn).toLocaleTimeString('es-CL', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}`,
+                              })
+                            }
                             style={{
-                              maxHeight: 120,
-                              borderRadius: 8,
-                              border: '1px solid #cbd5e1',
+                              maxHeight: 190,
+                              maxWidth: '100%',
+                              borderRadius: 10,
+                              border: '2px solid #86efac',
+                              cursor: 'zoom-in',
+                              objectFit: 'cover',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
                             }}
                           />
+                          <div style={{ fontSize: '0.71rem', color: '#15803d', marginTop: 3, fontWeight: 700 }}>
+                            🔍 Haz clic en la foto para ampliarla
+                          </div>
                         </div>
                       )}
                     </div>
@@ -2122,6 +2335,115 @@ export default function AgenteOmnicanal() {
                   )}
                 </div>
 
+                {/* 1.B LISTADO DE FOTOS Y ADJUNTOS DE LA CONVERSACIÓN (CONTEXTO VISUAL) */}
+                <div
+                  className={styles.traceSection}
+                  style={{ background: '#f8fafc', borderColor: '#cbd5e1' }}
+                >
+                  <div className={styles.traceSectionTitle}>
+                    <span>🖼️ Fotos y Adjuntos del Contexto</span>
+                    <span>{galeriaFotosContexto.length} foto(s)</span>
+                  </div>
+                  {galeriaFotosContexto.length === 0 ? (
+                    <div style={{ fontSize: '0.77rem', color: '#64748b' }}>
+                      Cuando el cliente envíe fotos de su repuesto/muestra por WhatsApp o se cotice un producto con imagen, aparecerán listadas aquí para ampliarlas.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {galeriaFotosContexto.map((itemFoto) => (
+                        <div
+                          key={`side-${itemFoto.id}`}
+                          onClick={() =>
+                            itemFoto.url
+                              ? setFotoLightbox({
+                                  url: itemFoto.url,
+                                  titulo: itemFoto.titulo,
+                                  subtitulo: itemFoto.subtitulo,
+                                  urlWeb: itemFoto.urlWeb,
+                                })
+                              : undefined
+                          }
+                          style={{
+                            display: 'flex',
+                            gap: 10,
+                            alignItems: 'center',
+                            background: '#ffffff',
+                            border: '1px solid #cbd5e1',
+                            borderRadius: 8,
+                            padding: 8,
+                            cursor: itemFoto.url ? 'zoom-in' : 'default',
+                          }}
+                        >
+                          {itemFoto.url ? (
+                            <img
+                              src={itemFoto.url}
+                              alt={itemFoto.titulo}
+                              style={{
+                                width: 54,
+                                height: 54,
+                                borderRadius: 6,
+                                objectFit: 'cover',
+                                border: '1px solid #cbd5e1',
+                                flexShrink: 0,
+                                background: '#f8fafc',
+                              }}
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: 54,
+                                height: 54,
+                                borderRadius: 6,
+                                background: '#fef9c3',
+                                border: '1px solid #fde047',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '1.3rem',
+                                flexShrink: 0,
+                              }}
+                            >
+                              📷
+                            </div>
+                          )}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div
+                              style={{
+                                fontSize: '0.76rem',
+                                fontWeight: 800,
+                                color: '#0f172a',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {itemFoto.titulo}
+                            </div>
+                            <div style={{ fontSize: '0.71rem', color: '#475569', marginTop: 2 }}>
+                              {itemFoto.subtitulo}
+                            </div>
+                            {itemFoto.url && (
+                              <div
+                                style={{
+                                  fontSize: '0.69rem',
+                                  color: '#0284c7',
+                                  fontWeight: 700,
+                                  marginTop: 2,
+                                }}
+                              >
+                                🔍 Clic para ver foto en pantalla completa
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {/* 2. PROMESA DE RETIRO Y DESPACHO ACTIVA PARA ESTA SESIÓN */}
                 <div
                   className={styles.traceSection}
@@ -2171,6 +2493,14 @@ export default function AgenteOmnicanal() {
                         const esSol =
                           c.origen === 'soluparts_ailoo' ||
                           String(c.skuPublicoFrp || '').startsWith('FRP-SOL-');
+                        const idSolCard = String(c.id || '').startsWith('ailoo_soluparts_')
+                          ? String(c.id).replace('ailoo_soluparts_', '')
+                          : '';
+                        const fotoProdUrl =
+                          c.imagenUrl ||
+                          (idSolCard
+                            ? `https://www.soluparts.cl/Content/products/${idSolCard}_600.jpg`
+                            : '');
                         const etiquetaRetiroItem = esSol
                           ? 'Soluparts → Retiro desde 15:30 hrs (compras antes de 11:30 hrs)'
                           : c.origen === 'stock_propio'
@@ -2179,32 +2509,63 @@ export default function AgenteOmnicanal() {
 
                         return (
                           <div key={c.id || c.skuPublicoFrp} className={styles.candCard}>
-                            <div
-                              style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                fontWeight: 800,
-                                color: '#0f172a',
-                              }}
-                            >
-                              <span>{c.skuPublicoFrp}</span>
-                              <span style={{ color: '#047857' }}>Stock: {c.stock} un.</span>
-                            </div>
-                            <div style={{ fontSize: '0.8rem', fontWeight: 700, margin: '3px 0' }}>
-                              {c.nombre}
-                            </div>
-                            <div style={{ fontSize: '0.73rem', color: '#475569' }}>
-                              Bodega interna: <strong>{c.proveedorNombre}</strong>
-                            </div>
-                            <div
-                              style={{
-                                fontSize: '0.72rem',
-                                color: '#0369a1',
-                                fontWeight: 700,
-                                marginTop: 2,
-                              }}
-                            >
-                              ⏱️ {etiquetaRetiroItem}
+                            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                              {fotoProdUrl && (
+                                <img
+                                  src={fotoProdUrl}
+                                  alt={c.nombre}
+                                  onClick={() =>
+                                    setFotoLightbox({
+                                      url: fotoProdUrl,
+                                      titulo: `${c.nombre} (${c.skuPublicoFrp})`,
+                                      subtitulo: `$${Number(c.precioVentaConIva || 0).toLocaleString('es-CL')} IVA inc.`,
+                                      urlWeb: c.urlProductoWoo,
+                                    })
+                                  }
+                                  style={{
+                                    width: 52,
+                                    height: 52,
+                                    borderRadius: 6,
+                                    objectFit: 'cover',
+                                    border: '1px solid #cbd5e1',
+                                    cursor: 'zoom-in',
+                                    flexShrink: 0,
+                                    background: '#ffffff',
+                                  }}
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                              )}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div
+                                  style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    fontWeight: 800,
+                                    color: '#0f172a',
+                                  }}
+                                >
+                                  <span>{c.skuPublicoFrp}</span>
+                                  <span style={{ color: '#047857' }}>Stock: {c.stock} un.</span>
+                                </div>
+                                <div style={{ fontSize: '0.8rem', fontWeight: 700, margin: '3px 0' }}>
+                                  {c.nombre}
+                                </div>
+                                <div style={{ fontSize: '0.73rem', color: '#475569' }}>
+                                  Bodega interna: <strong>{c.proveedorNombre}</strong>
+                                </div>
+                                <div
+                                  style={{
+                                    fontSize: '0.72rem',
+                                    color: '#0369a1',
+                                    fontWeight: 700,
+                                    marginTop: 2,
+                                  }}
+                                >
+                                  ⏱️ {etiquetaRetiroItem}
+                                </div>
+                              </div>
                             </div>
                             <div
                               style={{
@@ -2345,6 +2706,102 @@ export default function AgenteOmnicanal() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL LIGHTBOX PARA VER FOTOS EN TAMAÑO COMPLETO ── */}
+      {fotoLightbox && (
+        <div
+          onClick={() => setFotoLightbox(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.85)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: '#ffffff',
+              borderRadius: 14,
+              maxWidth: 780,
+              width: '100%',
+              overflow: 'hidden',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.45)',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <div
+              style={{
+                padding: '12px 16px',
+                background: '#0f172a',
+                color: '#ffffff',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 12,
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 800, fontSize: '0.92rem' }}>{fotoLightbox.titulo}</div>
+                {fotoLightbox.subtitulo && (
+                  <div style={{ fontSize: '0.76rem', color: '#94a3b8' }}>
+                    {fotoLightbox.subtitulo}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {fotoLightbox.urlWeb && (
+                  <a
+                    href={fotoLightbox.urlWeb}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn btn-primary btn-sm"
+                    style={{ textDecoration: 'none', fontSize: '0.76rem' }}
+                  >
+                    🔎 Ver en Tienda ↗
+                  </a>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm"
+                  style={{ color: '#fff', borderColor: 'rgba(255,255,255,0.3)' }}
+                  onClick={() => setFotoLightbox(null)}
+                >
+                  ✕ Cerrar
+                </button>
+              </div>
+            </div>
+            <div
+              style={{
+                padding: 20,
+                background: '#f1f5f9',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                maxHeight: '75vh',
+                overflow: 'auto',
+              }}
+            >
+              <img
+                src={fotoLightbox.url}
+                alt={fotoLightbox.titulo}
+                style={{
+                  maxWidth: '100%',
+                  maxHeight: '68vh',
+                  borderRadius: 8,
+                  objectFit: 'contain',
+                  background: '#ffffff',
+                }}
+              />
+            </div>
           </div>
         </div>
       )}

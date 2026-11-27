@@ -85,6 +85,7 @@ import {
   crearPedidoPendienteWooCommerce,
   obtenerUrlBaseTiendaWoo,
 } from '../services/woocommerceSync.js';
+import { resolverImagenEfectivaProducto } from '../services/catalogoImagenesService.js';
 import { sincronizarZonasDespachoWooCommerce } from '../services/woocommerceShippingConfig.js';
 
 import {
@@ -2530,6 +2531,14 @@ async function ejecutarCascadaAgenteOmnicanal({
           ? `${baseUrlTienda}/?add-to-cart=${wooProductId}&quantity=1`
           : urlProductoWoo;
 
+        const imgEfectivaCand = resolverImagenEfectivaProducto(item);
+        const imagenUrlCand =
+          item.imagenUrl ||
+          imgEfectivaCand?.url ||
+          (item.nodoAilooId === 'soluparts' && item.idAiloo
+            ? `https://www.soluparts.cl/Content/products/${item.idAiloo}_600.jpg`
+            : '');
+
         candidatosEncontradosGlobal.push({
           id: item.id,
           codigoInterno: item.codigo,
@@ -2557,6 +2566,7 @@ async function ejecutarCascadaAgenteOmnicanal({
           wooProductId,
           urlProductoWoo,
           urlAgregarAlCarroWoo,
+          imagenUrl: imagenUrlCand,
           subConsultaResumen: sub.resumenRepuesto,
         });
       }
@@ -4415,12 +4425,77 @@ export async function manejarWebhookPostMeta(req, res) {
       await docRef.set(sesion);
     }
 
+    // Si el cliente envió una fotografía o audio de voz por WhatsApp, descargarlo desde Meta Cloud API
+    // para que quede visible en el listado de fotos del portal de revisión y disponible para la IA
+    let fotoUrlCliente = '';
+    let transcripcionAudioCliente = '';
+    let lecturaImagenIaCliente = '';
+    let tipoAdjuntoCliente = '';
+
+    if (msg.type === 'image' || msg.type === 'audio' || msg.type === 'document') {
+      const cfgMetaCli = await obtenerConfigMetaWhatsapp();
+      if (msg.type === 'image' && msg.image?.id) {
+        tipoAdjuntoCliente = 'imagen';
+        const imgDesc = await descargarMediaMetaWhatsapp({
+          mediaId: msg.image.id,
+          accessToken: cfgMetaCli.accessToken,
+          graphVersion: cfgMetaCli.graphVersion,
+        });
+        if (imgDesc?.dataUri) {
+          fotoUrlCliente = imgDesc.dataUri;
+        }
+      } else if (msg.type === 'document' && msg.document?.id && /^image\//i.test(String(msg.document?.mime_type || ''))) {
+        tipoAdjuntoCliente = 'imagen';
+        const docDesc = await descargarMediaMetaWhatsapp({
+          mediaId: msg.document.id,
+          accessToken: cfgMetaCli.accessToken,
+          graphVersion: cfgMetaCli.graphVersion,
+        });
+        if (docDesc?.dataUri) {
+          fotoUrlCliente = docDesc.dataUri;
+        }
+      } else if (msg.type === 'audio' && msg.audio?.id) {
+        tipoAdjuntoCliente = 'audio';
+        const audDesc = await descargarMediaMetaWhatsapp({
+          mediaId: msg.audio.id,
+          accessToken: cfgMetaCli.accessToken,
+          graphVersion: cfgMetaCli.graphVersion,
+        });
+        if (audDesc?.base64) {
+          const analisisAud = await analizarRespuestaMultimodalProveedorAgente4({
+            mensajeTexto: textoEntrante || '',
+            audioBase64: audDesc.base64,
+            audioMimeType: audDesc.mimeType || 'audio/ogg',
+            repuestoBuscado: sesion?.vehiculoContexto?.marca || 'Repuesto Automotriz',
+            vehiculoStr: sesion?.vehiculoContexto
+              ? `${sesion.vehiculoContexto.marca} ${sesion.vehiculoContexto.modelo || ''}`
+              : '',
+            proveedorNombre: perfilNombre,
+          }).catch(() => null);
+          if (analisisAud?.transcripcionAudio) {
+            transcripcionAudioCliente = analisisAud.transcripcionAudio;
+          }
+        }
+      }
+    }
+
+    const textoEtiquetaAdjunto =
+      textoEntrante ||
+      (fotoUrlCliente
+        ? '📷 [Fotografía enviada por WhatsApp]'
+        : transcripcionAudioCliente
+        ? `🎙️ [Audio de voz]: "${transcripcionAudioCliente}"`
+        : '[Adjunto enviado por WhatsApp]');
+
     const msgCliente = {
       id: wamid || `msg-cli-${Date.now()}`,
       autor: 'cliente',
-      texto: textoEntrante || '[Adjunto enviado por WhatsApp]',
-      transcripcionAudio: '',
-      fotoUrl: '',
+      texto: textoEtiquetaAdjunto,
+      transcripcionAudio: transcripcionAudioCliente,
+      lecturaImagenIa: lecturaImagenIaCliente,
+      fotoUrl: fotoUrlCliente,
+      tipoAdjunto: tipoAdjuntoCliente || (msg.type !== 'text' ? msg.type : ''),
+      mediaIdMeta: msg.image?.id || msg.audio?.id || msg.document?.id || '',
       creadoEn: now,
     };
 
@@ -4486,9 +4561,20 @@ export async function manejarWebhookPostMeta(req, res) {
     BUFFERS_MENSAJES_WSP.delete(sesionDocId);
     const mensajesRafaga = buffer.mensajesAcumulados || [msgCliente];
     const textoUnificado = mensajesRafaga
-      .map((m) => String(m.texto || '').trim())
+      .map((m) => {
+        const txt = String(m.texto || '').trim();
+        if (txt === '[Adjunto enviado por WhatsApp]' || txt === '📷 [Fotografía enviada por WhatsApp]') {
+          return '';
+        }
+        return txt;
+      })
       .filter(Boolean)
       .join('\n');
+
+    const fotosRafaga = mensajesRafaga.map((m) => m.fotoUrl).filter(Boolean);
+    const audiosRafaga = mensajesRafaga.map((m) => m.transcripcionAudio).filter(Boolean);
+    const ultimaFotoRafaga = fotosRafaga[fotosRafaga.length - 1] || '';
+    const transcripcionUnificada = audiosRafaga.join(' · ');
 
     // Re-leer la sesión fresca de Firestore para incluir todas las burbujas guardadas durante la ráfaga
     const snapFresco = await docRef.get();
@@ -4498,9 +4584,9 @@ export async function manejarWebhookPostMeta(req, res) {
 
     const resultadoCascada = await ejecutarCascadaAgenteOmnicanal({
       sesion: sesionFresca,
-      textoCliente: textoUnificado || msgCliente.texto,
-      transcripcionAudio: '',
-      fotoUrl: '',
+      textoCliente: textoUnificado || transcripcionUnificada || msgCliente.texto,
+      transcripcionAudio: transcripcionUnificada,
+      fotoUrl: ultimaFotoRafaga,
     });
 
     const msgAgente = {

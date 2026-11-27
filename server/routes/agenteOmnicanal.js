@@ -658,6 +658,8 @@ const MODELOS_A_MARCA = {
   S5: 'JAC',
   T6: 'JAC',
   T8: 'JAC',
+  A137: 'JAC',
+  J137: 'JAC',
   URBAN: 'JAC',
   '1061': 'JAC',
   SUNRAY: 'JAC',
@@ -819,6 +821,12 @@ const STOPWORDS_BUSQUEDA = new Set([
   'COTIZACION',
   'PIEZA',
   'PIEZAS',
+  'MISMO',
+  'MISMA',
+  'ESE',
+  'ESA',
+  'ESTE',
+  'ESTA',
 ]);
 
 /**
@@ -829,7 +837,7 @@ function normalizarTextoAutomotriz(texto = '') {
   const reemplazos = [
     // Marcas y modelos mal escritos frecuentemente en WhatsApp
     [/\b(DONFEN|DONG\s*FENG|DONGFENG|DFLM|DFM\s+DONGFENG)\b/gi, 'DFM'],
-    [/\bYAC\b/gi, 'JAC'],
+    [/\b(YAC|JAZ|JAK)\b/gi, 'JAC'],
     [/\b(CHERRY|CHERI)\b/gi, 'CHERY'],
     [/\b(SANYON|SAN\s+YONG|SSANG\s+YONG)\b/gi, 'SSANGYONG'],
     [/\b(GREATWALL|GRET\s+WALL|G\.?\s*WALL)\b/gi, 'GREAT WALL'],
